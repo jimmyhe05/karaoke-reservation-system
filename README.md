@@ -9,13 +9,8 @@ A practical tool designed to efficiently manage karaoke room reservations, inspi
 - [Features](#features)
 - [Demo](#demo)
 - [Installation](#installation)
-- [Usage](#usage)
-  - [Endpoints](#endpoints)
 - [Technologies Used](#technologies-used)
 - [Inspiration](#inspiration)
-- [Future Enhancements](#future-enhancements)
-- [License](#license)
-- [Contact](#contact)
 
 ---
 
@@ -33,7 +28,7 @@ A practical tool designed to efficiently manage karaoke room reservations, inspi
 
 ---
 
-## 🎥 Demo
+## 🎥Demo
 
 Here’s a glimpse of the Karaoke Reservation System in action:
 
@@ -42,7 +37,7 @@ Here’s a glimpse of the Karaoke Reservation System in action:
 
 ---
 
-## ⚙️ Installation
+## ⚙️Installation
 
 Follow these steps to run the project locally:
 
