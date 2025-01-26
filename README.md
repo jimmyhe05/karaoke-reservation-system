@@ -6,7 +6,7 @@ A practical tool designed to efficiently manage karaoke room reservations, inspi
 
 ## 📋 Table of Contents
 
-- [Features](#features)
+- [✨ Features](#features)
 - [Demo](#demo)
 - [Installation](#installation)
 - [Usage](#usage)
