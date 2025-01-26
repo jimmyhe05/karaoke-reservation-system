@@ -41,10 +41,6 @@ Here’s a glimpse of the Karaoke Reservation System in action:
 
 Follow these steps to run the project locally:
 
-### Prerequisites
-- Python 3.7+
-- pip (Python package manager)
-
 ### Steps
 
 1. **Clone the repository**:
