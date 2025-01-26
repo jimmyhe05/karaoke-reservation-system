@@ -49,9 +49,19 @@ Follow these steps to run the project locally:
 2. **Navigate to the project directory**:
    ```bash
    cd karaoke-reservation-system
-4. **Run the application**:
+3. **Run the application**:
    ```bash
    python app.py
-6. **Access the app**:
+4. **Access the app**:
+   ```bash
    Open your browser and go to http://127.0.0.1:5000
-   
+---
+
+## 🖥️Techonlogy Used
+<img src="https://raw.githubusercontent.com/devicons/devicon/master/icons/python/python-original.svg" alt="python" width="40" height="40"/> </a> <a href="https://reactjs.org/" target="_blank" rel="noreferrer">
+
+---
+
+## 💡Inspiration
+
+---
