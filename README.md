@@ -38,7 +38,7 @@ A practical tool designed to efficiently manage karaoke room reservations, inspi
 Here’s a glimpse of the Karaoke Reservation System in action:
 
 ![Demo GIF](demo.gif)  
-*(If the GIF isn’t loading, check out the [live demo](#))*
+<!-- *(If the GIF isn’t loading, check out the [live demo](#))* -->
 
 ---
 
@@ -54,4 +54,11 @@ Follow these steps to run the project locally:
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/yourusername/karaoke-reservation-system.git
+   git clone https://github.com/jimmyhe05/karaoke-reservation-system.git
+2. **Navigate to the project directory**:
+   cd karaoke-reservation-system
+4. **Run the application**:
+   python app.py
+5. **Access the app**:
+   Open your browser and go to http://127.0.0.1:5000
+   
