@@ -1,24 +1,57 @@
 # 🎤 Karaoke Reservation System
 
-> A practical tool inspired by 'Nam's Noodle' in Madison, designed to manage karaoke room bookings efficiently.
+A practical tool designed to efficiently manage karaoke room reservations, inspired by the real-life operations at "Nam's Noodle" in Madison, WI. This application helps track bookings, calculate charges, and manage drink orders—all in one place. Built with Python and Flask, this system is perfect for small to medium-sized businesses offering karaoke services.
 
-## Features
-- Add/Delete reservations for specific rooms.
-- Real-time availability tracking.
-- Flexible pricing based on time slots.
-- Tax-inclusive charge calculations.
-- Option to add drink orders to the bill.
+---
 
-## Demo
-![Reservation System Demo](demo.gif)
+## 📋 Table of Contents
 
-## Installation
-```bash
-# Clone the repository
-git clone https://github.com/yourusername/karaoke-reservation-system.git
+- [Features](#features)
+- [Demo](#demo)
+- [Installation](#installation)
+- [Usage](#usage)
+  - [Endpoints](#endpoints)
+- [Technologies Used](#technologies-used)
+- [Inspiration](#inspiration)
+- [Future Enhancements](#future-enhancements)
+- [License](#license)
+- [Contact](#contact)
 
-# Install dependencies
-pip install -r requirements.txt
+---
 
-# Run the app
-python app.py
+## ✨ Features
+
+- **Reservation Management**: Add or delete reservations based on room availability.
+- **Real-Time Availability**: Keep track of which rooms are booked at any given time.
+- **Flexible Pricing**: Automatically calculate karaoke charges based on time slots:
+  - Early Bird Special: $30/hour (12 PM - 6 PM)
+  - Before 9 PM: $45/hour (6 PM - 9 PM)
+  - After 9 PM: $50/hour (9 PM - 12 AM)
+- **Tax Integration**: Includes a 5.5% sales tax for all calculations.
+- **Drink Orders**: Add drink costs to the total bill with support for various beverages.
+- **Dynamic Cost Calculation**: Handles overlapping time slots and tax-inclusive pricing.
+
+---
+
+## 🎥 Demo
+
+Here’s a glimpse of the Karaoke Reservation System in action:
+
+![Demo GIF](demo.gif)  
+*(If the GIF isn’t loading, check out the [live demo](#))*
+
+---
+
+## ⚙️ Installation
+
+Follow these steps to run the project locally:
+
+### Prerequisites
+- Python 3.7+
+- pip (Python package manager)
+
+### Steps
+
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/yourusername/karaoke-reservation-system.git
