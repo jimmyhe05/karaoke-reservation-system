@@ -56,9 +56,11 @@ Follow these steps to run the project locally:
    ```bash
    git clone https://github.com/jimmyhe05/karaoke-reservation-system.git
 2. **Navigate to the project directory**:
+   ```bash
    cd karaoke-reservation-system
 4. **Run the application**:
+   ```bash
    python app.py
-5. **Access the app**:
+6. **Access the app**:
    Open your browser and go to http://127.0.0.1:5000
    
