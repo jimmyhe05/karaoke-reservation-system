@@ -4,7 +4,7 @@ A practical tool designed to efficiently manage karaoke room reservations, inspi
 
 ---
 
-## 📋 Table of Contents
+## 📋Table of Contents
 
 - [Features](#features)
 - [Demo](#demo)
@@ -14,7 +14,7 @@ A practical tool designed to efficiently manage karaoke room reservations, inspi
 
 ---
 
-## ✨Features
+## ✨ Features
 
 - **Reservation Management**: Add or delete reservations based on room availability.
 - **Real-Time Availability**: Keep track of which rooms are booked at any given time.
