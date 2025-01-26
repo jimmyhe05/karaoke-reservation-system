@@ -37,7 +37,7 @@ Here’s a glimpse of the Karaoke Reservation System in action:
 
 ---
 
-## ⚙️Installation
+## ⚙Installation
 
 Follow these steps to run the project locally:
 
