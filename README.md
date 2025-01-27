@@ -79,4 +79,8 @@ Follow these steps to run the project locally:
 
 ## 💡Inspiration
 
+The Karaoke Reservation System was inspired by my experience working at "Nam's Noodle," a family-owned restaurant in Madison, Wisconsin. My cousin owns the restaurant, which also features karaoke rooms as part of its unique dining experience.
+
+Managing reservations manually for these rooms was often challenging, especially during peak hours when multiple parties requested overlapping time slots. This inspired me to create a practical and efficient tool to streamline the process of handling room reservations.
+
 ---
