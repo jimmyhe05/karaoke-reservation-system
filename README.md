@@ -32,7 +32,7 @@ A practical tool designed to efficiently manage karaoke room reservations, inspi
 
 Here’s a glimpse of the Karaoke Reservation System in action:
 
-![Demo GIF](demo.gif)  
+![Demo GIF](karaoke-reservation-system.gif)  
 <!-- *(If the GIF isn’t loading, check out the [live demo](#))* -->
 
 ---
