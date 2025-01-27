@@ -1,6 +1,6 @@
 # 🎤 Karaoke Reservation System
 
-A practical tool designed to efficiently manage karaoke room reservations, inspired by the real-life operations at "Nam's Noodle" in Madison, WI. This application helps track bookings, calculate charges, and manage drink orders—all in one place. Built with Python and Flask, this system is perfect for small to medium-sized businesses offering karaoke services.
+A practical tool designed to efficiently manage karaoke room reservations, inspired by the real-life operations at "Nam's Noodle" in Madison, WI. This application helps track bookings and calculate charges all in one place. Built with Python and Flask, this system is perfect for small to medium-sized businesses offering karaoke services.
 
 ---
 
@@ -23,7 +23,6 @@ A practical tool designed to efficiently manage karaoke room reservations, inspi
   - Before 9 PM: $45/hour (6 PM - 9 PM)
   - After 9 PM: $50/hour (9 PM - 12 AM)
 - **Tax Integration**: Includes a 5.5% sales tax for all calculations.
-- **Drink Orders**: Add drink costs to the total bill with support for various beverages.
 - **Dynamic Cost Calculation**: Handles overlapping time slots and tax-inclusive pricing.
 
 ---
