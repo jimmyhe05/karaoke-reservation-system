@@ -57,7 +57,7 @@ Follow these steps to run the project locally:
    Open your browser and go to http://127.0.0.1:5000
 ---
 
-## 🖥️Techonlogies Used
+## Technologies Used
 
 <a href="https://www.python.org" target="_blank" rel="noreferrer">
 <img src="https://raw.githubusercontent.com/devicons/devicon/master/icons/python/python-original.svg" alt="python" width="40" height="40"/> </a>
