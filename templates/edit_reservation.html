@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit Reservation</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+    <h1>Edit Reservation</h1>
+
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    {% for category, message in messages %}
+    <div class="alert alert-{{ category }}">
+        {{ message }}
+    </div>
+    {% endfor %}
+    {% endif %}
+    {% endwith %}
+
+    <div class="container">
+        <form action="{{ url_for('edit_reservation', index=index) }}" method="POST">
+            <label>Name:</label>
+            <input type="text" name="customer_name" value="{{ reservation.customer_name }}" required><br>
+
+            <label>Email:</label>
+            <input type="email" name="customer_email" value="{{ reservation.customer_email }}" required><br>
+
+            <label>Phone:</label>
+            <input type="tel" name="customer_phone" value="{{ reservation.customer_phone }}" required><br>
+
+            <label>Number of People:</label>
+            <input type="number" name="num_people" value="{{ reservation.num_people }}" min="1" max="16" required><br>
+
+            <label>Language:</label>
+            <select name="language">
+                <option value="English" {% if reservation.language=="English" %}selected{% endif %}>English</option>
+                <option value="Mandarin" {% if reservation.language=="Mandarin" %}selected{% endif %}>Mandarin</option>
+                <option value="Korean" {% if reservation.language=="Korean" %}selected{% endif %}>Korean</option>
+                <option value="Japanese" {% if reservation.language=="Japanese" %}selected{% endif %}>Japanese</option>
+                <option value="Spanish" {% if reservation.language=="Spanish" %}selected{% endif %}>Spanish</option>
+                <option value="French" {% if reservation.language=="French" %}selected{% endif %}>French</option>
+                <option value="Other" {% if reservation.language=="Other" %}selected{% endif %}>Other</option>
+            </select><br>
+
+            <label>Room:</label>
+            <select name="room_id">
+                <option value="R1" {% if reservation.room_id=="R1" %}selected{% endif %}>Room 1</option>
+                <option value="R2" {% if reservation.room_id=="R2" %}selected{% endif %}>Room 2</option>
+                <option value="R3" {% if reservation.room_id=="R3" %}selected{% endif %}>Room 3</option>
+            </select><br>
+
+            <label>Start Time:</label>
+            <input type="datetime-local" name="new_start_time" value="{{ reservation.start_time }}" required><br>
+
+            <label>End Time:</label>
+            <input type="datetime-local" name="new_end_time" value="{{ reservation.end_time }}" required><br>
+
+            <button type="submit">Update Reservation</button>
+        </form>
+    </div>
+</body>
+
+</html>

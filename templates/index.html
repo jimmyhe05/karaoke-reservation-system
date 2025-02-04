@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Karaoke Reservation System</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+    <h1>Karaoke Reservation System</h1>
+
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    {% for category, message in messages %}
+    <div class="alert alert-{{ category }}">
+        {{ message }}
+    </div>
+    {% endfor %}
+    {% endif %}
+    {% endwith %}
+
+    <div class="container">
+        <h2>Make a Reservation</h2>
+        <form action="/" method="POST">
+            <label>Name:</label>
+            <input type="text" name="customer_name" required><br>
+
+            <label>Email:</label>
+            <input type="email" name="customer_email" required><br>
+
+            <label>Phone:</label>
+            <input type="tel" name="customer_phone" required><br>
+
+            <label>Number of People:</label>
+            <input type="number" name="num_people" min="1" max="16" required><br>
+
+            <label>Language:</label>
+            <select name="language">
+                <option value="English" selected>English</option>
+                <option value="Mandarin">Mandarin</option>
+                <option value="Korean">Korean</option>
+                <option value="Japanese">Japanese</option>
+                <option value="Spanish">Spanish</option>
+                <option value="French">French</option>
+                <option value="Other">Other</option>
+            </select><br>
+
+            <label>Room:</label>
+            <select name="room_id">
+                <option value="R1">Room 1</option>
+                <option value="R2">Room 2</option>
+                <option value="R3">Room 3</option>
+            </select><br>
+
+            <label>Start Time:</label>
+            <input type="datetime-local" name="start_time" required><br>
+
+            <label>End Time:</label>
+            <input type="datetime-local" name="end_time" required><br>
+
+            <button type="submit">Reserve</button>
+        </form>
+    </div>
+
+    <div class="container">
+        <h2>Existing Reservations</h2>
+
+        <div class="room-container">
+            <h3>Room 1 Reservations</h3>
+            {% for reservation in room_1_reservations %}
+            <div class="room-card">
+                <p><strong>Customer:</strong> {{ reservation.customer_name }}</p>
+                <p><strong>Email:</strong> {{ reservation.customer_email }}</p>
+                <p><strong>Phone:</strong> {{ reservation.customer_phone }}</p>
+                <p><strong>People:</strong> {{ reservation.num_people }}</p>
+                <p><strong>Language:</strong> {{ reservation.language }}</p>
+                <p><strong>Start Time:</strong> {{ reservation.formatted_start_time }}</p>
+                <p><strong>End Time:</strong> {{ reservation.formatted_end_time }}</p>
+                <p><strong>Total Cost:</strong> ${{ reservation.total_cost }}</p>
+
+                <button class="show-details-btn" data-cost='{{ reservation.cost_breakdown | tojson | safe }}'>
+                    Show Details
+                </button>
+
+                <form action="{{ url_for('remove_reservation', index=loop.index0) }}" method="POST">
+                    <button type="submit" class="remove-btn">Remove</button>
+                </form>
+
+                <a href="{{ url_for('edit_reservation', index=loop.index0) }}" class="edit-btn">Edit</a>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="room-container">
+            <h3>Room 2 Reservations</h3>
+            {% for reservation in room_2_reservations %}
+            <div class="room-card">
+                <p><strong>Customer:</strong> {{ reservation.customer_name }}</p>
+                <p><strong>Email:</strong> {{ reservation.customer_email }}</p>
+                <p><strong>Phone:</strong> {{ reservation.customer_phone }}</p>
+                <p><strong>People:</strong> {{ reservation.num_people }}</p>
+                <p><strong>Language:</strong> {{ reservation.language }}</p>
+                <p><strong>Start Time:</strong> {{ reservation.formatted_start_time }}</p>
+                <p><strong>End Time:</strong> {{ reservation.formatted_end_time }}</p>
+                <p><strong>Total Cost:</strong> ${{ reservation.total_cost }}</p>
+
+                <button class="show-details-btn" data-cost='{{ reservation.cost_breakdown | tojson | safe }}'>
+                    Show Details
+                </button>
+
+                <form action="{{ url_for('remove_reservation', index=loop.index0) }}" method="POST">
+                    <button type="submit" class="remove-btn">Remove</button>
+                </form>
+
+                <a href="{{ url_for('edit_reservation', index=loop.index0) }}" class="edit-btn">Edit</a>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="room-container">
+            <h3>Room 3 Reservations</h3>
+            {% for reservation in room_3_reservations %}
+            <div class="room-card">
+                <p><strong>Customer:</strong> {{ reservation.customer_name }}</p>
+                <p><strong>Email:</strong> {{ reservation.customer_email }}</p>
+                <p><strong>Phone:</strong> {{ reservation.customer_phone }}</p>
+                <p><strong>People:</strong> {{ reservation.num_people }}</p>
+                <p><strong>Language:</strong> {{ reservation.language }}</p>
+                <p><strong>Start Time:</strong> {{ reservation.formatted_start_time }}</p>
+                <p><strong>End Time:</strong> {{ reservation.formatted_end_time }}</p>
+                <p><strong>Total Cost:</strong> ${{ reservation.total_cost }}</p>
+
+                <button class="show-details-btn" data-cost='{{ reservation.cost_breakdown | tojson | safe }}'>
+                    Show Details
+                </button>
+
+                <form action="{{ url_for('remove_reservation', index=loop.index0) }}" method="POST">
+                    <button type="submit" class="remove-btn">Remove</button>
+                </form>
+
+                <a href="{{ url_for('edit_reservation', index=loop.index0) }}" class="edit-btn">Edit</a>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Cost Breakdown Modal -->
+    <div id="cost-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="closeModal()">&times;</span>
+            <h2>Cost Breakdown</h2>
+            <table id="cost-table">
+                <thead>
+                    <tr>
+                        <th>Time Period</th>
+                        <th>Start</th>
+                        <th>End</th>
+                        <th>Hours</th>
+                        <th>Rate</th>
+                        <th>Cost</th>
+                    </tr>
+                </thead>
+                <tbody id="cost-details"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        // Attach click event to show cost breakdown
+        document.querySelectorAll('.show-details-btn').forEach(button => {
+            button.addEventListener('click', function () {
+                const breakdown = JSON.parse(this.dataset.cost);
+                const tbody = document.getElementById('cost-details');
+                tbody.innerHTML = '';
+
+                breakdown.forEach(detail => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${detail.period}</td>
+                        <td>${detail.start}</td>
+                        <td>${detail.end}</td>
+                        <td>${detail.hours.toFixed(2)}</td>
+                        <td>$${detail.rate}/hr</td>
+                        <td>$${detail.cost.toFixed(2)}</td>
+                    `;
+                    tbody.appendChild(row);
+                });
+
+                document.getElementById('cost-modal').style.display = 'block';
+            });
+        });
+
+        function closeModal() {
+            document.getElementById('cost-modal').style.display = 'none';
+        }
+
+        // Close modal when clicking outside of it
+        window.onclick = function (event) {
+            const modal = document.getElementById('cost-modal');
+            if (event.target === modal) {
+                closeModal();
+            }
+        };
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,185 @@
+body {
+    font-family: 'Roboto', sans-serif;
+    background-color: #f4f4f4;
+    margin: 0;
+    padding: 0;
+    color: #333;
+}
+
+h1,
+h2 {
+    color: #2c3e50;
+    font-weight: 600;
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.container {
+    width: 70%;
+    margin: 20px auto;
+    padding: 30px;
+    background-color: #fff;
+    border-radius: 12px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+}
+
+form {
+    display: block;
+    margin: 0;
+    padding: 5px;
+}
+
+form label {
+    width: 100%;
+    font-size: 1rem;
+    color: #333;
+    text-align: left;
+    margin-bottom: 5px;
+    display: block;
+}
+
+form input,
+form select,
+form button {
+    width: 100%;
+    padding: 12px;
+    font-size: 1rem;
+    border-radius: 5px;
+    border: 1px solid #ddd;
+    margin-bottom: 15px;
+    box-sizing: border-box;
+}
+
+form input:focus,
+form select:focus {
+    border-color: #3498db;
+    outline: none;
+}
+
+button {
+    background-color: #3498db;
+    color: white;
+    cursor: pointer;
+    border: none;
+    transition: background-color 0.3s ease;
+    width: 100%;
+    padding: 15px;
+    border-radius: 5px;
+}
+
+button:hover {
+    background-color: #2980b9;
+}
+
+.room-container {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    margin-top: 30px;
+}
+
+.room-card {
+    width: 30%;
+    background-color: #fff;
+    border-radius: 8px;
+    padding: 20px;
+    margin: 15px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    height: 100%;
+}
+
+.room-card:hover {
+    transform: translateY(-10px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+}
+
+room-card p {
+    margin: 10px 0;
+    line-height: 1.6;
+}
+
+.room-card .edit-btn,
+.room-card .remove-btn {
+    background-color: #e74c3c;
+    border: none;
+    color: white;
+    cursor: pointer;
+    padding: 10px;
+    border-radius: 5px;
+    transition: background-color 0.3s ease;
+    margin-top: 5px;
+}
+
+.room-card .remove-btn:hover {
+    background-color: #c0392b;
+}
+
+.room-card .edit-btn {
+    background-color: grey;
+    text-align: center;
+    width: 90%;
+}
+
+.room-card .edit-btn:hover {
+    background-color: darkgrey;
+}
+
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+}
+
+.modal-content {
+    background-color: white;
+    padding: 20px;
+    width: 50%;
+    border-radius: 10px;
+    max-height: 80vh;
+    overflow-y: auto;
+    position: relative;
+}
+
+.close-btn {
+    font-size: 25px;
+    cursor: pointer;
+    color: #333;
+    position: absolute;
+    top: 15px;
+    right: 20px;
+}
+
+.close-btn:hover {
+    color: #e74c3c;
+}
+
+.alert {
+    padding: 15px;
+    margin-bottom: 20px;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    text-align: center;
+}
+
+.alert-success {
+    color: #3c763d;
+    background-color: #dff0d8;
+    border-color: #d6e9c6;
+}
+
+.alert-error {
+    color: #a94442;
+    background-color: #f2dede;
+    border-color: #ebccd1;
+}
