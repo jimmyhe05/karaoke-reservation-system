@@ -874,6 +874,8 @@
                 initialDate: '{{ selected_date }}',
                 selectable: true,
                 select: function (info) {
+                    // Store the selected date in a data attribute on the calendar element
+                    calendarEl.dataset.selectedDate = info.startStr;
                     updateRoomTimelines(info.startStr);
                 },
                 headerToolbar: {
@@ -897,6 +899,9 @@
                 document.querySelectorAll('.room-timeline').forEach(timeline => {
                     timeline.style.opacity = '0.5';
                 });
+
+                // Store the selected date
+                calendarEl.dataset.selectedDate = date;
 
                 // Fetch reservations for the selected date
                 fetch(`/api/daily_reservations?date=${date}`)
@@ -976,7 +981,7 @@
                     });
             }
 
-            // Add click handlers for time slots to show new reservation modal
+            // Update the time slot click handler
             document.querySelectorAll('.room-timeline').forEach(timeline => {
                 timeline.addEventListener('click', function (e) {
                     if (e.target.classList.contains('time-slot')) {
@@ -986,23 +991,16 @@
                             return; // Don't allow new reservations on occupied slots
                         }
 
-                        // Remove selected class from all time slots
-                        document.querySelectorAll('.time-slot').forEach(slot => {
-                            slot.classList.remove('selected');
-                        });
-
-                        // Add selected class to clicked time slot
-                        e.target.classList.add('selected');
-
                         const hour = e.target.dataset.hour;
                         const roomId = this.id.replace('room-', '');
-                        const selectedDate = document.getElementById('date').value;
+                        // Use the calendar's selected date if available, otherwise use current date
+                        const selectedDate = calendarEl.dataset.selectedDate || '{{ selected_date }}';
                         showNewReservationModal(hour, roomId, selectedDate);
                     }
                 });
             });
 
-            // Update room timelines after successful reservation
+            // Update the form submission to handle time validation better
             const reservationForm = document.getElementById('reservationForm');
             reservationForm.addEventListener('submit', function (e) {
                 e.preventDefault();
@@ -1021,6 +1019,8 @@
                 const startTime = document.getElementById('start_time').value;
                 const endTime = document.getElementById('end_time').value;
                 const date = document.getElementById('date').value;
+                const reservationId = document.getElementById('reservation_id').value;
+                const roomId = document.getElementById('room_id').value;
 
                 // Validate time range
                 const start24 = formatTimeFor24Hour(startTime);
@@ -1028,32 +1028,74 @@
 
                 // Check if times are within business hours (11 AM to 1 AM next day)
                 const startHour = parseInt(start24.split(':')[0]);
-                const endHour = parseInt(end24.split(':')[0]);
+                let endHour = parseInt(end24.split(':')[0]);
 
-                if (startHour < 11 || (endHour > 1 && endHour < 11)) {
+                // Adjust end hour for after midnight
+                if (endHour < startHour && endHour <= 1) {
+                    endHour += 24;  // Convert 1 AM to 25:00 for comparison
+                }
+
+                if (startHour < 11 || (endHour > 25)) {
                     alert('Reservation times must be between 11:00 AM and 1:00 AM the next day.');
                     return;
                 }
 
-                // Update the form data with 24-hour format times
-                formData.set('start_time', start24);
-                formData.set('end_time', end24);
+                // Check if the new time slot is available using daily_reservations endpoint
+                fetch(`/api/daily_reservations?date=${date}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        const room = data.rooms.find(r => r.id === parseInt(roomId));
+                        if (!room) {
+                            throw new Error('Room not found');
+                        }
 
-                // Convert FormData to JSON
-                const jsonData = {};
-                formData.forEach((value, key) => {
-                    jsonData[key] = value;
-                });
+                        // Check for time slot conflicts
+                        const newStartHour = startHour;
+                        const newEndHour = endHour;
 
-                fetch(this.action, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(jsonData)
-                })
+                        const hasConflict = room.reservations.some(res => {
+                            // Skip checking against the current reservation being edited
+                            if (reservationId && res.id === parseInt(reservationId)) {
+                                return false;
+                            }
+
+                            const resStartHour = parseInt(res.start_time.split(':')[0]);
+                            let resEndHour = parseInt(res.end_time.split(':')[0]);
+
+                            // Adjust end hour for after midnight reservations
+                            if (resEndHour < resStartHour && resEndHour <= 1) {
+                                resEndHour += 24;
+                            }
+
+                            // Check for overlap
+                            return (newStartHour < resEndHour && newEndHour > resStartHour);
+                        });
+
+                        if (hasConflict) {
+                            alert('The selected time slot is not available. Please choose a different time.');
+                            return;
+                        }
+
+                        // If no conflicts, proceed with the reservation
+                        formData.set('start_time', start24);
+                        formData.set('end_time', end24);
+
+                        // Convert FormData to JSON
+                        const jsonData = {};
+                        formData.forEach((value, key) => {
+                            jsonData[key] = value;
+                        });
+
+                        return fetch(this.action, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify(jsonData)
+                        });
+                    })
                     .then(response => {
-                        if (!response.ok) {
+                        if (!response || !response.ok) {
                             return response.json().then(data => {
                                 throw new Error(data.error || 'Error saving reservation');
                             });
@@ -1061,9 +1103,8 @@
                         return response.json();
                     })
                     .then(data => {
-                        // Close the modal
-                        const modal = bootstrap.Modal.getInstance(document.getElementById('reservationModal'));
-                        modal.hide();
+                        // Close the modal and clear temporary visual indicators
+                        closeReservationModal();
 
                         // Update the timeline with the new reservation
                         updateRoomTimelines(date);
@@ -1148,7 +1189,6 @@
 
             var modal = new bootstrap.Modal(document.getElementById('reservationModal'), {
                 backdrop: 'static',
-                keyboard: false,
                 focus: true
             });
 
@@ -1172,6 +1212,10 @@
                 document.getElementById('reservationForm').reset();
                 document.querySelectorAll('.form-control').forEach(input => {
                     input.classList.remove('is-invalid', 'is-valid');
+                });
+                // Remove any temporary visual indicators
+                document.querySelectorAll('.time-slot').forEach(slot => {
+                    slot.classList.remove('selected');
                 });
             }
         }
@@ -1265,69 +1309,115 @@
             const endTime = document.getElementById('end_time').value;
 
             if (startTime && endTime) {
-                // Convert times to 24-hour format for the API
+                // Convert times to 24-hour format for calculation
                 const formatTimeFor24Hour = (timeStr) => {
                     const [time, period] = timeStr.split(' ');
                     let [hours, minutes] = time.split(':');
                     hours = parseInt(hours);
                     if (period === 'PM' && hours !== 12) hours += 12;
                     if (period === 'AM' && hours === 12) hours = 0;
-                    return `${hours.toString().padStart(2, '0')}:${minutes}`;
+                    return { hours: parseInt(hours), minutes: parseInt(minutes) };
                 };
 
-                const start24 = formatTimeFor24Hour(startTime);
-                const end24 = formatTimeFor24Hour(endTime);
+                const start = formatTimeFor24Hour(startTime);
+                const end = formatTimeFor24Hour(endTime);
 
-                console.log('Sending price estimate request:', {
-                    start_time: start24,
-                    end_time: end24
-                });
+                // Calculate duration and costs for different time periods
+                let totalCost = 0;
+                let periodCharges = [];
 
-                fetch('/api/price_estimate', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        start_time: start24,
-                        end_time: end24
-                    })
-                })
-                    .then(response => response.json())
-                    .then(data => {
-                        console.log('Price estimate response:', data);
-                        if (data.error) {
-                            console.error('Price estimate error:', data.error);
-                            return;
-                        }
+                // Helper function to format time for display
+                const formatTimeDisplay = (hours, minutes) => {
+                    const period = hours >= 12 ? 'PM' : 'AM';
+                    const displayHours = hours % 12 || 12;
+                    return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
+                };
 
-                        document.getElementById('room-rate').textContent = `$${data.room_rate.toFixed(2)}`;
-                        document.getElementById('tax-amount').textContent = `$${data.tax.toFixed(2)}`;
-                        document.getElementById('total-cost').textContent = `$${data.total.toFixed(2)}`;
+                // Function to calculate cost for a time segment
+                const calculateSegmentCost = (segmentStart, segmentEnd) => {
+                    const earlyBirdRate = 35; // $35/hour for early bird (11am-6pm)
+                    const eveningRate = 50;    // $50/hour for evening (6pm-1am)
 
-                        // Update period charges breakdown
-                        const periodCharges = document.getElementById('period-charges');
-                        periodCharges.innerHTML = data.period_charges.map(period => `
-                        <div class="period-charge">
-                            <div>${period.time}</div>
-                            <div>$${period.rate}/hr × ${period.duration}hr = $${period.cost.toFixed(2)}</div>
-                        </div>
-                    `).join('');
+                    let hours = segmentEnd.hours - segmentStart.hours;
+                    let minutes = segmentEnd.minutes - segmentStart.minutes;
 
-                        // Update the cost summary in the timeline if it exists
-                        const timeSlot = document.querySelector('.time-slot.selected');
-                        if (timeSlot) {
-                            const costSummary = timeSlot.querySelector('.cost-summary') || document.createElement('div');
-                            costSummary.className = 'cost-summary';
-                            costSummary.textContent = `$${data.total.toFixed(2)}`;
-                            if (!timeSlot.querySelector('.cost-summary')) {
-                                timeSlot.appendChild(costSummary);
-                            }
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error calculating price:', error);
-                    });
+                    if (minutes < 0) {
+                        hours -= 1;
+                        minutes += 60;
+                    }
+
+                    const duration = hours + (minutes / 60);
+
+                    // Determine rate based on time period
+                    let rate;
+                    if (segmentStart.hours >= 18 || segmentStart.hours < 1) { // 6pm-1am
+                        rate = eveningRate;
+                    } else { // 11am-6pm
+                        rate = earlyBirdRate;
+                    }
+
+                    return {
+                        startTime: formatTimeDisplay(segmentStart.hours, segmentStart.minutes),
+                        endTime: formatTimeDisplay(segmentEnd.hours, segmentEnd.minutes),
+                        rate: rate,
+                        duration: duration.toFixed(1),
+                        cost: rate * duration
+                    };
+                };
+
+                // Handle time periods
+                let currentTime = { ...start };
+                const endTime24 = end.hours === 1 ? 25 : end.hours; // Convert 1 AM to 25:00 for calculation
+
+                while (currentTime.hours < endTime24) {
+                    let periodEnd;
+
+                    if (currentTime.hours < 18 && end.hours >= 18) {
+                        // If reservation crosses 6 PM boundary
+                        periodEnd = { hours: 18, minutes: 0 };
+                    } else {
+                        // Otherwise go to end time
+                        periodEnd = end;
+                    }
+
+                    const segment = calculateSegmentCost(currentTime, periodEnd);
+                    periodCharges.push(segment);
+                    totalCost += segment.cost;
+
+                    if (periodEnd.hours === 18) {
+                        // Start next segment from 6 PM
+                        currentTime = { hours: 18, minutes: 0 };
+                    } else {
+                        break;
+                    }
+                }
+
+                // Calculate tax
+                const tax = totalCost * 0.055;
+                const finalTotal = totalCost + tax;
+
+                // Update the display
+                document.getElementById('period-charges').innerHTML = periodCharges.map(period => `
+                    <div class="period-charge">
+                        <div>${period.startTime} - ${period.endTime}</div>
+                        <div>$${period.rate}/hr × ${period.duration}hr = $${period.cost.toFixed(2)}</div>
+                    </div>
+                `).join('');
+
+                document.getElementById('room-rate').textContent = `$${totalCost.toFixed(2)}`;
+                document.getElementById('tax-amount').textContent = `$${tax.toFixed(2)}`;
+                document.getElementById('total-cost').textContent = `$${finalTotal.toFixed(2)}`;
+
+                // Update the cost summary in the timeline if it exists
+                const timeSlot = document.querySelector('.time-slot.selected');
+                if (timeSlot) {
+                    const costSummary = timeSlot.querySelector('.cost-summary') || document.createElement('div');
+                    costSummary.className = 'cost-summary';
+                    costSummary.textContent = `$${finalTotal.toFixed(2)}`;
+                    if (!timeSlot.querySelector('.cost-summary')) {
+                        timeSlot.appendChild(costSummary);
+                    }
+                }
             }
         }
 
@@ -1446,7 +1536,19 @@
             const card = document.createElement('div');
             card.className = 'reservation-card';
             card.dataset.reservationId = reservation.id;
-            card.style.height = `${(reservation.duration * 40)}px`;
+
+            // Calculate duration considering midnight crossing
+            let startHour = parseInt(reservation.start_time.split(':')[0]);
+            let endHour = parseInt(reservation.end_time.split(':')[0]);
+
+            // Adjust end hour for after midnight
+            if (endHour < startHour && endHour <= 1) {
+                endHour += 24;
+            }
+
+            const duration = endHour - startHour;
+            card.style.height = `${(duration * 40)}px`;
+
             card.onclick = function () {
                 showEditReservationModal(reservation.id);
             };
@@ -1478,6 +1580,9 @@
             card.appendChild(content);
             return card;
         }
+
+        // Update the modal's close button to use closeReservationModal
+        document.querySelector('#reservationModal .btn-close').addEventListener('click', closeReservationModal);
     </script>
 </body>
 
