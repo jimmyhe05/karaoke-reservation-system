@@ -1,0 +1,1220 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Karaoke Room Reservation System</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/fullcalendar@5.10.1/main.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/material_blue.css">
+    <style>
+        .main-container {
+            display: flex;
+            gap: 20px;
+            padding: 20px;
+            height: calc(100vh - 100px);
+        }
+
+        .calendar-container {
+            flex: 0 0 400px;
+            height: 100%;
+        }
+
+        .rooms-container {
+            flex: 1;
+            display: flex;
+            gap: 20px;
+            overflow-x: auto;
+            height: 100%;
+        }
+
+        .room-container {
+            flex: 1;
+            min-width: 250px;
+            max-width: 300px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .room-header {
+            background: #f8f9fa;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-bottom: none;
+            text-align: center;
+        }
+
+        .room-timeline {
+            flex: 1;
+            position: relative;
+            border: 1px solid #ddd;
+            background: #f8f9fa;
+            overflow-y: auto;
+        }
+
+        .time-slot {
+            height: 40px;
+            border-bottom: 1px solid #ddd;
+            position: relative;
+            font-size: 0.9em;
+        }
+
+        .time-label {
+            position: absolute;
+            left: 0;
+            width: 50px;
+            padding: 5px;
+            background: #fff;
+            border-right: 1px solid #ddd;
+            font-size: 0.8em;
+        }
+
+        .reservation-card {
+            position: absolute;
+            width: calc(100% - 50px);
+            margin-left: 50px;
+            background: #007bff;
+            color: white;
+            padding: 5px;
+            border-radius: 4px;
+            cursor: pointer;
+            z-index: 100;
+            font-size: 0.8em;
+            overflow: hidden;
+        }
+
+        .reservation-card:hover {
+            background: #0056b3;
+        }
+
+        .reservation-card strong {
+            display: block;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .fc {
+            font-size: 0.9em;
+            height: 100%;
+        }
+
+        .fc .fc-toolbar {
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .fc .fc-toolbar-title {
+            font-size: 1.2em;
+        }
+
+        .fc .fc-button {
+            padding: 0.3em 0.6em;
+            font-size: 0.9em;
+        }
+
+        .fc-view-harness {
+            height: calc(100% - 50px) !important;
+        }
+
+        .bilingual-label {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .bilingual-label .en {
+            font-size: 0.9em;
+        }
+
+        .bilingual-label .zh {
+            font-size: 0.8em;
+            color: #666;
+        }
+
+        .stats-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+        }
+
+        .quick-actions {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            display: flex;
+            gap: 10px;
+            z-index: 1000;
+        }
+
+        .quick-action-btn {
+            width: 50px;
+            height: 50px;
+            border-radius: 25px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .quick-action-btn:hover {
+            background: #0056b3;
+        }
+
+        .unavailable {
+            color: #999;
+            background-color: #f5f5f5;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 1rem;
+        }
+
+        .form-control:focus {
+            border-color: #007bff;
+            outline: none;
+            box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, .25);
+        }
+
+        .quick-duration-buttons {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 1rem;
+        }
+
+        .duration-btn {
+            flex: 1;
+            padding: 0.5rem;
+            border: 1px solid #007bff;
+            border-radius: 4px;
+            background: white;
+            color: #007bff;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .duration-btn:hover,
+        .duration-btn.active {
+            background: #007bff;
+            color: white;
+        }
+
+        .price-estimate {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: #f8f9fa;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        }
+
+        .price-estimate h4 {
+            margin-bottom: 0.5rem;
+            color: #333;
+        }
+
+        .price-breakdown {
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .room-suggestion {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: #e3f2fd;
+            border-radius: 4px;
+            border: 1px solid #90caf9;
+        }
+
+        .room-suggestion h4 {
+            margin-bottom: 0.5rem;
+            color: #1976d2;
+        }
+
+        .suggestion-reason {
+            font-size: 0.9em;
+            color: #1976d2;
+        }
+
+        .time-suggestion {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: #f3e5f5;
+            border-radius: 4px;
+            border: 1px solid #ce93d8;
+        }
+
+        .time-suggestion h4 {
+            margin-bottom: 0.5rem;
+            color: #7b1fa2;
+        }
+
+        .suggestion-times {
+            display: flex;
+            gap: 10px;
+            margin-top: 0.5rem;
+        }
+
+        .suggestion-time-btn {
+            padding: 0.5rem 1rem;
+            border: 1px solid #7b1fa2;
+            border-radius: 4px;
+            background: white;
+            color: #7b1fa2;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .suggestion-time-btn:hover {
+            background: #7b1fa2;
+            color: white;
+        }
+
+        .loading-indicator {
+            display: none;
+            text-align: center;
+            padding: 1rem;
+        }
+
+        .loading-indicator.active {
+            display: block;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            margin: 0 auto;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #007bff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .quick-time-buttons {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin: 1rem 0;
+        }
+
+        .time-preset-btn {
+            padding: 0.75rem;
+            border: 1px solid #007bff;
+            border-radius: 4px;
+            background: white;
+            color: #007bff;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+        }
+
+        .time-preset-btn:hover {
+            background: #007bff;
+            color: white;
+        }
+
+        .time-preset-btn .chinese {
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .time-preset-btn:hover .chinese {
+            color: #fff;
+        }
+
+        .breakdown-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .breakdown-item.total {
+            border-top: 2px solid #ddd;
+            border-bottom: none;
+            font-weight: bold;
+            font-size: 1.1em;
+            margin-top: 1rem;
+        }
+
+        .breakdown-label {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .breakdown-label .chinese {
+            font-size: 0.8em;
+            color: #666;
+        }
+
+        #period-charges {
+            flex: 1;
+            margin-left: 1rem;
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .modal-dialog {
+            max-width: 500px;
+        }
+
+        .modal-body {
+            padding: 1rem;
+        }
+
+        .form-group {
+            margin-bottom: 0.5rem;
+        }
+
+        .form-control {
+            padding: 0.375rem 0.75rem;
+            font-size: 0.9rem;
+        }
+
+        .quick-duration-buttons {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .duration-btn {
+            flex: 1;
+            padding: 0.25rem;
+            border: 1px solid #007bff;
+            border-radius: 4px;
+            background: white;
+            color: #007bff;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 0.9rem;
+        }
+
+        .duration-btn:hover,
+        .duration-btn.active {
+            background: #007bff;
+            color: white;
+        }
+
+        .accordion-button {
+            padding: 0.5rem 1rem;
+            font-size: 0.9rem;
+        }
+
+        .accordion-body {
+            padding: 0.5rem;
+        }
+
+        .breakdown-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.25rem 0;
+            font-size: 0.9rem;
+        }
+
+        .breakdown-item.total {
+            border-top: 1px solid #dee2e6;
+            margin-top: 0.5rem;
+            padding-top: 0.5rem;
+            font-weight: bold;
+        }
+
+        .chinese {
+            font-size: 0.85em;
+            color: #666;
+        }
+
+        label {
+            margin-bottom: 0.25rem;
+            font-size: 0.9rem;
+        }
+
+        .time-slot {
+            position: relative;
+        }
+
+        .cost-summary {
+            position: absolute;
+            right: 5px;
+            top: 5px;
+            background: rgba(0, 123, 255, 0.1);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            color: #007bff;
+        }
+
+        .time-slot.selected {
+            background: rgba(0, 123, 255, 0.05);
+        }
+
+        .period-charge {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.25rem;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container-fluid">
+        <h1 class="my-4 text-center">Karaoke Room Reservation System</h1>
+
+        <!-- Stats Container -->
+        <div class="stats-container">
+            <h5>Today's Stats</h5>
+            <div class="bilingual-label">
+                <span class="en">Total Reservations</span>
+                <span class="zh">总预订数</span>
+                <strong>{{ today_stats.total_reservations }}</strong>
+            </div>
+            <div class="bilingual-label">
+                <span class="en">Occupancy Rate</span>
+                <span class="zh">房间使用率</span>
+                <strong>{{ today_stats.occupancy_rate }}%</strong>
+            </div>
+        </div>
+
+        <div class="main-container">
+            <!-- Calendar View -->
+            <div class="calendar-container">
+                <div id="calendar"></div>
+            </div>
+
+            <!-- Room Timelines -->
+            <div class="rooms-container">
+                {% for room in rooms %}
+                <div class="room-container">
+                    <div class="room-header">
+                        <h3 class="m-0">
+                            <span class="en">Room {{ room.id }}</span>
+                            <span class="zh">房间 {{ room.id }}</span>
+                        </h3>
+                    </div>
+                    <div class="room-timeline" id="room-{{ room.id }}">
+                        {% for hour in range(11, 25) %}
+                        <div class="time-slot" data-hour="{{ hour }}">
+                            <div class="time-label">
+                                {{ "%02d:00"|format(hour % 24) }}
+                            </div>
+                            {% for reservation in room.reservations %}
+                            {% if reservation.start_hour == hour %}
+                            <div class="reservation-card" data-reservation-id="{{ reservation.id }}"
+                                style="height: {{ (reservation.duration * 40) }}px;">
+                                <strong>{{ reservation.contact_name }}</strong>
+                                <div class="bilingual-label">
+                                    <span class="en">{{ reservation.num_people }} people</span>
+                                    <span class="zh">{{ reservation.num_people }} 人</span>
+                                </div>
+                                <div>{{ reservation.start_time }} - {{ reservation.end_time }}</div>
+                            </div>
+                            {% endif %}
+                            {% endfor %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="quick-actions">
+            <button class="quick-action-btn" onclick="showNewReservationModal()">
+                <i class="fas fa-plus"></i>
+            </button>
+            <button class="quick-action-btn" onclick="showTodaySummary()">
+                <i class="fas fa-chart-bar"></i>
+            </button>
+        </div>
+
+        <!-- Reservation Form Modal -->
+        <div class="modal fade" id="reservationModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">
+                            <span class="en">New Reservation</span>
+                            <span class="zh">新预订</span>
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="reservationForm" method="POST" action="{{ url_for('reservation') }}">
+                            <input type="hidden" id="reservation_id" name="reservation_id">
+
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-group mb-2">
+                                        <label for="date">Date <span class="chinese">日期</span></label>
+                                        <input type="text" id="date" name="date" class="form-control" required>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-group mb-2">
+                                        <label class="bilingual-label">
+                                            <span class="en">Room</span>
+                                            <span class="zh">房间</span>
+                                        </label>
+                                        <select id="room_id" name="room_id" class="form-control">
+                                            {% for room in rooms %}
+                                            <option value="{{ room.id }}">Room {{ room.id }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-group mb-2">
+                                        <label for="start_time">Start Time <span class="chinese">开始时间</span></label>
+                                        <input type="text" id="start_time" name="start_time" class="form-control"
+                                            required>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-group mb-2">
+                                        <label for="end_time">End Time <span class="chinese">结束时间</span></label>
+                                        <input type="text" id="end_time" name="end_time" class="form-control" required>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="quick-duration-buttons mb-2">
+                                <button type="button" class="duration-btn" data-hours="1">1h</button>
+                                <button type="button" class="duration-btn" data-hours="2">2h</button>
+                                <button type="button" class="duration-btn" data-hours="3">3h</button>
+                                <button type="button" class="duration-btn" data-hours="4">4h</button>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-group mb-2">
+                                        <label class="bilingual-label">
+                                            <span class="en">Number of People</span>
+                                            <span class="zh">人数</span>
+                                        </label>
+                                        <input type="number" id="num_people" name="num_people" required min="1" max="20"
+                                            class="form-control">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-12">
+                                    <div class="form-group mb-2">
+                                        <label class="bilingual-label">
+                                            <span class="en">Contact Name</span>
+                                            <span class="zh">联系人姓名</span>
+                                        </label>
+                                        <input type="text" id="contact_name" name="contact_name" required
+                                            class="form-control">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-group mb-2">
+                                        <label class="bilingual-label">
+                                            <span class="en">Contact Phone</span>
+                                            <span class="zh">联系电话</span>
+                                        </label>
+                                        <input type="tel" id="contact_phone" name="contact_phone" required
+                                            class="form-control">
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-group mb-2">
+                                        <label class="bilingual-label">
+                                            <span class="en">Contact Email</span>
+                                            <span class="zh">电子邮箱</span>
+                                        </label>
+                                        <input type="email" id="contact_email" name="contact_email" required
+                                            class="form-control">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="accordion mt-2 mb-2">
+                                <div class="accordion-item">
+                                    <h2 class="accordion-header" id="costBreakdownHeader">
+                                        <button class="accordion-button collapsed" type="button"
+                                            data-bs-toggle="collapse" data-bs-target="#costBreakdown">
+                                            Cost Breakdown <span class="chinese ms-2">费用明细</span>
+                                        </button>
+                                    </h2>
+                                    <div id="costBreakdown" class="accordion-collapse collapse">
+                                        <div class="accordion-body p-2">
+                                            <div class="price-breakdown">
+                                                <div class="breakdown-item">
+                                                    <span class="breakdown-label">Room Rate <span
+                                                            class="chinese">房间费用</span></span>
+                                                    <span id="room-rate">$0</span>
+                                                </div>
+                                                <div class="breakdown-item">
+                                                    <span class="breakdown-label">Time Period Charges <span
+                                                            class="chinese">时段费用</span></span>
+                                                    <div id="period-charges"></div>
+                                                </div>
+                                                <div class="breakdown-item">
+                                                    <span class="breakdown-label">Tax (5.5%) <span
+                                                            class="chinese">税费</span></span>
+                                                    <span id="tax-amount">$0</span>
+                                                </div>
+                                                <div class="breakdown-item total">
+                                                    <span class="breakdown-label">Total <span
+                                                            class="chinese">总计</span></span>
+                                                    <span id="total-cost">$0</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="d-flex justify-content-between">
+                                <button type="button" class="btn btn-danger" onclick="deleteReservation()">
+                                    <span class="en">Delete</span>
+                                    <span class="zh">删除</span>
+                                </button>
+                                <button type="submit" class="btn btn-primary">
+                                    <span class="en">Save</span>
+                                    <span class="zh">保存</span>
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Move scripts before closing body tag -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@5.10.1/main.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.14.0/Sortable.min.js"></script>
+    <script src="https://kit.fontawesome.com/your-fontawesome-kit.js"></script>
+    <!-- Update Flatpickr script -->
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/zh.js"></script>
+    <script>
+        let currentReservationId = null;
+        let startTimePicker, endTimePicker;
+
+        document.addEventListener('DOMContentLoaded', function () {
+            // Initialize FullCalendar
+            var calendarEl = document.getElementById('calendar');
+            var calendar = new FullCalendar.Calendar(calendarEl, {
+                initialView: 'dayGridMonth',
+                initialDate: '{{ selected_date }}',
+                selectable: true,
+                select: function (info) {
+                    updateRoomTimelines(info.startStr);
+                },
+                headerToolbar: {
+                    left: 'prev,next today',
+                    center: 'title',
+                    right: 'dayGridMonth,timeGridWeek'
+                }
+            });
+            calendar.render();
+
+            function formatTime(timeStr) {
+                const [hours, minutes] = timeStr.split(':');
+                const hour = parseInt(hours);
+                const ampm = hour >= 12 ? 'PM' : 'AM';
+                const displayHour = hour % 12 || 12;
+                return `${displayHour}:${minutes} ${ampm}`;
+            }
+
+            function updateRoomTimelines(date) {
+                // Show loading state
+                document.querySelectorAll('.room-timeline').forEach(timeline => {
+                    timeline.style.opacity = '0.5';
+                });
+
+                // Fetch reservations for the selected date
+                fetch(`/api/daily_reservations?date=${date}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        // Update room timelines
+                        data.rooms.forEach(room => {
+                            const timeline = document.getElementById(`room-${room.id}`);
+                            if (timeline) {
+                                // Clear existing reservations
+                                timeline.innerHTML = '';
+
+                                // Add time slots
+                                for (let hour = 11; hour < 25; hour++) {
+                                    const timeSlot = document.createElement('div');
+                                    timeSlot.className = 'time-slot';
+                                    timeSlot.dataset.hour = hour;
+
+                                    const timeLabel = document.createElement('div');
+                                    timeLabel.className = 'time-label';
+                                    timeLabel.textContent = formatTime(`${hour % 24}:00`);
+                                    timeSlot.appendChild(timeLabel);
+
+                                    // Add reservations for this hour
+                                    room.reservations.forEach(reservation => {
+                                        if (reservation.start_hour === hour) {
+                                            const card = document.createElement('div');
+                                            card.className = 'reservation-card';
+                                            card.dataset.reservationId = reservation.id;
+                                            card.style.height = `${reservation.duration * 40}px`;
+
+                                            const name = document.createElement('strong');
+                                            name.textContent = reservation.contact_name;
+                                            card.appendChild(name);
+
+                                            const details = document.createElement('div');
+                                            details.className = 'bilingual-label';
+                                            details.innerHTML = `
+                                                <span class="en">${reservation.num_people} people</span>
+                                                <span class="zh">${reservation.num_people} 人</span>
+                                            `;
+                                            card.appendChild(details);
+
+                                            const time = document.createElement('div');
+                                            time.textContent = `${formatTime(reservation.start_time)} - ${formatTime(reservation.end_time)}`;
+                                            card.appendChild(time);
+
+                                            timeSlot.appendChild(card);
+                                        }
+                                    });
+
+                                    timeline.appendChild(timeSlot);
+                                }
+                            }
+                        });
+
+                        // Update URL and form date
+                        const urlParams = new URLSearchParams(window.location.search);
+                        urlParams.set('date', date);
+                        window.history.replaceState({}, '', `${window.location.pathname}?${urlParams}`);
+                        document.getElementById('date').value = date;
+                    })
+                    .finally(() => {
+                        // Remove loading state
+                        document.querySelectorAll('.room-timeline').forEach(timeline => {
+                            timeline.style.opacity = '1';
+                        });
+                    });
+            }
+
+            // Add click handlers for time slots to show new reservation modal
+            document.querySelectorAll('.room-timeline').forEach(timeline => {
+                timeline.addEventListener('click', function (e) {
+                    if (e.target.classList.contains('time-slot')) {
+                        // Remove selected class from all time slots
+                        document.querySelectorAll('.time-slot').forEach(slot => {
+                            slot.classList.remove('selected');
+                        });
+
+                        // Add selected class to clicked time slot
+                        e.target.classList.add('selected');
+
+                        const hour = e.target.dataset.hour;
+                        const roomId = this.id.replace('room-', '');
+                        const selectedDate = document.getElementById('date').value;
+                        showNewReservationModal(hour, roomId, selectedDate);
+                    }
+                });
+            });
+
+            // Update room timelines after successful reservation
+            const reservationForm = document.getElementById('reservationForm');
+            reservationForm.addEventListener('submit', function (e) {
+                e.preventDefault();
+
+                // Convert times to 24-hour format for submission
+                const formatTimeFor24Hour = (timeStr) => {
+                    const [time, period] = timeStr.split(' ');
+                    let [hours, minutes] = time.split(':');
+                    hours = parseInt(hours);
+                    if (period === 'PM' && hours !== 12) hours += 12;
+                    if (period === 'AM' && hours === 12) hours = 0;
+                    return `${hours.toString().padStart(2, '0')}:${minutes}`;
+                };
+
+                const formData = new FormData(this);
+                const startTime = document.getElementById('start_time').value;
+                const endTime = document.getElementById('end_time').value;
+
+                // Update the form data with 24-hour format times
+                formData.set('start_time', formatTimeFor24Hour(startTime));
+                formData.set('end_time', formatTimeFor24Hour(endTime));
+
+                fetch(this.action, {
+                    method: 'POST',
+                    body: formData
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.error) {
+                            alert(data.error);
+                        } else {
+                            // Close the modal
+                            const modal = bootstrap.Modal.getInstance(document.getElementById('reservationModal'));
+                            modal.hide();
+
+                            // Update the timeline with the new reservation
+                            const date = document.getElementById('date').value;
+                            updateRoomTimelines(date);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error saving reservation:', error);
+                        alert('Error saving reservation. Please try again.');
+                    });
+            });
+
+            // Initialize with current date's reservations
+            updateRoomTimelines('{{ selected_date }}');
+
+            // Initialize flatpickr for time inputs with 12-hour format
+            startTimePicker = flatpickr("#start_time", {
+                enableTime: true,
+                noCalendar: true,
+                dateFormat: "h:i K",
+                time_24hr: false,
+                minuteIncrement: 30,
+                defaultHour: 11,
+                disableMobile: false,
+                allowInput: true,
+                onChange: function (selectedDates, dateStr) {
+                    updatePriceEstimate();
+                    findAlternativeTimes();
+                }
+            });
+
+            endTimePicker = flatpickr("#end_time", {
+                enableTime: true,
+                noCalendar: true,
+                dateFormat: "h:i K",
+                time_24hr: false,
+                minuteIncrement: 30,
+                defaultHour: 13,
+                disableMobile: false,
+                allowInput: true,
+                onChange: function (selectedDates, dateStr) {
+                    updatePriceEstimate();
+                }
+            });
+
+            // Update the form inputs to have type="text" instead of type="time"
+            document.querySelector('#start_time').type = 'text';
+            document.querySelector('#end_time').type = 'text';
+        });
+
+        function showNewReservationModal(hour, roomId, selectedDate) {
+            currentReservationId = null;
+            document.getElementById('reservationForm').reset();
+            document.getElementById('reservation_id').value = '';
+            document.querySelector('.modal-title .en').textContent = 'New Reservation';
+            document.querySelector('.modal-title .zh').textContent = '新预订';
+            document.querySelector('.btn-danger').style.display = 'none';
+
+            // Set the date if provided
+            if (selectedDate) {
+                document.getElementById('date').value = selectedDate;
+            }
+
+            // Set the room if provided
+            if (roomId) {
+                document.getElementById('room_id').value = roomId;
+            }
+
+            // Set the start time and calculate end time (default to 2 hours)
+            if (hour) {
+                const date = new Date();
+                date.setHours(hour, 0, 0, 0);
+                startTimePicker.setDate(date);
+
+                // Set a default end time 2 hours after start time
+                const endDate = new Date(date);
+                endDate.setHours(date.getHours() + 2);
+                endTimePicker.setDate(endDate);
+
+                // Calculate initial price estimate
+                updatePriceEstimate();
+            }
+
+            var modal = new bootstrap.Modal(document.getElementById('reservationModal'));
+            modal.show();
+        }
+
+        function showEditReservationModal(reservationId) {
+            currentReservationId = reservationId;
+            document.getElementById('reservation_id').value = reservationId;
+            document.querySelector('.modal-title .en').textContent = 'Edit Reservation';
+            document.querySelector('.modal-title .zh').textContent = '编辑预订';
+            document.querySelector('.btn-danger').style.display = 'block';
+
+            // Fetch reservation details
+            fetch(`/get_reservation/${reservationId}`)
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('date').value = data.date;
+                    document.getElementById('start_time').value = data.start_time;
+                    document.getElementById('end_time').value = data.end_time;
+                    document.getElementById('num_people').value = data.num_people;
+                    document.getElementById('contact_name').value = data.contact_name;
+                    document.getElementById('contact_phone').value = data.contact_phone;
+                    document.getElementById('contact_email').value = data.contact_email;
+                    document.getElementById('room_id').value = data.room_id;
+                });
+
+            var modal = new bootstrap.Modal(document.getElementById('reservationModal'));
+            modal.show();
+        }
+
+        function deleteReservation() {
+            if (currentReservationId && confirm('Are you sure you want to delete this reservation?')) {
+                fetch(`/delete_reservation/${currentReservationId}`, {
+                    method: 'POST'
+                }).then(response => {
+                    if (response.ok) {
+                        window.location.reload();
+                    }
+                });
+            }
+        }
+
+        function showTodaySummary() {
+            // Implementation for showing today's summary
+            // This could open a modal with detailed statistics
+        }
+
+        // Function to update room availability
+        function updateRoomAvailability(date) {
+            fetch(`/api/room_availability?date=${date}`)
+                .then(response => response.json())
+                .then(data => {
+                    const roomSelect = document.querySelector("#room_id");
+                    Array.from(roomSelect.options).forEach(option => {
+                        const roomId = option.value;
+                        if (data.available_rooms.includes(parseInt(roomId))) {
+                            option.disabled = false;
+                            option.classList.remove('unavailable');
+                        } else {
+                            option.disabled = true;
+                            option.classList.add('unavailable');
+                        }
+                    });
+                });
+        }
+
+        function updatePriceEstimate() {
+            const startTime = document.getElementById('start_time').value;
+            const endTime = document.getElementById('end_time').value;
+
+            if (startTime && endTime) {
+                // Convert times to 24-hour format for the API
+                const formatTimeFor24Hour = (timeStr) => {
+                    const [time, period] = timeStr.split(' ');
+                    let [hours, minutes] = time.split(':');
+                    hours = parseInt(hours);
+                    if (period === 'PM' && hours !== 12) hours += 12;
+                    if (period === 'AM' && hours === 12) hours = 0;
+                    return `${hours.toString().padStart(2, '0')}:${minutes}`;
+                };
+
+                const start24 = formatTimeFor24Hour(startTime);
+                const end24 = formatTimeFor24Hour(endTime);
+
+                console.log('Sending price estimate request:', {
+                    start_time: start24,
+                    end_time: end24
+                });
+
+                fetch('/api/price_estimate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        start_time: start24,
+                        end_time: end24
+                    })
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        console.log('Price estimate response:', data);
+                        if (data.error) {
+                            console.error('Price estimate error:', data.error);
+                            return;
+                        }
+
+                        document.getElementById('room-rate').textContent = `$${data.room_rate.toFixed(2)}`;
+                        document.getElementById('tax-amount').textContent = `$${data.tax.toFixed(2)}`;
+                        document.getElementById('total-cost').textContent = `$${data.total.toFixed(2)}`;
+
+                        // Update period charges breakdown
+                        const periodCharges = document.getElementById('period-charges');
+                        periodCharges.innerHTML = data.period_charges.map(period => `
+                        <div class="period-charge">
+                            <div>${period.time}</div>
+                            <div>$${period.rate}/hr × ${period.duration}hr = $${period.cost.toFixed(2)}</div>
+                        </div>
+                    `).join('');
+
+                        // Update the cost summary in the timeline if it exists
+                        const timeSlot = document.querySelector('.time-slot.selected');
+                        if (timeSlot) {
+                            const costSummary = timeSlot.querySelector('.cost-summary') || document.createElement('div');
+                            costSummary.className = 'cost-summary';
+                            costSummary.textContent = `$${data.total.toFixed(2)}`;
+                            if (!timeSlot.querySelector('.cost-summary')) {
+                                timeSlot.appendChild(costSummary);
+                            }
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error calculating price:', error);
+                    });
+            }
+        }
+
+        function suggestRoom() {
+            const numPeople = document.getElementById('num_people').value;
+            if (numPeople) {
+                fetch('/api/room_suggestion', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        num_people: numPeople
+                    })
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        const roomSelect = document.getElementById('room_id');
+                        const suggestionReason = document.getElementById('room-suggestion-reason');
+
+                        // Update room selection
+                        Array.from(roomSelect.options).forEach(option => {
+                            if (data.suggested_rooms.includes(parseInt(option.value))) {
+                                option.classList.add('suggested');
+                            } else {
+                                option.classList.remove('suggested');
+                            }
+                        });
+
+                        suggestionReason.textContent = data.reason;
+                    });
+            }
+        }
+
+        function findAlternativeTimes() {
+            const date = document.getElementById('date').value;
+            const startTime = document.getElementById('start_time').value;
+            const roomId = document.getElementById('room_id').value;
+
+            if (date && startTime && roomId) {
+                document.querySelector('.loading-indicator').classList.add('active');
+
+                fetch('/api/alternative_times', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        date: date,
+                        start_time: startTime,
+                        room_id: roomId
+                    })
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        const timeSuggestion = document.querySelector('.time-suggestion');
+                        const alternativeTimes = document.getElementById('alternative-times');
+
+                        if (data.alternatives && data.alternatives.length > 0) {
+                            alternativeTimes.innerHTML = data.alternatives.map(time => `
+                            <button class="suggestion-time-btn" onclick="selectAlternativeTime('${time}')">
+                                ${time}
+                            </button>
+                        `).join('');
+                            timeSuggestion.style.display = 'block';
+                        } else {
+                            timeSuggestion.style.display = 'none';
+                        }
+                    })
+                    .finally(() => {
+                        document.querySelector('.loading-indicator').classList.remove('active');
+                    });
+            }
+        }
+
+        function selectAlternativeTime(time) {
+            document.getElementById('start_time').value = time;
+            updatePriceEstimate();
+            findAlternativeTimes();
+        }
+
+        // Add event listeners for quick duration buttons
+        document.querySelectorAll('.duration-btn').forEach(button => {
+            button.addEventListener('click', function () {
+                // Remove active class from all duration buttons
+                document.querySelectorAll('.duration-btn').forEach(btn => {
+                    btn.classList.remove('active');
+                });
+
+                // Add active class to clicked button
+                this.classList.add('active');
+
+                const hours = parseInt(this.dataset.hours);
+                const startTime = startTimePicker.selectedDates[0];
+
+                if (startTime) {
+                    const endTime = new Date(startTime);
+                    endTime.setHours(endTime.getHours() + hours);
+                    endTimePicker.setDate(endTime);
+                    updatePriceEstimate();
+                }
+            });
+        });
+
+        // Add event listeners for form inputs
+        document.getElementById('num_people').addEventListener('change', suggestRoom);
+        document.getElementById('start_time').addEventListener('change', () => {
+            updatePriceEstimate();
+            findAlternativeTimes();
+        });
+        document.getElementById('end_time').addEventListener('change', updatePriceEstimate);
+        document.getElementById('room_id').addEventListener('change', findAlternativeTimes);
+    </script>
+</body>
+
+</html>
