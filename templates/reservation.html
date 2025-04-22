@@ -59,6 +59,7 @@
             border-bottom: 1px solid #ddd;
             position: relative;
             font-size: 0.9em;
+            background-color: #ffffff;
         }
 
         .time-label {
@@ -66,27 +67,63 @@
             left: 0;
             width: 50px;
             padding: 5px;
-            background: #fff;
+            background: #f8f9fa;
             border-right: 1px solid #ddd;
             font-size: 0.8em;
+            color: #495057;
+            font-weight: 500;
         }
 
         .reservation-card {
             position: absolute;
             width: calc(100% - 50px);
             margin-left: 50px;
-            background: #007bff;
-            color: white;
-            padding: 5px;
+            background: #e3f2fd;
+            color: #1976d2;
+            padding: 8px;
             border-radius: 4px;
             cursor: pointer;
             z-index: 100;
-            font-size: 0.8em;
+            font-size: 0.85em;
             overflow: hidden;
+            border: 2px solid #1976d2;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            transition: all 0.2s ease;
         }
 
         .reservation-card:hover {
-            background: #0056b3;
+            background: #bbdefb;
+            border-color: #1565c0;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+        }
+
+        .reservation-card .time-indicator {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 24px;
+            background: #1976d2;
+            color: white;
+            font-size: 0.8em;
+            padding: 2px 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: 500;
+        }
+
+        .reservation-card .time-indicator .start-time,
+        .reservation-card .time-indicator .end-time {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+
+        .reservation-card .content {
+            margin-top: 24px;
+            padding: 4px 0;
         }
 
         .reservation-card strong {
@@ -94,6 +131,37 @@
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            color: #1565c0;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .reservation-card .bilingual-label {
+            font-size: 0.8em;
+            color: #1976d2;
+        }
+
+        .reservation-card .remove-btn {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            background: rgba(255, 0, 0, 0.8);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            font-size: 12px;
+            cursor: pointer;
+            display: none;
+        }
+
+        .reservation-card:hover .remove-btn {
+            display: block;
+        }
+
+        .reservation-card:hover .remove-btn:hover {
+            background: red;
         }
 
         .fc {
@@ -145,30 +213,15 @@
         }
 
         .quick-actions {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            display: flex;
-            gap: 10px;
-            z-index: 1000;
+            display: none;
         }
 
         .quick-action-btn {
-            width: 50px;
-            height: 50px;
-            border-radius: 25px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: #007bff;
-            color: white;
-            border: none;
-            cursor: pointer;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            display: none;
         }
 
         .quick-action-btn:hover {
-            background: #0056b3;
+            display: none;
         }
 
         .unavailable {
@@ -180,18 +233,59 @@
             margin-bottom: 1.5rem;
         }
 
+        .form-group label.required::after {
+            content: "*";
+            color: red;
+            margin-left: 4px;
+        }
+
         .form-control {
-            width: 100%;
-            padding: 0.5rem;
-            border: 1px solid #ddd;
             border-radius: 4px;
+            border: 1px solid #ced4da;
+            padding: 0.75rem 1rem;
             font-size: 1rem;
+            transition: all 0.2s ease-in-out;
+            background-color: #fff;
         }
 
         .form-control:focus {
-            border-color: #007bff;
-            outline: none;
-            box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, .25);
+            border-color: #80bdff;
+            outline: 0;
+            box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+        }
+
+        .form-control::placeholder {
+            color: #6c757d;
+            opacity: 0.7;
+        }
+
+        .form-control:required:invalid {
+            border-color: #dc3545;
+        }
+
+        .form-control:required:valid {
+            border-color: #28a745;
+        }
+
+        .text-muted {
+            font-size: 0.875rem;
+            color: #6c757d;
+        }
+
+        .bilingual-label {
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 0.5rem;
+        }
+
+        .bilingual-label .en {
+            font-weight: 500;
+            color: #212529;
+        }
+
+        .bilingual-label .zh {
+            font-size: 0.875rem;
+            color: #6c757d;
         }
 
         .quick-duration-buttons {
@@ -455,8 +549,24 @@
             font-size: 0.9rem;
         }
 
-        .time-slot {
-            position: relative;
+        .time-slot.occupied {
+            background-color: #fff3f3;
+        }
+
+        .time-slot.occupied .time-label {
+            color: #dc3545;
+            font-weight: bold;
+        }
+
+        .time-slot.selected {
+            background: #e3f2fd;
+            border: 1px solid #1976d2;
+        }
+
+        .time-slot.selected .time-label {
+            background: #e3f2fd;
+            color: #1976d2;
+            font-weight: bold;
         }
 
         .cost-summary {
@@ -470,15 +580,34 @@
             color: #007bff;
         }
 
-        .time-slot.selected {
-            background: rgba(0, 123, 255, 0.05);
-        }
-
         .period-charge {
             display: flex;
             justify-content: space-between;
             margin-bottom: 0.25rem;
             font-size: 0.9em;
+        }
+
+        .bilingual-label.horizontal {
+            flex-direction: row;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .bilingual-label.horizontal .en {
+            margin-right: 0.5rem;
+        }
+
+        .bilingual-label.horizontal .zh {
+            font-size: 0.9em;
+        }
+
+        select.form-control {
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 0.75rem center;
+            background-size: 16px 12px;
+            padding-right: 2.5rem;
         }
     </style>
 </head>
@@ -545,16 +674,6 @@
             </div>
         </div>
 
-        <!-- Quick Actions -->
-        <div class="quick-actions">
-            <button class="quick-action-btn" onclick="showNewReservationModal()">
-                <i class="fas fa-plus"></i>
-            </button>
-            <button class="quick-action-btn" onclick="showTodaySummary()">
-                <i class="fas fa-chart-bar"></i>
-            </button>
-        </div>
-
         <!-- Reservation Form Modal -->
         <div class="modal fade" id="reservationModal" tabindex="-1">
             <div class="modal-dialog">
@@ -579,7 +698,7 @@
                                 </div>
                                 <div class="col-md-6">
                                     <div class="form-group mb-2">
-                                        <label class="bilingual-label">
+                                        <label class="bilingual-label horizontal">
                                             <span class="en">Room</span>
                                             <span class="zh">房间</span>
                                         </label>
@@ -617,49 +736,66 @@
 
                             <div class="row">
                                 <div class="col-md-6">
-                                    <div class="form-group mb-2">
+                                    <div class="form-group mb-3">
                                         <label class="bilingual-label">
                                             <span class="en">Number of People</span>
                                             <span class="zh">人数</span>
                                         </label>
-                                        <input type="number" id="num_people" name="num_people" required min="1" max="20"
-                                            class="form-control">
+                                        <input type="number" id="num_people" name="num_people" min="1" max="20"
+                                            class="form-control" value="1" required>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-group mb-3">
+                                        <label class="bilingual-label">
+                                            <span class="en">Language</span>
+                                            <span class="zh">语言</span>
+                                        </label>
+                                        <select id="language" name="language" class="form-control">
+                                            <option value="en" selected>English</option>
+                                            <option value="zh">Mandarin (普通话)</option>
+                                            <option value="ja">Japanese (日本語)</option>
+                                            <option value="ko">Korean (한국어)</option>
+                                            <option value="vi">Vietnamese (Tiếng Việt)</option>
+                                            <option value="th">Thai (ไทย)</option>
+                                            <option value="other">Other (其他)</option>
+                                        </select>
                                     </div>
                                 </div>
                             </div>
 
                             <div class="row">
                                 <div class="col-md-12">
-                                    <div class="form-group mb-2">
+                                    <div class="form-group mb-3">
                                         <label class="bilingual-label">
                                             <span class="en">Contact Name</span>
                                             <span class="zh">联系人姓名</span>
                                         </label>
                                         <input type="text" id="contact_name" name="contact_name" required
-                                            class="form-control">
+                                            class="form-control" placeholder="Required *">
                                     </div>
                                 </div>
                             </div>
 
                             <div class="row">
                                 <div class="col-md-6">
-                                    <div class="form-group mb-2">
+                                    <div class="form-group mb-3">
                                         <label class="bilingual-label">
                                             <span class="en">Contact Phone</span>
                                             <span class="zh">联系电话</span>
                                         </label>
                                         <input type="tel" id="contact_phone" name="contact_phone" required
-                                            class="form-control">
+                                            class="form-control" placeholder="Required *">
                                     </div>
                                 </div>
                                 <div class="col-md-6">
-                                    <div class="form-group mb-2">
+                                    <div class="form-group mb-3">
                                         <label class="bilingual-label">
                                             <span class="en">Contact Email</span>
                                             <span class="zh">电子邮箱</span>
                                         </label>
-                                        <input type="email" id="contact_email" name="contact_email" required
-                                            class="form-control">
+                                        <input type="email" id="contact_email" name="contact_email" class="form-control"
+                                            placeholder="Optional">
                                     </div>
                                 </div>
                             </div>
@@ -790,25 +926,34 @@
                                             const card = document.createElement('div');
                                             card.className = 'reservation-card';
                                             card.dataset.reservationId = reservation.id;
-                                            card.style.height = `${reservation.duration * 40}px`;
+                                            card.style.height = `${(reservation.duration * 40)}px`;
+                                            card.onclick = function () {
+                                                showEditReservationModal(reservation.id);
+                                            };
+
+                                            // Add time indicator
+                                            const timeIndicator = document.createElement('div');
+                                            timeIndicator.className = 'time-indicator';
+                                            timeIndicator.innerHTML = `
+                                                <span class="start-time">${formatTime(reservation.start_time)}</span>
+                                                <span class="end-time">${formatTime(reservation.end_time)}</span>
+                                            `;
+                                            card.appendChild(timeIndicator);
 
                                             const name = document.createElement('strong');
                                             name.textContent = reservation.contact_name;
                                             card.appendChild(name);
 
-                                            const details = document.createElement('div');
-                                            details.className = 'bilingual-label';
-                                            details.innerHTML = `
+                                            const people = document.createElement('div');
+                                            people.className = 'bilingual-label';
+                                            people.innerHTML = `
                                                 <span class="en">${reservation.num_people} people</span>
                                                 <span class="zh">${reservation.num_people} 人</span>
                                             `;
-                                            card.appendChild(details);
-
-                                            const time = document.createElement('div');
-                                            time.textContent = `${formatTime(reservation.start_time)} - ${formatTime(reservation.end_time)}`;
-                                            card.appendChild(time);
+                                            card.appendChild(people);
 
                                             timeSlot.appendChild(card);
+                                            timeSlot.classList.add('occupied');
                                         }
                                     });
 
@@ -835,6 +980,12 @@
             document.querySelectorAll('.room-timeline').forEach(timeline => {
                 timeline.addEventListener('click', function (e) {
                     if (e.target.classList.contains('time-slot')) {
+                        // Check if the time slot is already occupied
+                        const isOccupied = e.target.classList.contains('occupied');
+                        if (isOccupied) {
+                            return; // Don't allow new reservations on occupied slots
+                        }
+
                         // Remove selected class from all time slots
                         document.querySelectorAll('.time-slot').forEach(slot => {
                             slot.classList.remove('selected');
@@ -869,32 +1020,57 @@
                 const formData = new FormData(this);
                 const startTime = document.getElementById('start_time').value;
                 const endTime = document.getElementById('end_time').value;
+                const date = document.getElementById('date').value;
+
+                // Validate time range
+                const start24 = formatTimeFor24Hour(startTime);
+                const end24 = formatTimeFor24Hour(endTime);
+
+                // Check if times are within business hours (11 AM to 1 AM next day)
+                const startHour = parseInt(start24.split(':')[0]);
+                const endHour = parseInt(end24.split(':')[0]);
+
+                if (startHour < 11 || (endHour > 1 && endHour < 11)) {
+                    alert('Reservation times must be between 11:00 AM and 1:00 AM the next day.');
+                    return;
+                }
 
                 // Update the form data with 24-hour format times
-                formData.set('start_time', formatTimeFor24Hour(startTime));
-                formData.set('end_time', formatTimeFor24Hour(endTime));
+                formData.set('start_time', start24);
+                formData.set('end_time', end24);
+
+                // Convert FormData to JSON
+                const jsonData = {};
+                formData.forEach((value, key) => {
+                    jsonData[key] = value;
+                });
 
                 fetch(this.action, {
                     method: 'POST',
-                    body: formData
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(jsonData)
                 })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.error) {
-                            alert(data.error);
-                        } else {
-                            // Close the modal
-                            const modal = bootstrap.Modal.getInstance(document.getElementById('reservationModal'));
-                            modal.hide();
-
-                            // Update the timeline with the new reservation
-                            const date = document.getElementById('date').value;
-                            updateRoomTimelines(date);
+                    .then(response => {
+                        if (!response.ok) {
+                            return response.json().then(data => {
+                                throw new Error(data.error || 'Error saving reservation');
+                            });
                         }
+                        return response.json();
+                    })
+                    .then(data => {
+                        // Close the modal
+                        const modal = bootstrap.Modal.getInstance(document.getElementById('reservationModal'));
+                        modal.hide();
+
+                        // Update the timeline with the new reservation
+                        updateRoomTimelines(date);
                     })
                     .catch(error => {
                         console.error('Error saving reservation:', error);
-                        alert('Error saving reservation. Please try again.');
+                        alert(error.message || 'Error saving reservation. Please try again.');
                     });
             });
 
@@ -940,6 +1116,7 @@
             currentReservationId = null;
             document.getElementById('reservationForm').reset();
             document.getElementById('reservation_id').value = '';
+            document.getElementById('num_people').value = '1'; // Set default to 1 person
             document.querySelector('.modal-title .en').textContent = 'New Reservation';
             document.querySelector('.modal-title .zh').textContent = '新预订';
             document.querySelector('.btn-danger').style.display = 'none';
@@ -969,8 +1146,34 @@
                 updatePriceEstimate();
             }
 
-            var modal = new bootstrap.Modal(document.getElementById('reservationModal'));
+            var modal = new bootstrap.Modal(document.getElementById('reservationModal'), {
+                backdrop: 'static',
+                keyboard: false,
+                focus: true
+            });
+
+            // Show the modal
             modal.show();
+
+            // Set focus to the first input field
+            setTimeout(() => {
+                const firstInput = document.querySelector('#reservationModal input:not([type="hidden"])');
+                if (firstInput) {
+                    firstInput.focus();
+                }
+            }, 100);
+        }
+
+        function closeReservationModal() {
+            const modal = bootstrap.Modal.getInstance(document.getElementById('reservationModal'));
+            if (modal) {
+                modal.hide();
+                // Reset form and clear any validation states
+                document.getElementById('reservationForm').reset();
+                document.querySelectorAll('.form-control').forEach(input => {
+                    input.classList.remove('is-invalid', 'is-valid');
+                });
+            }
         }
 
         function showEditReservationModal(reservationId) {
@@ -985,17 +1188,40 @@
                 .then(response => response.json())
                 .then(data => {
                     document.getElementById('date').value = data.date;
-                    document.getElementById('start_time').value = data.start_time;
-                    document.getElementById('end_time').value = data.end_time;
+
+                    // Convert 24-hour times to 12-hour format for display
+                    const startTime = new Date(`2000-01-01T${data.start_time}`);
+                    const endTime = new Date(`2000-01-01T${data.end_time}`);
+
+                    startTimePicker.setDate(startTime);
+                    endTimePicker.setDate(endTime);
+
                     document.getElementById('num_people').value = data.num_people;
                     document.getElementById('contact_name').value = data.contact_name;
                     document.getElementById('contact_phone').value = data.contact_phone;
                     document.getElementById('contact_email').value = data.contact_email;
                     document.getElementById('room_id').value = data.room_id;
+                    document.getElementById('language').value = data.language || 'en';
+
+                    // Update price estimate with the new times
+                    updatePriceEstimate();
                 });
 
-            var modal = new bootstrap.Modal(document.getElementById('reservationModal'));
+            var modal = new bootstrap.Modal(document.getElementById('reservationModal'), {
+                backdrop: 'static',
+                focus: true
+            });
+
+            // Show the modal
             modal.show();
+
+            // Set focus to the first input field
+            setTimeout(() => {
+                const firstInput = document.querySelector('#reservationModal input:not([type="hidden"])');
+                if (firstInput) {
+                    firstInput.focus();
+                }
+            }, 100);
         }
 
         function deleteReservation() {
@@ -1214,6 +1440,44 @@
         });
         document.getElementById('end_time').addEventListener('change', updatePriceEstimate);
         document.getElementById('room_id').addEventListener('change', findAlternativeTimes);
+
+        // Update the reservation card creation
+        function createReservationCard(reservation) {
+            const card = document.createElement('div');
+            card.className = 'reservation-card';
+            card.dataset.reservationId = reservation.id;
+            card.style.height = `${(reservation.duration * 40)}px`;
+            card.onclick = function () {
+                showEditReservationModal(reservation.id);
+            };
+
+            // Add time indicator
+            const timeIndicator = document.createElement('div');
+            timeIndicator.className = 'time-indicator';
+            timeIndicator.innerHTML = `
+                <span class="start-time">${formatTime(reservation.start_time)}</span>
+                <span class="end-time">${formatTime(reservation.end_time)}</span>
+            `;
+            card.appendChild(timeIndicator);
+
+            const content = document.createElement('div');
+            content.className = 'content';
+
+            const name = document.createElement('strong');
+            name.textContent = reservation.contact_name;
+            content.appendChild(name);
+
+            const people = document.createElement('div');
+            people.className = 'bilingual-label';
+            people.innerHTML = `
+                <span class="en">${reservation.num_people} people</span>
+                <span class="zh">${reservation.num_people} 人</span>
+            `;
+            content.appendChild(people);
+
+            card.appendChild(content);
+            return card;
+        }
     </script>
 </body>
 

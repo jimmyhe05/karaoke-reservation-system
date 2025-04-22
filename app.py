@@ -100,23 +100,17 @@ def calculate_cost(start_time, end_time):
     current_time = start_time
     while current_time < end_time:
         # Determine rate period
-        if 11 <= current_time.hour < 18:  # 11 AM - 6 PM
+        if 11 <= current_time.hour < 18:  # 11 AM - 6 PM (Early Bird Special)
             rate = 35
             segment = "Early Bird Special (11 AM - 6 PM)"
-        elif 18 <= current_time.hour < 21:  # 6 PM - 9 PM
-            rate = 45
-            segment = "Prime Time (6 PM - 9 PM)"
-        elif 21 <= current_time.hour or current_time.hour < 1:  # 9 PM - 1 AM
+        else:  # 6 PM - 1 AM
             rate = 50
-            segment = "Late Night (9 PM - 1 AM)"
-        else:  # 1 AM - 11 AM (Closed)
-            raise ValueError(
-                "Invalid reservation time. For overnight reservations, please ensure your reservation ends by 1 AM. The restaurant is closed from 1 AM to 11 AM.")
+            segment = "Evening Rate (6 PM - 1 AM)"
 
         # Calculate until next rate change or reservation end
         next_change = current_time.replace(
             minute=0, second=0, microsecond=0) + timedelta(hours=1)
-        if current_time.hour >= 21:  # Handle overnight rates
+        if current_time.hour >= 18:  # Handle evening rates
             next_change = min(next_change, current_time.replace(
                 hour=1, minute=0, second=0))
             if current_time < current_time.replace(hour=0, minute=0, second=0):
@@ -343,228 +337,137 @@ def index():
 @app.route('/reservation', methods=['GET', 'POST'])
 def reservation():
     if request.method == 'POST':
-        form_data = {
-            'date': request.form['date'],
-            'start_time': request.form['start_time'],
-            'end_time': request.form['end_time'],
-            'num_people': request.form['num_people'],
-            'contact_name': request.form['contact_name'],
-            'contact_phone': request.form['contact_phone'],
-            'contact_email': request.form['contact_email'],
-            'room_id': request.form['room_id']
-        }
-
-        error_fields = []
-
-        # Validate contact information
-        if not form_data['contact_name'].strip():
-            error_fields.append('contact_name')
-        if not form_data['contact_phone'].strip():
-            error_fields.append('contact_phone')
-        if not form_data['contact_email'].strip():
-            error_fields.append('contact_email')
-
-        # Validate number of people
         try:
-            num_people = int(form_data['num_people'])
-            if num_people < 1 or num_people > 20:
-                error_fields.append('num_people')
-        except ValueError:
-            error_fields.append('num_people')
+            # Get data from JSON request
+            data = request.get_json()
+            if not data:
+                return jsonify({'error': 'No data provided'}), 400
 
-        # Validate date and time
-        try:
-            date = datetime.strptime(form_data['date'], '%Y-%m-%d').date()
-            start_time = datetime.strptime(
-                form_data['start_time'], '%H:%M').time()
-            end_time = datetime.strptime(form_data['end_time'], '%H:%M').time()
+            form_data = {
+                'date': data.get('date'),
+                'start_time': data.get('start_time'),
+                'end_time': data.get('end_time'),
+                'num_people': data.get('num_people'),
+                'contact_name': data.get('contact_name'),
+                'contact_phone': data.get('contact_phone'),
+                'contact_email': data.get('contact_email'),
+                'room_id': data.get('room_id'),
+                'language': data.get('language')
+            }
 
-            # Check if the date is in the past
-            if date < datetime.now().date():
-                error_fields.append('date')
+            error_fields = []
 
-            # Check business hours
-            if start_time < datetime.strptime('11:00', '%H:%M').time() or \
-               end_time > datetime.strptime('01:00', '%H:%M').time():
-                error_fields.append('start_time')
-                error_fields.append('end_time')
+            # Validate required fields
+            if not form_data['contact_name']:
+                error_fields.append('contact_name')
+            if not form_data['contact_phone']:
+                error_fields.append('contact_phone')
 
-            # Check if end time is after start time
-            if end_time <= start_time:
-                # For overnight reservations, add a day to end_time
-                end_time = datetime.combine(date + timedelta(days=1), end_time)
-            else:
-                end_time = datetime.combine(date, end_time)
+            if error_fields:
+                return jsonify({
+                    'error': 'Missing required fields',
+                    'fields': error_fields
+                }), 400
 
-            start_time = datetime.combine(date, start_time)
+            # Validate date and time
+            try:
+                # Parse date and times
+                date = datetime.strptime(form_data['date'], '%Y-%m-%d').date()
+                start_time = datetime.strptime(
+                    form_data['start_time'], '%H:%M').time()
+                end_time = datetime.strptime(
+                    form_data['end_time'], '%H:%M').time()
 
-        except ValueError:
-            error_fields.extend(['date', 'start_time', 'end_time'])
+                # Create datetime objects for comparison
+                start_datetime = datetime.combine(date, start_time)
+                end_datetime = datetime.combine(date, end_time)
 
-        if error_fields:
-            # Get today's stats for the dashboard
-            today = datetime.now().strftime('%Y-%m-%d')
+                # Handle overnight reservations
+                if end_time <= start_time:
+                    end_datetime = end_datetime + timedelta(days=1)
+
+                # Check if the date is in the past
+                if date < datetime.now().date():
+                    error_fields.append('date')
+
+                # Check business hours (11 AM to 1 AM next day)
+                business_start = datetime.combine(
+                    date, datetime.strptime('11:00', '%H:%M').time())
+                business_end = datetime.combine(
+                    date + timedelta(days=1), datetime.strptime('01:00', '%H:%M').time())
+
+                if start_datetime < business_start or end_datetime > business_end:
+                    error_fields.extend(['start_time', 'end_time'])
+
+                if error_fields:
+                    return jsonify({
+                        'error': 'Invalid reservation time. Please ensure your reservation is within business hours (11 AM - 1 AM).',
+                        'fields': error_fields
+                    }), 400
+
+                # Update form_data with datetime objects
+                form_data['start_time'] = start_datetime.strftime('%H:%M')
+                form_data['end_time'] = end_datetime.strftime('%H:%M')
+
+            except ValueError as e:
+                return jsonify({
+                    'error': 'Invalid date or time format. Please use HH:MM format for times.',
+                    'fields': ['date', 'start_time', 'end_time']
+                }), 400
+
             conn = get_db()
+            try:
+                # Check if the room is available
+                existing_reservation = conn.execute('''
+                    SELECT * FROM reservations 
+                    WHERE room_id = ? AND date = ? AND 
+                    ((start_time <= ? AND end_time > ?) OR 
+                     (start_time < ? AND end_time >= ?) OR 
+                     (start_time >= ? AND end_time <= ?))
+                ''', (form_data['room_id'], form_data['date'],
+                      form_data['start_time'], form_data['start_time'],
+                      form_data['end_time'], form_data['end_time'],
+                      form_data['start_time'], form_data['end_time'])).fetchone()
 
-            total_reservations = conn.execute('''
-                SELECT COUNT(*) as count 
-                FROM reservations 
-                WHERE date = ?
-            ''', (today,)).fetchone()['count']
+                if existing_reservation:
+                    return jsonify({
+                        'error': 'Room is not available for the selected time',
+                        'fields': ['room_id']
+                    }), 400
 
-            total_rooms = conn.execute(
-                'SELECT COUNT(*) as count FROM rooms').fetchone()['count']
-            total_hours = 14  # 11 AM to 1 AM = 14 hours
-            total_room_hours = total_rooms * total_hours
+                # Calculate cost
+                total_cost, cost_breakdown = calculate_cost(
+                    start_datetime, end_datetime)
 
-            occupied_hours = conn.execute('''
-                SELECT SUM(
-                    CAST(
-                        (julianday(end_time) - julianday(start_time)) * 24 
-                        AS INTEGER)
-                ) as hours
-                FROM reservations 
-                WHERE date = ?
-            ''', (today,)).fetchone()['hours'] or 0
-
-            occupancy_rate = round(
-                (occupied_hours / total_room_hours) * 100, 1)
-
-            return render_template('reservation.html',
-                                   rooms=get_rooms_with_reservations(),
-                                   error_fields=error_fields,
-                                   form_data=form_data,
-                                   today_stats={
-                                       'total_reservations': total_reservations,
-                                       'occupancy_rate': occupancy_rate
-                                   })
-
-        conn = get_db()
-        try:
-            # Check if the room is available
-            existing_reservation = conn.execute('''
-                SELECT * FROM reservations 
-                WHERE room_id = ? AND date = ? AND 
-                ((start_time <= ? AND end_time > ?) OR 
-                 (start_time < ? AND end_time >= ?) OR 
-                 (start_time >= ? AND end_time <= ?))
-            ''', (form_data['room_id'], form_data['date'],
-                  form_data['start_time'], form_data['start_time'],
-                  form_data['end_time'], form_data['end_time'],
-                  form_data['start_time'], form_data['end_time'])).fetchone()
-
-            if existing_reservation:
-                error_fields.append('room_id')
-
-                # Get today's stats for the dashboard
-                today = datetime.now().strftime('%Y-%m-%d')
-
-                total_reservations = conn.execute('''
-                    SELECT COUNT(*) as count 
-                    FROM reservations 
-                    WHERE date = ?
-                ''', (today,)).fetchone()['count']
-
-                total_rooms = conn.execute(
-                    'SELECT COUNT(*) as count FROM rooms').fetchone()['count']
-                total_hours = 14  # 11 AM to 1 AM = 14 hours
-                total_room_hours = total_rooms * total_hours
-
-                occupied_hours = conn.execute('''
-                    SELECT SUM(
-                        CAST(
-                            (julianday(end_time) - julianday(start_time)) * 24 
-                            AS INTEGER)
-                    ) as hours
-                    FROM reservations 
-                    WHERE date = ?
-                ''', (today,)).fetchone()['hours'] or 0
-
-                occupancy_rate = round(
-                    (occupied_hours / total_room_hours) * 100, 1)
-
-                return render_template('reservation.html',
-                                       rooms=get_rooms_with_reservations(),
-                                       error_fields=error_fields,
-                                       form_data=form_data,
-                                       today_stats={
-                                           'total_reservations': total_reservations,
-                                           'occupancy_rate': occupancy_rate
-                                       })
-
-            # Calculate cost
-            total_cost, cost_breakdown = calculate_cost(start_time, end_time)
-
-            # If reservation_id is provided, update existing reservation
-            if 'reservation_id' in request.form and request.form['reservation_id']:
-                conn.execute('''
-                    UPDATE reservations 
-                    SET date = ?, start_time = ?, end_time = ?, 
-                        num_people = ?, contact_name = ?, 
-                        contact_phone = ?, contact_email = ?, 
-                        room_id = ?, total_cost = ?, cost_breakdown = ?
-                    WHERE id = ?
-                ''', (form_data['date'], form_data['start_time'],
-                      form_data['end_time'], form_data['num_people'],
-                      form_data['contact_name'], form_data['contact_phone'],
-                      form_data['contact_email'], form_data['room_id'],
-                      total_cost, str(cost_breakdown),
-                      request.form['reservation_id']))
-            else:
                 # Create new reservation
                 conn.execute('''
                     INSERT INTO reservations 
                     (date, start_time, end_time, num_people, 
                      contact_name, contact_phone, contact_email, room_id,
-                     total_cost, cost_breakdown)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     total_cost, cost_breakdown, language)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (form_data['date'], form_data['start_time'],
                       form_data['end_time'], form_data['num_people'],
                       form_data['contact_name'], form_data['contact_phone'],
                       form_data['contact_email'], form_data['room_id'],
-                      total_cost, str(cost_breakdown)))
+                      total_cost, str(cost_breakdown), form_data['language']))
 
-            conn.commit()
-            return redirect(url_for('reservation'))
+                conn.commit()
+                return jsonify({'message': 'Reservation created successfully'}), 200
+
+            except Exception as e:
+                conn.rollback()
+                return jsonify({'error': str(e)}), 500
+            finally:
+                conn.close()
 
         except Exception as e:
-            conn.rollback()
-            flash(f'Error saving reservation: {str(e)}', 'error')
-            return redirect(url_for('reservation'))
+            return jsonify({'error': str(e)}), 400
 
-    # Get today's stats for the dashboard
-    today = datetime.now().strftime('%Y-%m-%d')
-    conn = get_db()
-
-    total_reservations = conn.execute('''
-        SELECT COUNT(*) as count 
-        FROM reservations 
-        WHERE date = ?
-    ''', (today,)).fetchone()['count']
-
-    total_rooms = conn.execute(
-        'SELECT COUNT(*) as count FROM rooms').fetchone()['count']
-    total_hours = 14  # 11 AM to 1 AM = 14 hours
-    total_room_hours = total_rooms * total_hours
-
-    occupied_hours = conn.execute('''
-        SELECT SUM(
-            CAST(
-                (julianday(end_time) - julianday(start_time)) * 24 
-                AS INTEGER)
-        ) as hours
-        FROM reservations 
-        WHERE date = ?
-    ''', (today,)).fetchone()['hours'] or 0
-
-    occupancy_rate = round((occupied_hours / total_room_hours) * 100, 1)
-
+    # GET request handling remains the same
     return render_template('reservation.html',
                            rooms=get_rooms_with_reservations(),
-                           today_stats={
-                               'total_reservations': total_reservations,
-                               'occupancy_rate': occupancy_rate
-                           })
+                           today_stats=get_today_stats())
 
 
 @app.route('/get_reservation/<int:reservation_id>')
@@ -593,10 +496,25 @@ def get_reservation(reservation_id):
 @app.route('/delete_reservation/<int:reservation_id>', methods=['POST'])
 def delete_reservation(reservation_id):
     conn = get_db()
-    conn.execute('DELETE FROM reservations WHERE id = ?', (reservation_id,))
-    conn.commit()
-    conn.close()
-    return '', 204
+    try:
+        # Check if reservation exists
+        reservation = conn.execute(
+            'SELECT * FROM reservations WHERE id = ?', (reservation_id,)).fetchone()
+
+        if not reservation:
+            return jsonify({'error': 'Reservation not found'}), 404
+
+        # Delete the reservation
+        conn.execute('DELETE FROM reservations WHERE id = ?',
+                     (reservation_id,))
+        conn.commit()
+
+        return jsonify({'message': 'Reservation deleted successfully'}), 200
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
 
 
 @app.route('/update_reservation/<int:reservation_id>', methods=['POST'])
