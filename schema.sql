@@ -1,7 +1,8 @@
-DROP TABLE IF EXISTS reservations;
-DROP TABLE IF EXISTS rooms;
+-- Only drop tables if we're explicitly recreating the database
+-- DROP TABLE IF EXISTS reservations;
+-- DROP TABLE IF EXISTS rooms;
 
-CREATE TABLE rooms (
+CREATE TABLE IF NOT EXISTS rooms (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     capacity INTEGER NOT NULL,
@@ -10,7 +11,7 @@ CREATE TABLE rooms (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE reservations (
+CREATE TABLE IF NOT EXISTS reservations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     room_id INTEGER NOT NULL,
     date TEXT NOT NULL,
@@ -33,8 +34,15 @@ CREATE TABLE reservations (
     CHECK (julianday(end_time) > julianday(start_time))
 );
 
--- Insert default rooms with different capacities
-INSERT INTO rooms (name, capacity, hourly_rate, peak_hour_rate) VALUES
-    ('Small Room', 6, 35.00, 50.00),
-    ('Medium Room', 8, 40.00, 55.00),
-    ('Large Room', 12, 45.00, 60.00); 
+-- Only insert default rooms if the table is empty
+INSERT INTO rooms (name, capacity, hourly_rate, peak_hour_rate) 
+SELECT 'Room 1', 8, 35.00, 50.00
+WHERE NOT EXISTS (SELECT 1 FROM rooms WHERE id = 1);
+
+INSERT INTO rooms (name, capacity, hourly_rate, peak_hour_rate) 
+SELECT 'Room 2', 8, 35.00, 50.00
+WHERE NOT EXISTS (SELECT 1 FROM rooms WHERE id = 2);
+
+INSERT INTO rooms (name, capacity, hourly_rate, peak_hour_rate) 
+SELECT 'Room 3', 8, 35.00, 50.00
+WHERE NOT EXISTS (SELECT 1 FROM rooms WHERE id = 3); 
