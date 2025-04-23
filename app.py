@@ -1,8 +1,9 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, abort
 from datetime import datetime, timedelta
 import os
 import sqlite3
 from flask import g
+import json
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
@@ -88,55 +89,27 @@ def is_room_available(room_id, start_time, end_time, exclude_id=None):
     return len(existing_reservations) == 0
 
 
-def calculate_cost(start_time, end_time):
-    """Calculate total karaoke charge based on the time spent in the room."""
+def calculate_cost(start_time, end_time, room_id):
+    db = get_db()
+    room = db.execute('SELECT hourly_rate, peak_hour_rate FROM rooms WHERE id = ?', [
+                      room_id]).fetchone()
+
+    # Convert times to hours for calculation
+    start_hour = int(start_time.split(':')[0])
+    end_hour = int(end_time.split(':')[0])
+    if end_hour <= 1:  # Handle after midnight
+        end_hour += 24
+
     total_cost = 0
-    cost_breakdown = []
+    current_hour = start_hour
 
-    # Handle overnight reservations
-    if end_time <= start_time:
-        end_time = end_time + timedelta(days=1)
+    while current_hour < end_hour:
+        # Peak hours are 6 PM (18:00) to 1 AM (25:00)
+        rate = room['peak_hour_rate'] if current_hour >= 18 else room['hourly_rate']
+        total_cost += rate
+        current_hour += 1
 
-    current_time = start_time
-    while current_time < end_time:
-        # Determine rate period
-        if 11 <= current_time.hour < 18:  # 11 AM - 6 PM (Early Bird Special)
-            rate = 35
-            segment = "Early Bird Special (11 AM - 6 PM)"
-        else:  # 6 PM - 1 AM
-            rate = 50
-            segment = "Evening Rate (6 PM - 1 AM)"
-
-        # Calculate until next rate change or reservation end
-        next_change = current_time.replace(
-            minute=0, second=0, microsecond=0) + timedelta(hours=1)
-        if current_time.hour >= 18:  # Handle evening rates
-            next_change = min(next_change, current_time.replace(
-                hour=1, minute=0, second=0))
-            if current_time < current_time.replace(hour=0, minute=0, second=0):
-                next_change = min(next_change, current_time.replace(
-                    hour=1, minute=0, second=0))
-
-        segment_end = min(next_change, end_time)
-        duration = (segment_end - current_time).total_seconds() / \
-            3600  # In hours
-
-        cost_segment = rate * duration
-        total_cost += cost_segment
-
-        cost_breakdown.append({
-            'period': segment,
-            'start': current_time.strftime('%I:%M %p'),
-            'end': segment_end.strftime('%I:%M %p'),
-            'hours': round(duration, 2),
-            'rate': rate,
-            'cost': round(cost_segment, 2)
-        })
-
-        current_time = segment_end
-
-    total_cost_with_tax = total_cost * (1 + TAX_RATE)
-    return round(total_cost_with_tax, 2), cost_breakdown
+    return total_cost
 
 
 def get_rooms_with_reservations():
@@ -188,62 +161,52 @@ def get_rooms_with_reservations():
 
 @app.route('/api/daily_reservations')
 def get_daily_reservations():
-    selected_date = request.args.get(
-        'date', datetime.now().strftime('%Y-%m-%d'))
+    date = request.args.get('date')
+    if not date:
+        return jsonify({'error': 'Date parameter is required'}), 400
 
-    conn = get_db()
-    try:
-        # Get all rooms
-        rooms = conn.execute('SELECT * FROM rooms').fetchall()
+    db = get_db()
+    rooms = db.execute('''
+        SELECT id, name, capacity FROM rooms ORDER BY capacity
+    ''').fetchall()
 
-        # Get reservations for the selected date
-        reservations = conn.execute('''
-            SELECT * FROM reservations 
-            WHERE date = ?
+    result = {'rooms': []}
+
+    for room in rooms:
+        reservations = db.execute('''
+            SELECT id, start_time, end_time, contact_name, num_people, language
+            FROM reservations 
+            WHERE room_id = ? AND date = ? AND status != 'cancelled'
             ORDER BY start_time
-        ''', (selected_date,)).fetchall()
+        ''', [room['id'], date]).fetchall()
 
-        # Organize reservations by room
-        rooms_with_reservations = []
-        for room in rooms:
-            room_reservations = []
-            for reservation in reservations:
-                if reservation['room_id'] == room['id']:
-                    # Calculate start hour and duration
-                    start_time = datetime.strptime(
-                        reservation['start_time'], '%H:%M')
-                    end_time = datetime.strptime(
-                        reservation['end_time'], '%H:%M')
+        room_data = {
+            'id': room['id'],
+            'name': room['name'],
+            'capacity': room['capacity'],
+            'reservations': []
+        }
 
-                    # Handle overnight reservations
-                    if end_time < start_time:
-                        end_time = end_time + timedelta(days=1)
+        for res in reservations:
+            start_hour = int(res['start_time'].split(':')[0])
+            end_hour = int(res['end_time'].split(':')[0])
+            if end_hour <= 1:  # Handle after midnight
+                end_hour += 24
 
-                    duration = (end_time - start_time).total_seconds() / 3600
-
-                    room_reservations.append({
-                        'id': reservation['id'],
-                        'contact_name': reservation['contact_name'],
-                        'num_people': reservation['num_people'],
-                        'start_time': reservation['start_time'],
-                        'end_time': reservation['end_time'],
-                        'start_hour': start_time.hour,
-                        'duration': duration
-                    })
-
-            rooms_with_reservations.append({
-                'id': room['id'],
-                'name': room['name'],
-                'reservations': room_reservations
+            room_data['reservations'].append({
+                'id': res['id'],
+                'start_time': res['start_time'],
+                'end_time': res['end_time'],
+                'start_hour': start_hour,
+                'duration': end_hour - start_hour,
+                'contact_name': res['contact_name'],
+                'num_people': res['num_people'],
+                'language': res['language']
             })
 
-        return jsonify({
-            'rooms': rooms_with_reservations,
-            'date': selected_date
-        })
+        result['rooms'].append(room_data)
 
-    except Exception as e:
-        return jsonify({'error': str(e)}), 400
+    return jsonify(result)
 
 
 @app.route('/')
@@ -436,21 +399,21 @@ def reservation():
                     }), 400
 
                 # Calculate cost
-                total_cost, cost_breakdown = calculate_cost(
-                    start_datetime, end_datetime)
+                total_cost = calculate_cost(
+                    form_data['start_time'], form_data['end_time'], form_data['room_id'])
 
                 # Create new reservation
                 conn.execute('''
                     INSERT INTO reservations 
                     (date, start_time, end_time, num_people, 
                      contact_name, contact_phone, contact_email, room_id,
-                     total_cost, cost_breakdown, language)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     total_cost, language)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (form_data['date'], form_data['start_time'],
                       form_data['end_time'], form_data['num_people'],
                       form_data['contact_name'], form_data['contact_phone'],
                       form_data['contact_email'], form_data['room_id'],
-                      total_cost, str(cost_breakdown), form_data['language']))
+                      total_cost, form_data['language']))
 
                 conn.commit()
                 return jsonify({'message': 'Reservation created successfully'}), 200

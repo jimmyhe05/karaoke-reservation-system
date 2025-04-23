@@ -202,14 +202,7 @@
         }
 
         .stats-container {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: white;
-            padding: 15px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            z-index: 1000;
+            display: none;
         }
 
         .quick-actions {
@@ -609,27 +602,61 @@
             background-size: 16px 12px;
             padding-right: 2.5rem;
         }
+
+        /* Calendar reservation count styling */
+        .fc-daygrid-day-frame {
+            position: relative;
+            min-height: 70px;
+            display: flex !important;
+            flex-direction: column;
+        }
+
+        .fc-daygrid-day-top {
+            text-align: left;
+            padding: 4px;
+        }
+
+        .reservation-count {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #1976d2;
+            color: white;
+            border-radius: 50%;
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: bold;
+            z-index: 1;
+        }
+
+        /* Hide events area since we're using our own count display */
+        .fc-daygrid-day-events {
+            display: none !important;
+        }
+
+        .fc-daygrid-day-bg {
+            display: none !important;
+        }
+
+        /* Ensure proper height and positioning */
+        .fc .fc-daygrid-day-frame {
+            min-height: 80px;
+        }
+
+        .fc .fc-daygrid-day {
+            max-height: none !important;
+        }
     </style>
 </head>
 
 <body>
     <div class="container-fluid">
         <h1 class="my-4 text-center">Karaoke Room Reservation System</h1>
-
-        <!-- Stats Container -->
-        <div class="stats-container">
-            <h5>Today's Stats</h5>
-            <div class="bilingual-label">
-                <span class="en">Total Reservations</span>
-                <span class="zh">总预订数</span>
-                <strong>{{ today_stats.total_reservations }}</strong>
-            </div>
-            <div class="bilingual-label">
-                <span class="en">Occupancy Rate</span>
-                <span class="zh">房间使用率</span>
-                <strong>{{ today_stats.occupancy_rate }}%</strong>
-            </div>
-        </div>
 
         <div class="main-container">
             <!-- Calendar View -->
@@ -874,7 +901,6 @@
                 initialDate: '{{ selected_date }}',
                 selectable: true,
                 select: function (info) {
-                    // Store the selected date in a data attribute on the calendar element
                     calendarEl.dataset.selectedDate = info.startStr;
                     updateRoomTimelines(info.startStr);
                 },
@@ -882,9 +908,265 @@
                     left: 'prev,next today',
                     center: 'title',
                     right: 'dayGridMonth,timeGridWeek'
+                },
+                dayCellDidMount: function (arg) {
+                    // Format the date to match the API's expected format (YYYY-MM-DD)
+                    const date = arg.date.toISOString().split('T')[0];
+
+                    // Add a data attribute to the cell for debugging
+                    arg.el.setAttribute('data-date', date);
+
+                    fetch(`/api/daily_reservations?date=${date}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            // Count total reservations for this date
+                            let totalReservations = 0;
+                            data.rooms.forEach(room => {
+                                totalReservations += room.reservations.length;
+                            });
+
+                            // Clear any existing count
+                            const existingCount = arg.el.querySelector('.reservation-count');
+                            if (existingCount) {
+                                existingCount.remove();
+                            }
+
+                            // Only show count if there are reservations
+                            if (totalReservations > 0) {
+                                const countElement = document.createElement('div');
+                                countElement.className = 'reservation-count';
+                                countElement.textContent = totalReservations;
+
+                                // Get the frame element to ensure proper positioning
+                                const frame = arg.el.querySelector('.fc-daygrid-day-frame');
+                                if (frame) {
+                                    frame.appendChild(countElement);
+                                }
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error fetching reservations:', error);
+                        });
                 }
             });
             calendar.render();
+
+            // Optimize the update functions
+            let lastFetchPromises = {};
+
+            function updateDateCell(dateCell, date) {
+                if (!dateCell) return;
+
+                // Cancel any pending fetch for this date
+                if (lastFetchPromises[date]) {
+                    lastFetchPromises[date].aborted = true;
+                }
+
+                const fetchPromise = fetch(`/api/daily_reservations?date=${date}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        // If this fetch was aborted, don't update UI
+                        if (fetchPromise.aborted) return;
+
+                        let totalReservations = 0;
+                        data.rooms.forEach(room => {
+                            totalReservations += room.reservations.length;
+                        });
+
+                        // Clear existing count
+                        const existingCount = dateCell.querySelector('.reservation-count');
+                        if (existingCount) {
+                            existingCount.remove();
+                        }
+
+                        // Add new count if there are reservations
+                        if (totalReservations > 0) {
+                            const countElement = document.createElement('div');
+                            countElement.className = 'reservation-count';
+                            countElement.textContent = totalReservations;
+
+                            const frame = dateCell.querySelector('.fc-daygrid-day-frame');
+                            if (frame) {
+                                frame.appendChild(countElement);
+                            }
+                        }
+                    })
+                    .catch(error => {
+                        if (!fetchPromise.aborted) {
+                            console.error('Error updating reservation count:', error);
+                        }
+                    });
+
+                lastFetchPromises[date] = fetchPromise;
+            }
+
+            // Batch update function for multiple dates
+            function batchUpdateDates(dates) {
+                const uniqueDates = [...new Set(dates)];
+                const updates = uniqueDates.map(date => {
+                    const dateCell = document.querySelector(`[data-date="${date}"]`);
+                    if (dateCell) {
+                        return updateDateCell(dateCell, date);
+                    }
+                    return Promise.resolve();
+                });
+                return Promise.all(updates);
+            }
+
+            // Optimized refresh calendar function
+            function refreshCalendar() {
+                const selectedDate = document.getElementById('date').value;
+                const dateCell = document.querySelector(`[data-date="${selectedDate}"]`);
+
+                // Only update the timeline and count for the affected date
+                Promise.all([
+                    updateRoomTimelines(selectedDate),
+                    dateCell ? updateDateCell(dateCell, selectedDate) : Promise.resolve()
+                ]).catch(error => {
+                    console.error('Error refreshing calendar:', error);
+                });
+            }
+
+            // Update the deleteReservation function to be more efficient
+            deleteReservation = function () {
+                if (!currentReservationId || !confirm('Are you sure you want to delete this reservation?')) {
+                    return;
+                }
+
+                const selectedDate = document.getElementById('date').value;
+
+                fetch(`/delete_reservation/${currentReservationId}`, {
+                    method: 'POST'
+                })
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('Failed to delete reservation');
+                        }
+                        closeReservationModal();
+                        return refreshCalendar();
+                    })
+                    .catch(error => {
+                        console.error('Error deleting reservation:', error);
+                        alert('Error deleting reservation. Please try again.');
+                    });
+            };
+
+            // Optimize the form submission handler
+            const reservationForm = document.getElementById('reservationForm');
+            reservationForm.addEventListener('submit', function (e) {
+                e.preventDefault();
+
+                // Get form values
+                const startTime = startTimePicker.input.value;
+                const endTime = endTimePicker.input.value;
+                const date = document.getElementById('date').value;
+                const roomId = document.getElementById('room_id').value;
+                const reservationId = document.getElementById('reservation_id').value;
+
+                // Validate required fields
+                if (!startTime || !endTime || !date || !roomId) {
+                    alert('Please fill in all required fields.');
+                    return;
+                }
+
+                // Convert times to 24-hour format
+                const convertTo24Hour = (timeStr) => {
+                    try {
+                        const [time, period] = timeStr.split(' ');
+                        let [hours, minutes] = time.split(':').map(num => parseInt(num, 10));
+
+                        if (isNaN(hours) || isNaN(minutes)) {
+                            throw new Error('Invalid time format');
+                        }
+
+                        if (period === 'PM' && hours !== 12) hours += 12;
+                        if (period === 'AM' && hours === 12) hours = 0;
+
+                        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+                    } catch (error) {
+                        throw new Error('Invalid time format. Please use the time picker to select times.');
+                    }
+                };
+
+                try {
+                    const start24 = convertTo24Hour(startTime);
+                    const end24 = convertTo24Hour(endTime);
+
+                    // Validate business hours (11 AM to 1 AM next day)
+                    const startHour = parseInt(start24.split(':')[0]);
+                    let endHour = parseInt(end24.split(':')[0]);
+
+                    // Adjust end hour for after midnight
+                    if (endHour < startHour && endHour <= 1) {
+                        endHour += 24;
+                    }
+
+                    if (startHour < 11 || endHour > 25 || (startHour >= endHour)) {
+                        alert('Invalid time range. Reservations must be between 11:00 AM and 1:00 AM the next day, and end time must be after start time.');
+                        return;
+                    }
+
+                    // Check availability and submit
+                    fetch(`/api/daily_reservations?date=${date}`)
+                        .then(response => {
+                            if (!response.ok) throw new Error('Failed to check availability');
+                            return response.json();
+                        })
+                        .then(data => {
+                            const room = data.rooms.find(r => r.id === parseInt(roomId));
+                            if (!room) throw new Error('Room not found');
+
+                            // Check for conflicts
+                            const hasConflict = room.reservations.some(res => {
+                                if (reservationId && res.id === parseInt(reservationId)) return false;
+
+                                const resStart = parseInt(res.start_time.split(':')[0]);
+                                let resEnd = parseInt(res.end_time.split(':')[0]);
+                                if (resEnd < resStart && resEnd <= 1) resEnd += 24;
+
+                                return (startHour < resEnd && endHour > resStart);
+                            });
+
+                            if (hasConflict) {
+                                throw new Error('This time slot is not available. Please choose a different time.');
+                            }
+
+                            // Prepare and submit form data
+                            const formData = new FormData(this);
+                            formData.set('start_time', start24);
+                            formData.set('end_time', end24);
+
+                            const jsonData = Object.fromEntries(formData.entries());
+
+                            return fetch(this.action, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify(jsonData)
+                            });
+                        })
+                        .then(response => {
+                            if (!response.ok) {
+                                return response.json().then(data => {
+                                    throw new Error(data.error || 'Failed to save reservation');
+                                });
+                            }
+                            return response.json();
+                        })
+                        .then(() => {
+                            closeReservationModal();
+                            refreshCalendar();
+                        })
+                        .catch(error => {
+                            console.error('Error:', error);
+                            alert(error.message || 'Error saving reservation. Please try again.');
+                        });
+                } catch (error) {
+                    console.error('Error:', error);
+                    alert(error.message || 'Invalid time format. Please use the time picker to select times.');
+                }
+            });
 
             function formatTime(timeStr) {
                 const [hours, minutes] = timeStr.split(':');
@@ -1000,121 +1282,6 @@
                 });
             });
 
-            // Update the form submission to handle time validation better
-            const reservationForm = document.getElementById('reservationForm');
-            reservationForm.addEventListener('submit', function (e) {
-                e.preventDefault();
-
-                // Convert times to 24-hour format for submission
-                const formatTimeFor24Hour = (timeStr) => {
-                    const [time, period] = timeStr.split(' ');
-                    let [hours, minutes] = time.split(':');
-                    hours = parseInt(hours);
-                    if (period === 'PM' && hours !== 12) hours += 12;
-                    if (period === 'AM' && hours === 12) hours = 0;
-                    return `${hours.toString().padStart(2, '0')}:${minutes}`;
-                };
-
-                const formData = new FormData(this);
-                const startTime = document.getElementById('start_time').value;
-                const endTime = document.getElementById('end_time').value;
-                const date = document.getElementById('date').value;
-                const reservationId = document.getElementById('reservation_id').value;
-                const roomId = document.getElementById('room_id').value;
-
-                // Validate time range
-                const start24 = formatTimeFor24Hour(startTime);
-                const end24 = formatTimeFor24Hour(endTime);
-
-                // Check if times are within business hours (11 AM to 1 AM next day)
-                const startHour = parseInt(start24.split(':')[0]);
-                let endHour = parseInt(end24.split(':')[0]);
-
-                // Adjust end hour for after midnight
-                if (endHour < startHour && endHour <= 1) {
-                    endHour += 24;  // Convert 1 AM to 25:00 for comparison
-                }
-
-                if (startHour < 11 || (endHour > 25)) {
-                    alert('Reservation times must be between 11:00 AM and 1:00 AM the next day.');
-                    return;
-                }
-
-                // Check if the new time slot is available using daily_reservations endpoint
-                fetch(`/api/daily_reservations?date=${date}`)
-                    .then(response => response.json())
-                    .then(data => {
-                        const room = data.rooms.find(r => r.id === parseInt(roomId));
-                        if (!room) {
-                            throw new Error('Room not found');
-                        }
-
-                        // Check for time slot conflicts
-                        const newStartHour = startHour;
-                        const newEndHour = endHour;
-
-                        const hasConflict = room.reservations.some(res => {
-                            // Skip checking against the current reservation being edited
-                            if (reservationId && res.id === parseInt(reservationId)) {
-                                return false;
-                            }
-
-                            const resStartHour = parseInt(res.start_time.split(':')[0]);
-                            let resEndHour = parseInt(res.end_time.split(':')[0]);
-
-                            // Adjust end hour for after midnight reservations
-                            if (resEndHour < resStartHour && resEndHour <= 1) {
-                                resEndHour += 24;
-                            }
-
-                            // Check for overlap
-                            return (newStartHour < resEndHour && newEndHour > resStartHour);
-                        });
-
-                        if (hasConflict) {
-                            alert('The selected time slot is not available. Please choose a different time.');
-                            return;
-                        }
-
-                        // If no conflicts, proceed with the reservation
-                        formData.set('start_time', start24);
-                        formData.set('end_time', end24);
-
-                        // Convert FormData to JSON
-                        const jsonData = {};
-                        formData.forEach((value, key) => {
-                            jsonData[key] = value;
-                        });
-
-                        return fetch(this.action, {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify(jsonData)
-                        });
-                    })
-                    .then(response => {
-                        if (!response || !response.ok) {
-                            return response.json().then(data => {
-                                throw new Error(data.error || 'Error saving reservation');
-                            });
-                        }
-                        return response.json();
-                    })
-                    .then(data => {
-                        // Close the modal and clear temporary visual indicators
-                        closeReservationModal();
-
-                        // Update the timeline with the new reservation
-                        updateRoomTimelines(date);
-                    })
-                    .catch(error => {
-                        console.error('Error saving reservation:', error);
-                        alert(error.message || 'Error saving reservation. Please try again.');
-                    });
-            });
-
             // Initialize with current date's reservations
             updateRoomTimelines('{{ selected_date }}');
 
@@ -1122,27 +1289,28 @@
             startTimePicker = flatpickr("#start_time", {
                 enableTime: true,
                 noCalendar: true,
-                dateFormat: "h:i K",
+                dateFormat: "h:i K", // 12-hour format with AM/PM
                 time_24hr: false,
                 minuteIncrement: 30,
                 defaultHour: 11,
-                disableMobile: false,
-                allowInput: true,
+                defaultMinute: 0,
+                disableMobile: "true",
+                allowInput: false,
                 onChange: function (selectedDates, dateStr) {
                     updatePriceEstimate();
-                    findAlternativeTimes();
                 }
             });
 
             endTimePicker = flatpickr("#end_time", {
                 enableTime: true,
                 noCalendar: true,
-                dateFormat: "h:i K",
+                dateFormat: "h:i K", // 12-hour format with AM/PM
                 time_24hr: false,
                 minuteIncrement: 30,
                 defaultHour: 13,
-                disableMobile: false,
-                allowInput: true,
+                defaultMinute: 0,
+                disableMobile: "true",
+                allowInput: false,
                 onChange: function (selectedDates, dateStr) {
                     updatePriceEstimate();
                 }
@@ -1266,18 +1434,6 @@
                     firstInput.focus();
                 }
             }, 100);
-        }
-
-        function deleteReservation() {
-            if (currentReservationId && confirm('Are you sure you want to delete this reservation?')) {
-                fetch(`/delete_reservation/${currentReservationId}`, {
-                    method: 'POST'
-                }).then(response => {
-                    if (response.ok) {
-                        window.location.reload();
-                    }
-                });
-            }
         }
 
         function showTodaySummary() {
