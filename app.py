@@ -33,11 +33,18 @@ def get_db():
 
 def init_db():
     """Initialize the database if it doesn't exist."""
+    db = get_db()
+
+    # Create main tables if they don't exist
     if not os.path.exists(DATABASE):
-        db = get_db()
         with app.open_resource('schema.sql', mode='r') as f:
             db.cursor().executescript(f.read())
         db.commit()
+
+    # Create idle reservations table
+    with app.open_resource('idle_schema.sql', mode='r') as f:
+        db.cursor().executescript(f.read())
+    db.commit()
 
 
 @app.teardown_appcontext
@@ -76,8 +83,8 @@ def is_room_available(room_id, start_time, end_time, exclude_id=None):
     """Check if the room is available for the given time slot."""
     db = get_db()
     query = '''
-        SELECT * FROM reservations 
-        WHERE room_id = ? 
+        SELECT * FROM reservations
+        WHERE room_id = ?
         AND ((? < end_time) AND (? > start_time))
     '''
     params = [room_id, end_time.isoformat(), start_time.isoformat()]
@@ -113,26 +120,42 @@ def calculate_cost(start_time, end_time, room_id):
     return total_cost
 
 
-def get_rooms_with_reservations():
-    """Get all rooms with their reservations for the current date."""
+def get_rooms_with_reservations(selected_date=None):
+    """Get all rooms with their reservations for the specified date or today."""
     conn = get_db()
-    today = datetime.now().strftime('%Y-%m-%d')
+
+    # Use the selected date or default to today
+    if selected_date is None:
+        selected_date = datetime.now().strftime('%Y-%m-%d')
 
     # Get all rooms
     rooms = conn.execute('SELECT * FROM rooms').fetchall()
 
-    # Get reservations for today
+    # Get reservations for the selected date
     reservations = conn.execute('''
-        SELECT * FROM reservations 
+        SELECT * FROM reservations
         WHERE date = ?
         ORDER BY start_time
-    ''', (today,)).fetchall()
+    ''', (selected_date,)).fetchall()
+
+    # Get idle reservations for the selected date
+    idle_reservations_ids = conn.execute('''
+        SELECT reservation_id FROM idle_reservations
+        WHERE date = ?
+    ''', (selected_date,)).fetchall()
+
+    idle_reservation_ids_set = {row['reservation_id']
+                                for row in idle_reservations_ids}
 
     # Organize reservations by room
     rooms_with_reservations = []
     for room in rooms:
         room_reservations = []
         for reservation in reservations:
+            # Skip reservations that are in the idle area
+            if reservation['id'] in idle_reservation_ids_set:
+                continue
+
             if reservation['room_id'] == room['id']:
                 # Calculate start hour and duration for display
                 start_time = datetime.strptime(
@@ -157,7 +180,39 @@ def get_rooms_with_reservations():
             'reservations': room_reservations
         })
 
-    return rooms_with_reservations
+    # Get idle reservations details
+    idle_reservations = []
+    if idle_reservations_ids:
+        idle_res_list = ', '.join(['?' for _ in idle_reservations_ids])
+        idle_res_ids = [row['reservation_id'] for row in idle_reservations_ids]
+
+        if idle_res_ids:
+            idle_res_data = conn.execute(f'''
+                SELECT * FROM reservations
+                WHERE id IN ({idle_res_list})
+            ''', idle_res_ids).fetchall()
+
+            for reservation in idle_res_data:
+                start_time = datetime.strptime(
+                    reservation['start_time'], '%H:%M')
+                end_time = datetime.strptime(reservation['end_time'], '%H:%M')
+                duration = (end_time - start_time).total_seconds() / 3600
+
+                idle_reservations.append({
+                    'id': reservation['id'],
+                    'contact_name': reservation['contact_name'],
+                    'num_people': reservation['num_people'],
+                    'start_time': reservation['start_time'],
+                    'end_time': reservation['end_time'],
+                    'start_hour': start_time.hour,
+                    'duration': duration,
+                    'room_id': reservation['room_id']
+                })
+
+    return {
+        'rooms': rooms_with_reservations,
+        'idle_reservations': idle_reservations
+    }
 
 
 @app.route('/api/daily_reservations')
@@ -167,16 +222,29 @@ def get_daily_reservations():
         return jsonify({'error': 'Date parameter is required'}), 400
 
     db = get_db()
+
+    # Get all rooms
     rooms = db.execute('''
         SELECT id, name, capacity FROM rooms ORDER BY capacity
     ''').fetchall()
 
+    # Get idle reservations for this date
+    idle_reservations_ids = db.execute('''
+        SELECT reservation_id FROM idle_reservations
+        WHERE date = ?
+    ''', [date]).fetchall()
+
+    # Create a set of idle reservation IDs for faster lookup
+    idle_reservation_ids_set = {row['reservation_id']
+                                for row in idle_reservations_ids}
+
     result = {'rooms': []}
 
     for room in rooms:
+        # Get all reservations for this room and date
         reservations = db.execute('''
             SELECT id, start_time, end_time, contact_name, num_people, language
-            FROM reservations 
+            FROM reservations
             WHERE room_id = ? AND date = ? AND status != 'cancelled'
             ORDER BY start_time
         ''', [room['id'], date]).fetchall()
@@ -189,6 +257,10 @@ def get_daily_reservations():
         }
 
         for res in reservations:
+            # Skip reservations that are in the idle area
+            if res['id'] in idle_reservation_ids_set:
+                continue
+
             start_hour = int(res['start_time'].split(':')[0])
             end_hour = int(res['end_time'].split(':')[0])
             if end_hour <= 1:  # Handle after midnight
@@ -210,92 +282,54 @@ def get_daily_reservations():
     return jsonify(result)
 
 
+def get_today_stats():
+    """Get today's reservation statistics."""
+    conn = get_db()
+    today = datetime.now().strftime('%Y-%m-%d')
+
+    total_reservations = conn.execute('''
+        SELECT COUNT(*) as count
+        FROM reservations
+        WHERE date = ?
+    ''', (today,)).fetchone()['count']
+
+    total_rooms = conn.execute(
+        'SELECT COUNT(*) as count FROM rooms').fetchone()['count']
+    total_hours = 14  # 11 AM to 1 AM = 14 hours
+    total_room_hours = total_rooms * total_hours
+
+    occupied_hours = conn.execute('''
+        SELECT SUM(
+            CAST(
+                (julianday(end_time) - julianday(start_time)) * 24
+                AS INTEGER)
+        ) as hours
+        FROM reservations
+        WHERE date = ?
+    ''', (today,)).fetchone()['hours'] or 0
+
+    occupancy_rate = round((occupied_hours / total_room_hours) * 100, 1)
+
+    return {
+        'total_reservations': total_reservations,
+        'occupancy_rate': occupancy_rate
+    }
+
+
 @app.route('/')
 def index():
     # Get the selected date from query parameters or use today
     selected_date = request.args.get(
         'date', datetime.now().strftime('%Y-%m-%d'))
 
-    conn = get_db()
-    try:
-        # Get today's stats
-        today = datetime.now().strftime('%Y-%m-%d')
+    # Get rooms with reservations for the selected date
+    data = get_rooms_with_reservations(selected_date)
 
-        total_reservations = conn.execute('''
-            SELECT COUNT(*) as count 
-            FROM reservations 
-            WHERE date = ?
-        ''', (today,)).fetchone()['count']
-
-        total_rooms = conn.execute(
-            'SELECT COUNT(*) as count FROM rooms').fetchone()['count']
-        total_hours = 14  # 11 AM to 1 AM = 14 hours
-        total_room_hours = total_rooms * total_hours
-
-        occupied_hours = conn.execute('''
-            SELECT SUM(
-                CAST(
-                    (julianday(end_time) - julianday(start_time)) * 24 
-                    AS INTEGER)
-            ) as hours
-            FROM reservations 
-            WHERE date = ?
-        ''', (today,)).fetchone()['hours'] or 0
-
-        occupancy_rate = round((occupied_hours / total_room_hours) * 100, 1)
-
-        # Get rooms with reservations for the selected date
-        rooms = conn.execute('SELECT * FROM rooms').fetchall()
-        reservations = conn.execute('''
-            SELECT * FROM reservations 
-            WHERE date = ?
-            ORDER BY start_time
-        ''', (selected_date,)).fetchall()
-
-        # Organize reservations by room
-        rooms_with_reservations = []
-        for room in rooms:
-            room_reservations = []
-            for reservation in reservations:
-                if reservation['room_id'] == room['id']:
-                    # Calculate start hour and duration
-                    start_time = datetime.strptime(
-                        reservation['start_time'], '%H:%M')
-                    end_time = datetime.strptime(
-                        reservation['end_time'], '%H:%M')
-
-                    # Handle overnight reservations
-                    if end_time < start_time:
-                        end_time = end_time + timedelta(days=1)
-
-                    duration = (end_time - start_time).total_seconds() / 3600
-
-                    room_reservations.append({
-                        'id': reservation['id'],
-                        'contact_name': reservation['contact_name'],
-                        'num_people': reservation['num_people'],
-                        'start_time': reservation['start_time'],
-                        'end_time': reservation['end_time'],
-                        'start_hour': start_time.hour,
-                        'duration': duration
-                    })
-
-            rooms_with_reservations.append({
-                'id': room['id'],
-                'name': room['name'],
-                'reservations': room_reservations
-            })
-
-        return render_template('reservation.html',
-                               rooms=rooms_with_reservations,
-                               selected_date=selected_date,
-                               today_stats={
-                                   'total_reservations': total_reservations,
-                                   'occupancy_rate': occupancy_rate
-                               })
-
-    finally:
-        conn.close()
+    return render_template('reservation.html',
+                           rooms=data['rooms'],
+                           idle_reservations=data['idle_reservations'],
+                           selected_date=selected_date,
+                           today_stats=get_today_stats())
 
 
 @app.route('/reservation', methods=['GET', 'POST'])
@@ -382,18 +416,33 @@ def reservation():
             conn = get_db()
             try:
                 # Check if the room is available
-                existing_reservation = conn.execute('''
-                    SELECT * FROM reservations 
-                    WHERE room_id = ? AND date = ? AND 
-                    ((start_time <= ? AND end_time > ?) OR 
-                     (start_time < ? AND end_time >= ?) OR 
-                     (start_time >= ? AND end_time <= ?))
+                # First, get all reservations that might conflict
+                potential_conflicts = conn.execute('''
+                    SELECT r.* FROM reservations r
+                    WHERE r.room_id = ? AND r.date = ? AND
+                    ((r.start_time <= ? AND r.end_time > ?) OR
+                     (r.start_time < ? AND r.end_time >= ?) OR
+                     (r.start_time >= ? AND r.end_time <= ?))
                 ''', (form_data['room_id'], form_data['date'],
                       form_data['start_time'], form_data['start_time'],
                       form_data['end_time'], form_data['end_time'],
-                      form_data['start_time'], form_data['end_time'])).fetchone()
+                      form_data['start_time'], form_data['end_time'])).fetchall()
 
-                if existing_reservation:
+                # Check if any of these reservations are NOT in the idle area
+                conflict_exists = False
+                for res in potential_conflicts:
+                    # Check if this reservation is in the idle area
+                    idle_check = conn.execute('''
+                        SELECT * FROM idle_reservations
+                        WHERE reservation_id = ? AND date = ?
+                    ''', (res['id'], form_data['date'])).fetchone()
+
+                    # If it's not in the idle area, we have a conflict
+                    if not idle_check:
+                        conflict_exists = True
+                        break
+
+                if conflict_exists:
                     return jsonify({
                         'error': 'Room is not available for the selected time',
                         'fields': ['room_id']
@@ -405,8 +454,8 @@ def reservation():
 
                 # Create new reservation
                 conn.execute('''
-                    INSERT INTO reservations 
-                    (date, start_time, end_time, num_people, 
+                    INSERT INTO reservations
+                    (date, start_time, end_time, num_people,
                      contact_name, contact_phone, contact_email, room_id,
                      total_cost, language)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -428,9 +477,15 @@ def reservation():
         except Exception as e:
             return jsonify({'error': str(e)}), 400
 
-    # GET request handling remains the same
+    # GET request handling
+    selected_date = request.args.get(
+        'date', datetime.now().strftime('%Y-%m-%d'))
+    data = get_rooms_with_reservations(selected_date)
+
     return render_template('reservation.html',
-                           rooms=get_rooms_with_reservations(),
+                           rooms=data['rooms'],
+                           idle_reservations=data['idle_reservations'],
+                           selected_date=selected_date,
                            today_stats=get_today_stats())
 
 
@@ -486,16 +541,205 @@ def update_reservation(reservation_id):
     data = request.get_json()
     conn = get_db()
 
-    # Update the reservation time
-    conn.execute('''
-        UPDATE reservations 
-        SET start_time = ? 
-        WHERE id = ?
-    ''', (data['start_time'], reservation_id))
+    try:
+        # Check if we need to update the time
+        if 'start_time' in data and 'end_time' in data:
+            # Calculate new duration and total cost
+            start_time = data['start_time']
+            end_time = data['end_time']
+            room_id = data.get('room_id')
 
-    conn.commit()
-    conn.close()
-    return '', 204
+            # If room_id is not provided, get it from the reservation
+            if not room_id:
+                room_id = conn.execute(
+                    'SELECT room_id FROM reservations WHERE id = ?',
+                    (reservation_id,)).fetchone()['room_id']
+
+            # Calculate new cost
+            total_cost = calculate_cost(start_time, end_time, room_id)
+
+            # Update the reservation time and cost
+            conn.execute('''
+                UPDATE reservations
+                SET start_time = ?, end_time = ?, total_cost = ?
+                WHERE id = ?
+            ''', (start_time, end_time, total_cost, reservation_id))
+
+        # If room_id is provided, update it
+        if 'room_id' in data:
+            conn.execute('''
+                UPDATE reservations
+                SET room_id = ?
+                WHERE id = ?
+            ''', (data['room_id'], reservation_id))
+
+        conn.commit()
+        return jsonify({'success': True}), 200
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/move_to_idle/<int:reservation_id>', methods=['POST'])
+def move_to_idle(reservation_id):
+    """Move a reservation to the idle area."""
+    conn = get_db()
+    try:
+        # Check if the reservation exists
+        reservation = conn.execute(
+            'SELECT * FROM reservations WHERE id = ?',
+            (reservation_id,)).fetchone()
+
+        if not reservation:
+            return jsonify({'error': 'Reservation not found'}), 404
+
+        # Check if it's already in the idle area
+        existing = conn.execute(
+            'SELECT * FROM idle_reservations WHERE reservation_id = ?',
+            (reservation_id,)).fetchone()
+
+        if existing:
+            return jsonify({'message': 'Reservation already in idle area'}), 200
+
+        # Add to idle_reservations
+        conn.execute('''
+            INSERT INTO idle_reservations (reservation_id, date)
+            VALUES (?, ?)
+        ''', (reservation_id, reservation['date']))
+
+        conn.commit()
+        return jsonify({'success': True}), 200
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/remove_from_idle/<int:reservation_id>', methods=['POST'])
+def remove_from_idle(reservation_id):
+    """Remove a reservation from the idle area."""
+    conn = get_db()
+    try:
+        # Check if the reservation exists in idle area
+        existing = conn.execute(
+            'SELECT * FROM idle_reservations WHERE reservation_id = ?',
+            (reservation_id,)).fetchone()
+
+        if not existing:
+            return jsonify({'error': 'Reservation not found in idle area'}), 404
+
+        # Remove from idle_reservations
+        conn.execute(
+            'DELETE FROM idle_reservations WHERE reservation_id = ?',
+            (reservation_id,))
+
+        conn.commit()
+        return jsonify({'success': True}), 200
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/move_reservation', methods=['POST'])
+def move_reservation():
+    """Move a reservation to a different room or time slot."""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+
+        reservation_id = data.get('reservation_id')
+        room_id = data.get('room_id')
+        hour = data.get('hour')
+        date = data.get('date')
+
+        if not all([reservation_id, room_id, hour, date]):
+            return jsonify({'error': 'Missing required fields'}), 400
+
+        # Convert hour to integer
+        hour = int(hour)
+
+        conn = get_db()
+        try:
+            # Get the existing reservation
+            reservation = conn.execute(
+                'SELECT * FROM reservations WHERE id = ?', (reservation_id,)).fetchone()
+
+            if not reservation:
+                return jsonify({'error': 'Reservation not found'}), 404
+
+            # Calculate new start and end times
+            old_start_time = datetime.strptime(
+                reservation['start_time'], '%H:%M')
+            old_end_time = datetime.strptime(reservation['end_time'], '%H:%M')
+
+            # Calculate duration in hours
+            duration_hours = 0
+            if old_end_time < old_start_time:  # Overnight reservation
+                old_end_time_adjusted = old_end_time.replace(
+                    day=old_start_time.day + 1)
+                duration = old_end_time_adjusted - old_start_time
+            else:
+                duration = old_end_time - old_start_time
+
+            duration_hours = duration.total_seconds() / 3600
+
+            # Create new start and end times
+            new_start_time = f"{hour:02d}:00"
+            new_end_hour = (hour + int(duration_hours)) % 24
+            new_end_time = f"{new_end_hour:02d}:00"
+
+            # Check if the new time slot is available
+            conflict = conn.execute('''
+                SELECT * FROM reservations
+                WHERE room_id = ? AND date = ? AND id != ? AND
+                ((start_time <= ? AND end_time > ?) OR
+                 (start_time < ? AND end_time >= ?) OR
+                 (start_time >= ? AND end_time <= ?))
+            ''', (room_id, date, reservation_id,
+                  new_start_time, new_start_time,
+                  new_end_time, new_end_time,
+                  new_start_time, new_end_time)).fetchone()
+
+            if conflict:
+                return jsonify({
+                    'error': 'The selected time slot is already occupied',
+                    'conflict': True
+                }), 409
+
+            # Update the reservation
+            conn.execute('''
+                UPDATE reservations
+                SET room_id = ?, start_time = ?, end_time = ?, date = ?
+                WHERE id = ?
+            ''', (room_id, new_start_time, new_end_time, date, reservation_id))
+
+            conn.commit()
+
+            return jsonify({
+                'message': 'Reservation moved successfully',
+                'reservation': {
+                    'id': reservation_id,
+                    'room_id': room_id,
+                    'start_time': new_start_time,
+                    'end_time': new_end_time,
+                    'date': date
+                }
+            }), 200
+
+        except Exception as e:
+            conn.rollback()
+            return jsonify({'error': str(e)}), 500
+        finally:
+            conn.close()
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
 
 
 @app.route('/today_stats')
@@ -505,8 +749,8 @@ def today_stats():
 
     # Get total reservations for today
     total_reservations = conn.execute('''
-        SELECT COUNT(*) as count 
-        FROM reservations 
+        SELECT COUNT(*) as count
+        FROM reservations
         WHERE date = ?
     ''', (today,)).fetchone()['count']
 
@@ -519,10 +763,10 @@ def today_stats():
     occupied_hours = conn.execute('''
         SELECT SUM(
             CAST(
-                (julianday(end_time) - julianday(start_time)) * 24 
+                (julianday(end_time) - julianday(start_time)) * 24
                 AS INTEGER)
         ) as hours
-        FROM reservations 
+        FROM reservations
         WHERE date = ?
     ''', (today,)).fetchone()['hours'] or 0
 
@@ -555,8 +799,8 @@ def check_room_availability():
 
         # Get booked rooms for the date
         booked_rooms = conn.execute('''
-            SELECT DISTINCT room_id 
-            FROM reservations 
+            SELECT DISTINCT room_id
+            FROM reservations
             WHERE date = ?
         ''', (date,)).fetchall()
         booked_room_ids = [room['room_id'] for room in booked_rooms]
@@ -692,8 +936,8 @@ def alternative_times():
 
         # Get existing reservations for the room on the selected date
         existing_reservations = conn.execute('''
-            SELECT start_time, end_time 
-            FROM reservations 
+            SELECT start_time, end_time
+            FROM reservations
             WHERE room_id = ? AND date = ?
             ORDER BY start_time
         ''', (room_id, date)).fetchall()

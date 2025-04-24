@@ -60,35 +60,55 @@
             position: relative;
             font-size: 0.9em;
             background-color: #ffffff;
+            cursor: default;
+            /* Default cursor to indicate it's not draggable */
+            pointer-events: auto;
+            /* Allow interactions with the time slot */
         }
 
         .time-label {
             position: absolute;
             left: 0;
-            width: 50px;
-            padding: 5px;
+            width: 70px;
+            padding: 2px;
             background: #f8f9fa;
             border-right: 1px solid #ddd;
-            font-size: 0.8em;
+            font-size: 0.75em;
             color: #495057;
             font-weight: 500;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            text-align: center;
+            line-height: 26px;
+            /* Match the time-slot height minus padding */
+            pointer-events: none;
+            /* Make time labels non-interactive for drag operations */
+            user-select: none;
+            /* Prevent text selection */
         }
 
         .reservation-card {
             position: absolute;
-            width: calc(100% - 50px);
-            margin-left: 50px;
+            width: calc(100% - 70px);
+            margin-left: 70px;
             background: #e3f2fd;
             color: #1976d2;
             padding: 8px;
             border-radius: 4px;
-            cursor: pointer;
+            cursor: grab;
+            /* Change cursor to grab to indicate it's draggable */
             z-index: 100;
             font-size: 0.85em;
             overflow: hidden;
             border: 2px solid #1976d2;
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
             transition: all 0.2s ease;
+        }
+
+        .reservation-card:active {
+            cursor: grabbing;
+            /* Change cursor when actively dragging */
         }
 
         .reservation-card:hover {
@@ -103,27 +123,56 @@
             top: 0;
             left: 0;
             right: 0;
-            height: 24px;
+            height: 20px;
             background: #1976d2;
             color: white;
-            font-size: 0.8em;
-            padding: 2px 8px;
+            font-size: 0.75em;
+            padding: 1px 6px;
             display: flex;
             justify-content: space-between;
             align-items: center;
             font-weight: 500;
         }
 
-        .reservation-card .time-indicator .start-time,
-        .reservation-card .time-indicator .end-time {
+        .reservation-card .time-indicator .time-range {
             background: rgba(255, 255, 255, 0.2);
             padding: 2px 6px;
             border-radius: 3px;
+            display: inline-block;
+            width: 100%;
+            text-align: center;
+            font-weight: 500;
         }
 
         .reservation-card .content {
-            margin-top: 24px;
-            padding: 4px 0;
+            margin-top: 20px;
+            padding: 4px 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .reservation-card .name-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+        }
+
+        .reservation-card .content strong {
+            font-size: 0.85em;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            flex: 1;
+        }
+
+        .reservation-card .people-count {
+            font-size: 0.75em;
+            color: #555;
+            margin-left: 5px;
+            white-space: nowrap;
+            font-weight: normal;
         }
 
         .reservation-card strong {
@@ -651,6 +700,98 @@
         .fc .fc-daygrid-day {
             max-height: none !important;
         }
+
+        /* Idle Area Styles */
+        .idle-area-container {
+            width: 250px;
+            min-height: 120px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background-color: #f8f9fa;
+            margin: 0 auto 20px;
+        }
+
+        .idle-area-header {
+            background: #e9ecef;
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+            text-align: center;
+        }
+
+        .idle-area {
+            position: relative;
+            padding: 15px;
+            min-height: 80px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .idle-area .reservation-card {
+            position: relative;
+            width: 220px;
+            height: auto !important;
+            min-height: 60px;
+            margin-left: 0;
+            cursor: grab;
+            margin-top: -40px;
+            transition: margin-top 0.3s ease;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        .idle-area .reservation-card:first-child {
+            margin-top: 0;
+            z-index: 10;
+        }
+
+        .idle-area .reservation-card:nth-child(2) {
+            z-index: 9;
+        }
+
+        .idle-area .reservation-card:nth-child(3) {
+            z-index: 8;
+        }
+
+        .idle-area .reservation-card:nth-child(4) {
+            z-index: 7;
+        }
+
+        .idle-area .reservation-card:nth-child(5) {
+            z-index: 6;
+        }
+
+        .idle-area .reservation-card:hover {
+            margin-top: 5px;
+            z-index: 20;
+        }
+
+        .idle-area .reservation-card:active {
+            cursor: grabbing;
+            z-index: 30;
+        }
+
+        /* Draggable styles */
+        .reservation-card.draggable {
+            cursor: grab;
+        }
+
+        .reservation-card.draggable:active {
+            cursor: grabbing;
+        }
+
+        .reservation-card.ghost {
+            opacity: 0.5;
+            background: #bbdefb;
+        }
+
+        .reservation-card.drag-source {
+            opacity: 0.3;
+        }
+
+        .time-slot.drag-over {
+            background-color: #e3f2fd;
+            border: 1px dashed #1976d2;
+        }
     </style>
 </head>
 
@@ -664,6 +805,35 @@
                 <div id="calendar"></div>
             </div>
 
+            <!-- Idle Area for Temporary Reservations -->
+            <div class="idle-area-container mb-3">
+                <div class="idle-area-header">
+                    <h3 class="m-0">
+                        <span class="en">Idle Reservations</span>
+                        <span class="zh">闲置预订</span>
+                    </h3>
+                </div>
+                <div class="idle-area" id="idle-area">
+                    <!-- Idle reservations will be placed here -->
+                    {% for reservation in idle_reservations %}
+                    <div class="reservation-card" data-reservation-id="{{ reservation.id }}"
+                        data-room-id="{{ reservation.room_id }}" data-hour="{{ reservation.start_hour }}"
+                        data-start-time="{{ reservation.start_time }}" data-end-time="{{ reservation.end_time }}"
+                        data-duration="{{ reservation.duration }}">
+                        <div class="time-indicator">
+                            <span class="time-range">{{ reservation.start_time }} - {{ reservation.end_time }}</span>
+                        </div>
+                        <div class="content">
+                            <div class="name-row">
+                                <strong>{{ reservation.contact_name }}</strong>
+                                <span class="people-count">({{ reservation.num_people }})</span>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
             <!-- Room Timelines -->
             <div class="rooms-container">
                 {% for room in rooms %}
@@ -674,7 +844,7 @@
                             <span class="zh">房间 {{ room.id }}</span>
                         </h3>
                     </div>
-                    <div class="room-timeline" id="room-{{ room.id }}">
+                    <div class="room-timeline" id="room-{{ room.id }}" data-room-id="{{ room.id }}">
                         {% for hour in range(11, 25) %}
                         <div class="time-slot" data-hour="{{ hour }}">
                             <div class="time-label">
@@ -683,13 +853,20 @@
                             {% for reservation in room.reservations %}
                             {% if reservation.start_hour == hour %}
                             <div class="reservation-card" data-reservation-id="{{ reservation.id }}"
-                                style="height: {{ (reservation.duration * 40) }}px;">
-                                <strong>{{ reservation.contact_name }}</strong>
-                                <div class="bilingual-label">
-                                    <span class="en">{{ reservation.num_people }} people</span>
-                                    <span class="zh">{{ reservation.num_people }} 人</span>
+                                data-room-id="{{ room.id }}" data-hour="{{ hour }}"
+                                data-start-time="{{ reservation.start_time }}"
+                                data-end-time="{{ reservation.end_time }}" data-duration="{{ reservation.duration }}"
+                                style="height: {{ (reservation.duration * 30) }}px;">
+                                <div class="time-indicator">
+                                    <span class="time-range">{{ reservation.start_time }} - {{ reservation.end_time
+                                        }}</span>
                                 </div>
-                                <div>{{ reservation.start_time }} - {{ reservation.end_time }}</div>
+                                <div class="content">
+                                    <div class="name-row">
+                                        <strong>{{ reservation.contact_name }}</strong>
+                                        <span class="people-count">({{ reservation.num_people }})</span>
+                                    </div>
+                                </div>
                             </div>
                             {% endif %}
                             {% endfor %}
@@ -884,8 +1061,8 @@
     <!-- Move scripts before closing body tag -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@5.10.1/main.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.14.0/Sortable.min.js"></script>
-    <script src="https://kit.fontawesome.com/your-fontawesome-kit.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
     <!-- Update Flatpickr script -->
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/zh.js"></script>
@@ -894,6 +1071,9 @@
         let startTimePicker, endTimePicker;
 
         document.addEventListener('DOMContentLoaded', function () {
+            // Initialize drag and drop functionality
+            initDragAndDrop();
+
             // Initialize FullCalendar
             var calendarEl = document.getElementById('calendar');
             var calendar = new FullCalendar.Calendar(calendarEl, {
@@ -1313,16 +1493,22 @@
 
                                     const timeLabel = document.createElement('div');
                                     timeLabel.className = 'time-label';
-                                    timeLabel.textContent = formatTime(`${hour % 24}:00`);
+                                    // Use a more compact format for time labels
+                                    const h = hour % 24;
+                                    const ampm = h >= 12 ? 'PM' : 'AM';
+                                    const displayHour = h % 12 || 12;
+                                    timeLabel.textContent = `${displayHour}${ampm}`;
                                     timeSlot.appendChild(timeLabel);
 
                                     // Add reservations for this hour
                                     room.reservations.forEach(reservation => {
                                         if (reservation.start_hour === hour) {
                                             const card = document.createElement('div');
-                                            card.className = 'reservation-card';
+                                            card.className = 'reservation-card draggable';
                                             card.dataset.reservationId = reservation.id;
-                                            card.style.height = `${(reservation.duration * 40)}px`;
+                                            card.dataset.roomId = room.id;
+                                            card.dataset.hour = hour;
+                                            card.style.height = `${(reservation.duration * 30)}px`;
                                             card.onclick = function () {
                                                 showEditReservationModal(reservation.id);
                                             };
@@ -1331,22 +1517,42 @@
                                             const timeIndicator = document.createElement('div');
                                             timeIndicator.className = 'time-indicator';
                                             timeIndicator.innerHTML = `
-                                                <span class="start-time">${formatTime(reservation.start_time)}</span>
-                                                <span class="end-time">${formatTime(reservation.end_time)}</span>
+                                                <span class="time-range">${formatTime(reservation.start_time)} - ${formatTime(reservation.end_time)}</span>
                                             `;
                                             card.appendChild(timeIndicator);
 
-                                            const name = document.createElement('strong');
-                                            name.textContent = reservation.contact_name;
-                                            card.appendChild(name);
+                                            // Create content container
+                                            const content = document.createElement('div');
+                                            content.className = 'content';
 
-                                            const people = document.createElement('div');
-                                            people.className = 'bilingual-label';
-                                            people.innerHTML = `
-                                                <span class="en">${reservation.num_people} people</span>
-                                                <span class="zh">${reservation.num_people} 人</span>
-                                            `;
-                                            card.appendChild(people);
+                                            // Format name to show first name and last initial
+                                            const nameParts = reservation.contact_name.split(' ');
+                                            let displayName = reservation.contact_name;
+
+                                            if (nameParts.length > 1) {
+                                                const firstName = nameParts[0];
+                                                const lastInitial = nameParts[nameParts.length - 1][0] + '.';
+                                                displayName = `${firstName} ${lastInitial}`;
+                                            }
+
+                                            // Create a name row that contains both name and people count
+                                            const nameRow = document.createElement('div');
+                                            nameRow.className = 'name-row';
+
+                                            // Add name
+                                            const name = document.createElement('strong');
+                                            name.textContent = displayName;
+                                            nameRow.appendChild(name);
+
+                                            // Add people count on the same line
+                                            const people = document.createElement('span');
+                                            people.className = 'people-count';
+                                            people.textContent = `(${reservation.num_people})`;
+                                            nameRow.appendChild(people);
+
+                                            content.appendChild(nameRow);
+
+                                            card.appendChild(content);
 
                                             timeSlot.appendChild(card);
                                             timeSlot.classList.add('occupied');
@@ -1396,6 +1602,9 @@
 
             // Initialize with current date's reservations
             updateRoomTimelines('{{ selected_date }}');
+
+            // Initialize drag and drop functionality
+            initDragAndDrop();
 
             // Initialize flatpickr for time inputs with 12-hour format
             startTimePicker = flatpickr("#start_time", {
@@ -1827,7 +2036,7 @@
             }
 
             const duration = endHour - startHour;
-            card.style.height = `${(duration * 40)}px`;
+            card.style.height = `${(duration * 30)}px`;
 
             card.onclick = function () {
                 showEditReservationModal(reservation.id);
@@ -1837,25 +2046,39 @@
             const timeIndicator = document.createElement('div');
             timeIndicator.className = 'time-indicator';
             timeIndicator.innerHTML = `
-                <span class="start-time">${formatTime(reservation.start_time)}</span>
-                <span class="end-time">${formatTime(reservation.end_time)}</span>
+                <span class="time-range">${formatTime(reservation.start_time)} - ${formatTime(reservation.end_time)}</span>
             `;
             card.appendChild(timeIndicator);
 
             const content = document.createElement('div');
             content.className = 'content';
 
-            const name = document.createElement('strong');
-            name.textContent = reservation.contact_name;
-            content.appendChild(name);
+            // Format name to show first name and last initial
+            const nameParts = reservation.contact_name.split(' ');
+            let displayName = reservation.contact_name;
 
-            const people = document.createElement('div');
-            people.className = 'bilingual-label';
-            people.innerHTML = `
-                <span class="en">${reservation.num_people} people</span>
-                <span class="zh">${reservation.num_people} 人</span>
-            `;
-            content.appendChild(people);
+            if (nameParts.length > 1) {
+                const firstName = nameParts[0];
+                const lastInitial = nameParts[nameParts.length - 1][0] + '.';
+                displayName = `${firstName} ${lastInitial}`;
+            }
+
+            // Create a name row that contains both name and people count
+            const nameRow = document.createElement('div');
+            nameRow.className = 'name-row';
+
+            // Add name
+            const name = document.createElement('strong');
+            name.textContent = displayName;
+            nameRow.appendChild(name);
+
+            // Add people count on the same line
+            const people = document.createElement('span');
+            people.className = 'people-count';
+            people.textContent = `(${reservation.num_people})`;
+            nameRow.appendChild(people);
+
+            content.appendChild(nameRow);
 
             card.appendChild(content);
             return card;
@@ -1863,6 +2086,242 @@
 
         // Update the modal's close button to use closeReservationModal
         document.querySelector('#reservationModal .btn-close').addEventListener('click', closeReservationModal);
+
+        // Initialize drag and drop functionality
+        function initDragAndDrop() {
+            // Initialize the idle area as a Sortable container
+            const idleArea = document.getElementById('idle-area');
+            if (!idleArea) return;
+
+            // Create sortable for the idle area
+            new Sortable(idleArea, {
+                group: 'reservations',
+                animation: 150,
+                ghostClass: 'ghost',
+                dragClass: 'drag-source',
+                handle: '.reservation-card', // Use reservation cards as handles
+                draggable: '.reservation-card', // Only reservation cards should be draggable
+                onEnd: function (evt) {
+                    handleReservationMove(evt);
+                    // Restack cards after drag ends
+                    restackIdleCards();
+                }
+            });
+
+            // Make each room timeline a sortable container
+            document.querySelectorAll('.room-timeline').forEach(timeline => {
+                new Sortable(timeline, {
+                    group: 'reservations',
+                    animation: 150,
+                    ghostClass: 'ghost',
+                    dragClass: 'drag-source',
+                    filter: '.time-label', // Prevent dragging time labels
+                    handle: '.reservation-card', // Use reservation cards as handles
+                    draggable: '.reservation-card', // Only reservation cards should be draggable
+                    onEnd: function (evt) {
+                        handleReservationMove(evt);
+                    }
+                });
+            });
+
+            // Make each time slot a drop target
+            document.querySelectorAll('.time-slot').forEach(timeSlot => {
+                timeSlot.addEventListener('dragover', function (e) {
+                    e.preventDefault();
+                    this.classList.add('drag-over');
+                });
+
+                timeSlot.addEventListener('dragleave', function () {
+                    this.classList.remove('drag-over');
+                });
+
+                timeSlot.addEventListener('drop', function (e) {
+                    e.preventDefault();
+                    this.classList.remove('drag-over');
+                });
+            });
+
+            // Add click handler for idle area cards to bring them to the top
+            idleArea.addEventListener('click', function (e) {
+                const card = e.target.closest('.reservation-card');
+                if (card) {
+                    // Remove the card and add it back to the top
+                    card.remove();
+                    idleArea.prepend(card);
+                    // Restack all cards
+                    restackIdleCards();
+
+                    // Prevent the click from triggering the modal
+                    e.stopPropagation();
+                }
+            });
+
+            // Initial stacking of cards
+            restackIdleCards();
+        }
+
+        // Function to restack cards in the idle area
+        function restackIdleCards() {
+            const idleArea = document.getElementById('idle-area');
+            if (!idleArea) return;
+
+            const cards = idleArea.querySelectorAll('.reservation-card');
+
+            // Reset z-index and margins
+            cards.forEach((card, index) => {
+                card.style.zIndex = 10 - index;
+
+                if (index === 0) {
+                    card.style.marginTop = '0';
+                } else {
+                    card.style.marginTop = '-40px';
+                }
+            });
+        }
+
+        // Handle reservation moves between containers
+        function handleReservationMove(evt) {
+            const reservationCard = evt.item;
+            const reservationId = reservationCard.dataset.reservationId;
+            const fromContainer = evt.from;
+            const toContainer = evt.to;
+
+            // Check if we have a valid reservation ID
+            if (!reservationId || reservationId === 'undefined') {
+                console.error('Invalid reservation ID');
+                return;
+            }
+
+            // If moved to idle area
+            if (toContainer.id === 'idle-area') {
+                console.log(`Reservation ${reservationId} moved to idle area`);
+
+                // Move the card to the top of the idle area
+                toContainer.removeChild(reservationCard);
+                toContainer.prepend(reservationCard);
+
+                // Update the backend to mark this reservation as idle
+                fetch(`/move_to_idle/${reservationId}`, {
+                    method: 'POST'
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        console.log('Moved to idle area:', data);
+                    })
+                    .catch(error => {
+                        console.error('Error moving to idle area:', error);
+                    });
+
+                return;
+            }
+
+            // If moved from idle area to a room timeline
+            if (fromContainer.id === 'idle-area' && toContainer.classList.contains('room-timeline')) {
+                const roomId = toContainer.dataset.roomId;
+                const timeSlot = reservationCard.closest('.time-slot');
+
+                if (timeSlot) {
+                    const hour = timeSlot.dataset.hour;
+
+                    // First remove from idle area in the backend
+                    fetch(`/remove_from_idle/${reservationId}`, {
+                        method: 'POST'
+                    })
+                        .then(response => response.json())
+                        .then(data => {
+                            console.log('Removed from idle area:', data);
+                            // Then update the reservation with new time and room
+                            moveReservation(reservationId, roomId, hour);
+                        })
+                        .catch(error => {
+                            console.error('Error removing from idle area:', error);
+                        });
+                }
+                return;
+            }
+
+            // If moved between time slots in the same or different room
+            if (toContainer.classList.contains('room-timeline')) {
+                const roomId = toContainer.dataset.roomId;
+                const timeSlot = reservationCard.closest('.time-slot');
+
+                if (timeSlot) {
+                    const hour = timeSlot.dataset.hour;
+                    moveReservation(reservationId, roomId, hour);
+                }
+            }
+        }
+
+        // Function to call the API to move a reservation
+        function moveReservation(reservationId, roomId, hour) {
+            // Check if we have a valid reservation ID
+            if (!reservationId || reservationId === 'undefined') {
+                console.error('Invalid reservation ID');
+                return;
+            }
+
+            // Get the current date from the calendar
+            const selectedDate = calendarEl.dataset.selectedDate || document.getElementById('date').value;
+
+            // Find the reservation card
+            const card = document.querySelector(`.reservation-card[data-reservation-id="${reservationId}"]`);
+            if (!card) {
+                console.error('Reservation card not found');
+                return;
+            }
+
+            // Get the current duration from the card
+            const duration = parseFloat(card.dataset.duration) || 1;
+
+            // Calculate new start and end times
+            const newStartHour = parseInt(hour);
+            const newEndHour = newStartHour + duration;
+
+            // Format times for API
+            const startTime = `${newStartHour.toString().padStart(2, '0')}:00`;
+            const endTime = `${Math.floor(newEndHour).toString().padStart(2, '0')}:${(newEndHour % 1 * 60).toString().padStart(2, '0')}`;
+
+            // Update the card's data attributes
+            card.dataset.hour = newStartHour;
+            card.dataset.startTime = startTime;
+            card.dataset.endTime = endTime;
+
+            // Update the card's display
+            const timeRange = card.querySelector('.time-range');
+            if (timeRange) {
+                timeRange.textContent = `${startTime} - ${endTime}`;
+            }
+
+            // Call the API to update the reservation
+            fetch(`/update_reservation/${reservationId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    room_id: roomId,
+                    start_time: startTime,
+                    end_time: endTime
+                })
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Failed to update reservation');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('Reservation updated successfully:', data);
+                    // Refresh the room timelines to show the updated reservation
+                    updateRoomTimelines(selectedDate);
+                })
+                .catch(error => {
+                    console.error('Error updating reservation:', error);
+                    alert('Error updating reservation. Please try again.');
+                    // Refresh to restore the original state
+                    updateRoomTimelines(selectedDate);
+                });
+        }
     </script>
 </body>
 
