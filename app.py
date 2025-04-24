@@ -279,9 +279,9 @@ def get_daily_reservations():
 
     db = get_db()
 
-    # Get all rooms
+    # Get all rooms (excluding the idle room with id=0)
     rooms = db.execute('''
-        SELECT id, name, capacity FROM rooms ORDER BY capacity
+        SELECT id, name, capacity FROM rooms WHERE id > 0 ORDER BY capacity
     ''').fetchall()
 
     # Get idle reservations for this date
@@ -294,7 +294,7 @@ def get_daily_reservations():
     idle_reservation_ids_set = {row['reservation_id']
                                 for row in idle_reservations_ids}
 
-    result = {'rooms': []}
+    result = {'rooms': [], 'idle_reservations': []}
 
     for room in rooms:
         # Get all reservations for this room and date
@@ -340,6 +340,41 @@ def get_daily_reservations():
             })
 
         result['rooms'].append(room_data)
+
+    # Get all idle reservations for this date
+    if idle_reservation_ids_set:
+        idle_reservations = db.execute('''
+            SELECT id, start_time, end_time, contact_name, num_people, language, room_id, notes
+            FROM reservations
+            WHERE id IN ({}) AND date = ?
+            ORDER BY start_time
+        '''.format(','.join(['?'] * len(idle_reservation_ids_set))),
+            list(idle_reservation_ids_set) + [date]).fetchall()
+
+        for res in idle_reservations:
+            # Use our safe time parsing function
+            start_time, _ = parse_time_safe(res['start_time'])
+            end_time, is_extended = parse_time_safe(res['end_time'])
+
+            start_hour = start_time.hour
+            end_hour = end_time.hour
+
+            # Handle overnight reservations
+            if is_extended or end_hour <= start_hour:
+                end_hour += 24
+
+            result['idle_reservations'].append({
+                'id': res['id'],
+                'start_time': res['start_time'],
+                'end_time': res['end_time'],
+                'start_hour': start_hour,
+                'duration': end_hour - start_hour,
+                'contact_name': res['contact_name'],
+                'num_people': res['num_people'],
+                'language': res['language'],
+                'room_id': res['room_id'],
+                'notes': res['notes']
+            })
 
     return jsonify(result)
 

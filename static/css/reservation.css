@@ -758,11 +758,12 @@ select.form-control {
 /* Idle Area Styles */
 .idle-area-container {
     width: 250px;
-    min-height: 120px;
+    min-height: 200px;
     border: 1px solid #ddd;
     border-radius: 4px;
     background-color: #f8f9fa;
     margin: 0 auto 20px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
 }
 
 .idle-area-header {
@@ -770,27 +771,38 @@ select.form-control {
     padding: 10px;
     border-bottom: 1px solid #ddd;
     text-align: center;
+    font-weight: bold;
+    color: #495057;
 }
 
 .idle-area {
     position: relative;
     padding: 15px;
-    min-height: 80px;
+    min-height: 150px;
     display: flex;
     flex-direction: column;
     align-items: center;
+    overflow-y: visible;
 }
 
 .idle-area .reservation-card {
     position: relative;
     width: 220px;
     height: auto !important;
-    min-height: 60px;
+    min-height: 80px;
     margin-left: 0;
     cursor: grab;
     margin-top: -40px;
-    transition: margin-top 0.3s ease;
+    transition: all 0.3s ease;
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    background-color: #fff3cd;
+    border: 1px solid #ffeeba;
+    color: #856404;
+}
+
+.idle-area .reservation-card .time-indicator {
+    background-color: #ffc107;
+    color: #856404;
 }
 
 .idle-area .reservation-card:first-child {
@@ -817,11 +829,30 @@ select.form-control {
 .idle-area .reservation-card:hover {
     margin-top: 5px;
     z-index: 20;
+    transform: translateY(-5px);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
 }
 
 .idle-area .reservation-card:active {
     cursor: grabbing;
     z-index: 30;
+}
+
+.idle-area .reservation-card .language {
+    font-size: 0.75em;
+    color: #856404;
+    margin-top: 2px;
+    font-style: italic;
+}
+
+.idle-area .reservation-card .notes {
+    font-size: 0.75em;
+    color: #856404;
+    margin-top: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
 }
 
 /* Draggable styles */

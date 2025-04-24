@@ -39,9 +39,12 @@ window.showToast = function (message, type = "success") {
 
 // Initialize drag and drop functionality
 function initDragAndDrop() {
+  console.log("Initializing drag and drop functionality");
+
   // Initialize the idle area as a Sortable container
   const idleArea = document.getElementById("idle-area");
   if (idleArea) {
+    console.log("Setting up idle area as sortable");
     new Sortable(idleArea, {
       group: "reservations",
       animation: 150,
@@ -50,6 +53,7 @@ function initDragAndDrop() {
       handle: ".reservation-card", // Use reservation cards as handles
       draggable: ".reservation-card", // Only reservation cards should be draggable
       onEnd: function (evt) {
+        console.log("Drag ended in idle area", evt);
         handleReservationMove(evt);
         // Restack cards after drag ends
         restackIdleCards();
@@ -60,6 +64,7 @@ function initDragAndDrop() {
     idleArea.addEventListener("click", function (e) {
       const card = e.target.closest(".reservation-card");
       if (card) {
+        console.log("Clicked on idle card", card.dataset.reservationId);
         // Remove the card and add it back to the top
         card.remove();
         idleArea.prepend(card);
@@ -77,6 +82,10 @@ function initDragAndDrop() {
 
   // Make each room timeline a sortable container
   document.querySelectorAll(".room-timeline").forEach((timeline) => {
+    console.log(
+      "Setting up room timeline as sortable",
+      timeline.dataset.roomId
+    );
     new Sortable(timeline, {
       group: "reservations",
       animation: 150,
@@ -86,6 +95,7 @@ function initDragAndDrop() {
       handle: ".reservation-card", // Use reservation cards as handles
       draggable: ".reservation-card", // Only reservation cards should be draggable
       onEnd: function (evt) {
+        console.log("Drag ended in room timeline", evt);
         handleReservationMove(evt);
       },
     });
@@ -105,6 +115,10 @@ function initDragAndDrop() {
     timeSlot.addEventListener("drop", function (e) {
       e.preventDefault();
       this.classList.remove("drag-over");
+      console.log(
+        "Dropped on time slot",
+        this.dataset.hour || this.dataset.time
+      );
     });
   });
 }
@@ -135,6 +149,14 @@ function handleReservationMove(evt) {
   const fromContainer = evt.from;
   const toContainer = evt.to;
 
+  console.log("Handling reservation move:", {
+    reservationId,
+    fromContainerId: fromContainer.id,
+    fromContainerClass: fromContainer.className,
+    toContainerId: toContainer.id,
+    toContainerClass: toContainer.className,
+  });
+
   // Check if we have a valid reservation ID
   if (!reservationId || reservationId === "undefined") {
     console.error("Invalid reservation ID");
@@ -157,6 +179,9 @@ function handleReservationMove(evt) {
       .then((data) => {
         console.log("Moved to idle area:", data);
         showToast("Reservation moved to idle area");
+
+        // Restack the cards
+        restackIdleCards();
       })
       .catch((error) => {
         console.error("Error moving to idle area:", error);
@@ -172,10 +197,36 @@ function handleReservationMove(evt) {
     toContainer.classList.contains("room-timeline")
   ) {
     const roomId = toContainer.dataset.roomId;
-    const timeSlot = reservationCard.closest(".time-slot");
+
+    // Find the closest time slot
+    let timeSlot = reservationCard.closest(".time-slot");
+
+    // If no time slot is found directly, find the nearest one based on position
+    if (!timeSlot) {
+      const cardRect = reservationCard.getBoundingClientRect();
+      const cardTop = cardRect.top;
+
+      // Find the time slot whose top position is closest to the card's top
+      const timeSlots = toContainer.querySelectorAll(".time-slot");
+      let closestSlot = null;
+      let minDistance = Infinity;
+
+      timeSlots.forEach((slot) => {
+        const slotRect = slot.getBoundingClientRect();
+        const distance = Math.abs(slotRect.top - cardTop);
+
+        if (distance < minDistance) {
+          minDistance = distance;
+          closestSlot = slot;
+        }
+      });
+
+      timeSlot = closestSlot;
+    }
 
     if (timeSlot) {
       const hour = timeSlot.dataset.hour || timeSlot.dataset.time.split(":")[0];
+      console.log(`Moving from idle to room ${roomId} at hour ${hour}`);
 
       // First remove from idle area in the backend
       fetch(`/remove_from_idle/${reservationId}`, {
@@ -194,6 +245,9 @@ function handleReservationMove(evt) {
             "error"
           );
         });
+    } else {
+      console.error("No time slot found for the reservation");
+      showToast("Error: Could not determine the time slot", "error");
     }
     return;
   }
@@ -201,11 +255,40 @@ function handleReservationMove(evt) {
   // If moved between time slots in the same or different room
   if (toContainer.classList.contains("room-timeline")) {
     const roomId = toContainer.dataset.roomId;
-    const timeSlot = reservationCard.closest(".time-slot");
+
+    // Find the closest time slot
+    let timeSlot = reservationCard.closest(".time-slot");
+
+    // If no time slot is found directly, find the nearest one based on position
+    if (!timeSlot) {
+      const cardRect = reservationCard.getBoundingClientRect();
+      const cardTop = cardRect.top;
+
+      // Find the time slot whose top position is closest to the card's top
+      const timeSlots = toContainer.querySelectorAll(".time-slot");
+      let closestSlot = null;
+      let minDistance = Infinity;
+
+      timeSlots.forEach((slot) => {
+        const slotRect = slot.getBoundingClientRect();
+        const distance = Math.abs(slotRect.top - cardTop);
+
+        if (distance < minDistance) {
+          minDistance = distance;
+          closestSlot = slot;
+        }
+      });
+
+      timeSlot = closestSlot;
+    }
 
     if (timeSlot) {
       const hour = timeSlot.dataset.hour || timeSlot.dataset.time.split(":")[0];
+      console.log(`Moving to room ${roomId} at hour ${hour}`);
       moveReservation(reservationId, roomId, hour);
+    } else {
+      console.error("No time slot found for the reservation");
+      showToast("Error: Could not determine the time slot", "error");
     }
   }
 }
@@ -217,6 +300,10 @@ function moveReservation(reservationId, roomId, hour) {
     console.error("Invalid reservation ID");
     return;
   }
+
+  console.log(
+    `Moving reservation ${reservationId} to room ${roomId} at hour ${hour}`
+  );
 
   // Get the current date from the calendar
   const selectedDate =
@@ -252,11 +339,37 @@ function moveReservation(reservationId, roomId, hour) {
   card.dataset.hour = newStartHour;
   card.dataset.startTime = startTime;
   card.dataset.endTime = endTime;
+  card.dataset.roomId = roomId;
 
   // Update the card's display
   const timeRange = card.querySelector(".time-range");
   if (timeRange) {
     timeRange.textContent = `${startTime} - ${endTime}`;
+  }
+
+  // Special handling for idle room (room_id = 0)
+  if (roomId === 0 || roomId === "0") {
+    console.log("Moving to idle room");
+    // Move to idle area
+    fetch(`/move_to_idle/${reservationId}`, {
+      method: "POST",
+    })
+      .then((response) => response.json())
+      .then((data) => {
+        console.log("Moved to idle area:", data);
+        showToast("Reservation moved to idle area");
+        // Refresh the room timelines to show the updated reservation
+        updateRoomTimelines(selectedDate);
+        // Also update the idle area
+        updateIdleArea();
+      })
+      .catch((error) => {
+        console.error("Error moving to idle area:", error);
+        showToast("Error moving to idle area. Please try again.", "error");
+        // Refresh to restore the original state
+        updateRoomTimelines(selectedDate);
+      });
+    return;
   }
 
   // Call the API to update the reservation
@@ -292,6 +405,8 @@ function moveReservation(reservationId, roomId, hour) {
       showToast("Reservation updated successfully!");
       // Refresh the room timelines to show the updated reservation
       updateRoomTimelines(selectedDate);
+      // Also update the idle area
+      updateIdleArea();
     })
     .catch((error) => {
       console.error("Error updating reservation:", error);
@@ -384,14 +499,24 @@ function updateRoomTimelines(date) {
 
 // Function to update the idle area
 function updateIdleArea() {
-  const idleArea = document.querySelector(".idle-area");
-  if (!idleArea) return;
+  const idleArea = document.getElementById("idle-area");
+  if (!idleArea) {
+    console.error("Idle area not found");
+    return;
+  }
+
+  console.log("Updating idle area");
 
   // Clear the existing idle reservations
   idleArea.innerHTML = "";
 
   // Get the current date
-  const currentDate = document.getElementById("date").value;
+  const currentDate =
+    document.getElementById("date").value ||
+    window.calendarEl.dataset.selectedDate ||
+    new Date().toISOString().split("T")[0];
+
+  console.log("Fetching idle reservations for date:", currentDate);
 
   // Fetch all reservations for the selected date
   fetch(`/api/daily_reservations?date=${currentDate}`)
@@ -402,17 +527,24 @@ function updateIdleArea() {
       return response.json();
     })
     .then((data) => {
+      console.log("Received data for idle area:", data);
+
       // Check if there are idle reservations in the response
       if (data.idle_reservations && data.idle_reservations.length > 0) {
+        console.log(`Found ${data.idle_reservations.length} idle reservations`);
+
         // For each idle reservation, create a reservation card
         data.idle_reservations.forEach((reservation) => {
+          console.log("Creating idle card for reservation:", reservation);
+
           // Convert the reservation data to the format expected by createIdleReservationCard
           const formattedReservation = {
             id: reservation.id,
             name: reservation.contact_name,
             people: reservation.num_people,
             phone: "", // These fields might not be available in the API response
-            notes: "",
+            notes: reservation.notes || "",
+            language: reservation.language || "en",
             room_id: reservation.room_id,
             start_time: reservation.start_time,
             end_time: reservation.end_time,
@@ -420,8 +552,13 @@ function updateIdleArea() {
           createIdleReservationCard(formattedReservation, idleArea);
         });
 
+        // Stack the cards
+        restackIdleCards();
+
         // Re-initialize drag and drop
         initDragAndDrop();
+      } else {
+        console.log("No idle reservations found");
       }
     })
     .catch((error) => {
@@ -525,6 +662,8 @@ function createReservationCard(reservation, roomTimeline) {
 
 // Function to create an idle reservation card
 function createIdleReservationCard(reservation, idleArea) {
+  console.log("Creating idle reservation card:", reservation);
+
   // Create the reservation card
   const card = document.createElement("div");
   card.className = "reservation-card";
@@ -535,6 +674,7 @@ function createIdleReservationCard(reservation, idleArea) {
   card.dataset.roomId = reservation.room_id;
   card.dataset.phone = reservation.phone || "";
   card.dataset.notes = reservation.notes || "";
+  card.dataset.language = reservation.language || "en";
 
   // Parse the start and end times
   const startTime = reservation.start_time;
@@ -564,6 +704,7 @@ function createIdleReservationCard(reservation, idleArea) {
   card.dataset.hour = startHour;
   card.dataset.duration = (durationMinutes / 60).toFixed(1); // Store duration in hours
 
+  // Format the time for display
   const startHour12 = startHour % 12 || 12;
   const startAmPm = startHour >= 12 ? "PM" : "AM";
   const endHour12 = endHour % 12 || 12;
@@ -576,6 +717,31 @@ function createIdleReservationCard(reservation, idleArea) {
     .toString()
     .padStart(2, "0")} ${endAmPm}`;
 
+  // Get language display
+  let languageDisplay = "";
+  switch (reservation.language) {
+    case "en":
+      languageDisplay = "English";
+      break;
+    case "zh":
+      languageDisplay = "中文";
+      break;
+    case "ja":
+      languageDisplay = "日本語";
+      break;
+    case "ko":
+      languageDisplay = "한국어";
+      break;
+    case "vi":
+      languageDisplay = "Tiếng Việt";
+      break;
+    case "th":
+      languageDisplay = "ไทย";
+      break;
+    default:
+      languageDisplay = "";
+  }
+
   // Set the card content
   card.innerHTML = `
         <div class="time-indicator">
@@ -587,6 +753,11 @@ function createIdleReservationCard(reservation, idleArea) {
                 <span class="people-count">${reservation.people} 人</span>
             </div>
             ${
+              languageDisplay
+                ? `<div class="language">${languageDisplay}</div>`
+                : ""
+            }
+            ${
               reservation.notes
                 ? `<div class="notes">${reservation.notes}</div>`
                 : ""
@@ -596,6 +767,54 @@ function createIdleReservationCard(reservation, idleArea) {
 
   // Add the card to the idle area
   idleArea.appendChild(card);
+
+  // Make the card clickable to open the reservation modal
+  card.addEventListener("click", function (e) {
+    // Only handle clicks on the card itself, not on buttons inside it
+    if (e.target.closest(".remove-btn")) return;
+
+    // Prevent the event from bubbling up to the idle area
+    e.stopPropagation();
+
+    // Open the reservation modal for editing
+    const reservationId = this.dataset.reservationId;
+    if (reservationId) {
+      // Set the current reservation ID for the modal
+      window.currentReservationId = reservationId;
+
+      // Fetch the reservation details and open the modal
+      fetch(`/get_reservation/${reservationId}`)
+        .then((response) => response.json())
+        .then((data) => {
+          // Populate the modal with the reservation data
+          document.getElementById("reservation_id").value = data.id;
+          document.getElementById("date").value = data.date;
+          document.getElementById("start_time").value = data.start_time;
+          document.getElementById("end_time").value = data.end_time;
+          document.getElementById("room_id").value = data.room_id;
+          document.getElementById("num_people").value = data.num_people;
+          document.getElementById("contact_name").value = data.contact_name;
+          document.getElementById("contact_phone").value = data.contact_phone;
+          document.getElementById("contact_email").value =
+            data.contact_email || "";
+          document.getElementById("language").value = data.language || "en";
+
+          // Show the delete button
+          document.getElementById("delete-reservation-btn").style.display =
+            "block";
+
+          // Open the modal
+          const modal = new bootstrap.Modal(
+            document.getElementById("reservationModal")
+          );
+          modal.show();
+        })
+        .catch((error) => {
+          console.error("Error fetching reservation:", error);
+          showToast("Error fetching reservation details", "error");
+        });
+    }
+  });
 }
 
 // Function to mark occupied time slots

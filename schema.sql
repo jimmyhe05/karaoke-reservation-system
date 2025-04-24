@@ -1,6 +1,7 @@
 -- Only drop tables if we're explicitly recreating the database
 -- DROP TABLE IF EXISTS reservations;
 -- DROP TABLE IF EXISTS rooms;
+-- DROP TABLE IF EXISTS idle_reservations;
 
 CREATE TABLE IF NOT EXISTS rooms (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -45,3 +46,17 @@ WHERE NOT EXISTS (SELECT 1 FROM rooms WHERE id = 2);
 INSERT INTO rooms (name, capacity, hourly_rate, peak_hour_rate)
 SELECT 'Room 3', 8, 35.00, 50.00
 WHERE NOT EXISTS (SELECT 1 FROM rooms WHERE id = 3);
+
+-- Create a special "idle" room with ID 0
+INSERT INTO rooms (id, name, capacity, hourly_rate, peak_hour_rate)
+SELECT 0, 'Idle', 999, 0.00, 0.00
+WHERE NOT EXISTS (SELECT 1 FROM rooms WHERE id = 0);
+
+-- Create table for idle reservations
+CREATE TABLE IF NOT EXISTS idle_reservations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    reservation_id INTEGER NOT NULL,
+    date TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (reservation_id) REFERENCES reservations(id)
+);
