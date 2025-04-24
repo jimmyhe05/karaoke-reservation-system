@@ -62,6 +62,28 @@ with app.app_context():
     init_db()
 
 
+def parse_time_safe(time_str):
+    """
+    Safely parse time strings, including those in 24+ hour format (e.g., "25:00").
+    Returns a tuple of (datetime object, is_extended_format)
+    """
+    try:
+        # Try standard format first
+        return datetime.strptime(time_str, '%H:%M'), False
+    except ValueError:
+        # Handle extended format (24+ hours)
+        if ':' in time_str:
+            hours, minutes = time_str.split(':')
+            if int(hours) >= 24:
+                # Create a time for the equivalent hour on the same day
+                # (e.g., "25:00" becomes "01:00")
+                normalized_hour = int(hours) % 24
+                normalized_time_str = f"{normalized_hour:02d}:{minutes}"
+                return datetime.strptime(normalized_time_str, '%H:%M'), True
+        # If we can't parse it, re-raise the exception
+        raise
+
+
 def is_within_business_hours(start_time, end_time):
     """Check if the reservation falls within business hours (11 AM - 1 AM next day)."""
     # If end time is before start time, it means it's crossing midnight
@@ -75,8 +97,11 @@ def is_within_business_hours(start_time, end_time):
         normalized_end += 24
 
     # Business hours: 11 AM (11.0) to 1 AM next day (25.0)
-    return (11.0 <= normalized_start <= 25.0 and
-            11.0 <= normalized_end <= 25.0)
+    # Start time must be at least 11 AM
+    # End time must be at most 1 AM next day (25.0 in normalized time)
+    # End time must be after start time (already handled by the normalization above)
+    return (11.0 <= normalized_start < 25.0 and
+            11.0 < normalized_end <= 25.0)
 
 
 def is_room_available(room_id, start_time, end_time, exclude_id=None):
@@ -105,15 +130,29 @@ def calculate_cost(start_time, end_time, room_id):
     # Convert times to hours for calculation
     start_hour = int(start_time.split(':')[0])
     end_hour = int(end_time.split(':')[0])
-    if end_hour <= 1:  # Handle after midnight
+
+    # Handle overnight reservations (end time already in 24+ hour format or after midnight)
+    if end_hour < start_hour:
         end_hour += 24
 
     total_cost = 0
     current_hour = start_hour
 
     while current_hour < end_hour:
-        # Peak hours are 6 PM (18:00) to 1 AM (25:00)
-        rate = room['peak_hour_rate'] if current_hour >= 18 else room['hourly_rate']
+        # Normalize hour for rate calculation (handle hours > 24)
+        normalized_hour = current_hour % 24
+
+        # Different rate periods:
+        # Early Bird (11 AM - 6 PM): hourly_rate
+        # Prime Time (6 PM - 9 PM): peak_hour_rate
+        # Late Night (9 PM - 1 AM): peak_hour_rate
+        if 11 <= normalized_hour < 18:  # 11 AM - 6 PM
+            rate = room['hourly_rate']
+        elif 18 <= normalized_hour < 21:  # 6 PM - 9 PM
+            rate = room['peak_hour_rate']
+        else:  # 9 PM - 1 AM or 21-25
+            rate = room['peak_hour_rate']
+
         total_cost += rate
         current_hour += 1
 
@@ -158,11 +197,19 @@ def get_rooms_with_reservations(selected_date=None):
 
             if reservation['room_id'] == room['id']:
                 # Calculate start hour and duration for display
-                start_time = datetime.strptime(
-                    reservation['start_time'], '%H:%M')
-                end_time = datetime.strptime(reservation['end_time'], '%H:%M')
-                duration = (end_time - start_time).total_seconds() / \
-                    3600  # in hours
+                start_time, _ = parse_time_safe(reservation['start_time'])
+                end_time, is_extended = parse_time_safe(
+                    reservation['end_time'])
+
+                # For overnight reservations, add a day to end_time for correct duration calculation
+                if is_extended or end_time <= start_time:
+                    end_time_with_day = end_time.replace(
+                        day=start_time.day + 1)
+                    duration = (end_time_with_day -
+                                start_time).total_seconds() / 3600  # in hours
+                else:
+                    # in hours
+                    duration = (end_time - start_time).total_seconds() / 3600
 
                 room_reservations.append({
                     'id': reservation['id'],
@@ -193,10 +240,19 @@ def get_rooms_with_reservations(selected_date=None):
             ''', idle_res_ids).fetchall()
 
             for reservation in idle_res_data:
-                start_time = datetime.strptime(
-                    reservation['start_time'], '%H:%M')
-                end_time = datetime.strptime(reservation['end_time'], '%H:%M')
-                duration = (end_time - start_time).total_seconds() / 3600
+                start_time, _ = parse_time_safe(reservation['start_time'])
+                end_time, is_extended = parse_time_safe(
+                    reservation['end_time'])
+
+                # For overnight reservations, add a day to end_time for correct duration calculation
+                if is_extended or end_time <= start_time:
+                    end_time_with_day = end_time.replace(
+                        day=start_time.day + 1)
+                    duration = (end_time_with_day -
+                                start_time).total_seconds() / 3600  # in hours
+                else:
+                    # in hours
+                    duration = (end_time - start_time).total_seconds() / 3600
 
                 idle_reservations.append({
                     'id': reservation['id'],
@@ -261,9 +317,15 @@ def get_daily_reservations():
             if res['id'] in idle_reservation_ids_set:
                 continue
 
-            start_hour = int(res['start_time'].split(':')[0])
-            end_hour = int(res['end_time'].split(':')[0])
-            if end_hour <= 1:  # Handle after midnight
+            # Use our safe time parsing function
+            start_time, _ = parse_time_safe(res['start_time'])
+            end_time, is_extended = parse_time_safe(res['end_time'])
+
+            start_hour = start_time.hour
+            end_hour = end_time.hour
+
+            # Handle overnight reservations
+            if is_extended or end_hour <= start_hour:
                 end_hour += 24
 
             room_data['reservations'].append({
@@ -371,17 +433,22 @@ def reservation():
             try:
                 # Parse date and times
                 date = datetime.strptime(form_data['date'], '%Y-%m-%d').date()
-                start_time = datetime.strptime(
-                    form_data['start_time'], '%H:%M').time()
-                end_time = datetime.strptime(
-                    form_data['end_time'], '%H:%M').time()
+
+                # Use our safe time parsing function
+                start_time_obj, _ = parse_time_safe(form_data['start_time'])
+                end_time_obj, is_extended = parse_time_safe(
+                    form_data['end_time'])
+
+                # Extract time components
+                start_time = start_time_obj.time()
+                end_time = end_time_obj.time()
 
                 # Create datetime objects for comparison
                 start_datetime = datetime.combine(date, start_time)
                 end_datetime = datetime.combine(date, end_time)
 
                 # Handle overnight reservations
-                if end_time <= start_time:
+                if is_extended or end_time <= start_time:
                     end_datetime = end_datetime + timedelta(days=1)
 
                 # Check if the date is in the past
@@ -394,6 +461,7 @@ def reservation():
                 business_end = datetime.combine(
                     date + timedelta(days=1), datetime.strptime('01:00', '%H:%M').time())
 
+                # Ensure start time is at least 11 AM and end time is at most 1 AM next day
                 if start_datetime < business_start or end_datetime > business_end:
                     error_fields.extend(['start_time', 'end_time'])
 
@@ -405,7 +473,14 @@ def reservation():
 
                 # Update form_data with datetime objects
                 form_data['start_time'] = start_datetime.strftime('%H:%M')
-                form_data['end_time'] = end_datetime.strftime('%H:%M')
+
+                # For overnight reservations, store end time as 24-hour format (e.g., "25:00" for 1 AM next day)
+                if end_time <= start_time:
+                    # Convert end time to 24+ hour format for overnight reservations
+                    end_hour = end_time.hour + 24
+                    form_data['end_time'] = f"{end_hour:02d}:{end_time.minute:02d}"
+                else:
+                    form_data['end_time'] = end_datetime.strftime('%H:%M')
 
             except ValueError as e:
                 return jsonify({
@@ -674,13 +749,13 @@ def move_reservation():
                 return jsonify({'error': 'Reservation not found'}), 404
 
             # Calculate new start and end times
-            old_start_time = datetime.strptime(
-                reservation['start_time'], '%H:%M')
-            old_end_time = datetime.strptime(reservation['end_time'], '%H:%M')
+            old_start_time, _ = parse_time_safe(reservation['start_time'])
+            old_end_time, is_extended = parse_time_safe(
+                reservation['end_time'])
 
             # Calculate duration in hours
             duration_hours = 0
-            if old_end_time < old_start_time:  # Overnight reservation
+            if is_extended or old_end_time < old_start_time:  # Overnight reservation
                 old_end_time_adjusted = old_end_time.replace(
                     day=old_start_time.day + 1)
                 duration = old_end_time_adjusted - old_start_time
@@ -691,7 +766,10 @@ def move_reservation():
 
             # Create new start and end times
             new_start_time = f"{hour:02d}:00"
-            new_end_hour = (hour + int(duration_hours)) % 24
+
+            # Handle overnight reservations correctly
+            new_end_hour = hour + int(duration_hours)
+            # Always use the same format for consistency
             new_end_time = f"{new_end_hour:02d}:00"
 
             # Check if the new time slot is available
@@ -823,9 +901,9 @@ def price_estimate():
     print("Received price estimate request:", data)  # Debug log
 
     try:
-        # Parse the times using datetime
-        start_time = datetime.strptime(data['start_time'], '%H:%M')
-        end_time = datetime.strptime(data['end_time'], '%H:%M')
+        # Parse the times using our safe parser
+        start_time, _ = parse_time_safe(data['start_time'])
+        end_time, is_extended = parse_time_safe(data['end_time'])
 
         # Initialize cost components
         room_rate = 0
@@ -836,7 +914,7 @@ def price_estimate():
         end_datetime = end_time
 
         # Handle overnight reservations
-        if end_datetime <= current_time:
+        if is_extended or end_datetime <= current_time or end_time.hour == 0:
             end_datetime += timedelta(days=1)
 
         while current_time < end_datetime:
@@ -854,8 +932,15 @@ def price_estimate():
             # Calculate duration for this rate period
             next_hour = (current_time + timedelta(hours=1)).replace(minute=0)
             if hour >= 21:  # Late night period
+                # For late night, ensure we go up to 1 AM (next day)
                 next_hour = min(next_hour, (current_time +
                                 timedelta(days=1)).replace(hour=1, minute=0))
+            # Special handling for midnight (0:00)
+            elif hour == 0:  # Midnight
+                # Treat midnight as part of the late night period
+                next_hour = min(
+                    next_hour, (current_time).replace(hour=1, minute=0))
+
             period_end = min(next_hour, end_datetime)
             duration = (period_end - current_time).total_seconds() / 3600
 
@@ -978,4 +1063,4 @@ def alternative_times():
 
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, port=5001)

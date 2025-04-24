@@ -14,12 +14,17 @@
             display: flex;
             gap: 20px;
             padding: 20px;
-            height: calc(100vh - 100px);
+            height: calc(100vh - 60px);
+            /* Full viewport height minus padding */
+            min-height: 600px;
+            /* Minimum height */
         }
 
         .calendar-container {
             flex: 0 0 400px;
             height: 100%;
+            min-height: 600px;
+            /* Match the min-height of rooms-container */
         }
 
         .rooms-container {
@@ -28,6 +33,9 @@
             gap: 20px;
             overflow-x: auto;
             height: 100%;
+            /* Match the height of the calendar */
+            min-height: 600px;
+            /* Ensure minimum height */
         }
 
         .room-container {
@@ -36,6 +44,8 @@
             max-width: 300px;
             display: flex;
             flex-direction: column;
+            height: 100%;
+            /* Match the height of the calendar */
         }
 
         .room-header {
@@ -52,11 +62,16 @@
             border: 1px solid #ddd;
             background: #f8f9fa;
             overflow-y: auto;
+            height: 100%;
+            /* Ensure it takes full height */
         }
 
         .time-slot {
             height: 40px;
+            /* Fixed height to ensure consistency */
             border-bottom: 1px solid #ddd;
+            border-top: 1px solid #ddd;
+            /* Add top border for better alignment */
             position: relative;
             font-size: 0.9em;
             background-color: #ffffff;
@@ -64,13 +79,25 @@
             /* Default cursor to indicate it's not draggable */
             pointer-events: auto;
             /* Allow interactions with the time slot */
+            box-sizing: border-box;
+            /* Ensure consistent sizing */
+            padding: 0;
+            /* Remove any padding */
+            margin: 0;
+            /* Remove any margin */
         }
 
         .time-label {
             position: absolute;
             left: 0;
-            width: 70px;
-            padding: 2px;
+            top: -20px;
+            /* Position the label at the top border line */
+            width: 80px;
+            /* Increased width to accommodate full time format */
+            padding: 0;
+            margin: 0;
+            height: 20px;
+            /* Reduced height */
             background: #f8f9fa;
             border-right: 1px solid #ddd;
             font-size: 0.75em;
@@ -80,30 +107,40 @@
             overflow: hidden;
             text-overflow: ellipsis;
             text-align: center;
-            line-height: 26px;
-            /* Match the time-slot height minus padding */
+            line-height: 20px;
+            /* Adjusted line height */
             pointer-events: none;
             /* Make time labels non-interactive for drag operations */
             user-select: none;
             /* Prevent text selection */
+            z-index: 10;
+            /* Ensure labels appear above grid lines */
         }
 
         .reservation-card {
             position: absolute;
-            width: calc(100% - 70px);
-            margin-left: 70px;
+            width: calc(100% - 80px);
+            /* Match the time-label width */
+            margin-left: 80px;
+            /* Match the time-label width */
             background: #e3f2fd;
             color: #1976d2;
-            padding: 8px;
+            padding: 6px;
+            /* Reduced padding to better fit content */
             border-radius: 4px;
             cursor: grab;
             /* Change cursor to grab to indicate it's draggable */
             z-index: 100;
             font-size: 0.85em;
             overflow: hidden;
-            border: 2px solid #1976d2;
+            border: 1px solid #1976d2;
+            /* Thinner border to save space */
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
             transition: all 0.2s ease;
+            box-sizing: border-box;
+            /* Ensure padding and border are included in width calculation */
+            top: -1px;
+            /* Adjust to align with the top border line */
         }
 
         .reservation-card:active {
@@ -123,11 +160,14 @@
             top: 0;
             left: 0;
             right: 0;
-            height: 20px;
+            height: 18px;
+            /* Slightly smaller height */
             background: #1976d2;
             color: white;
-            font-size: 0.75em;
-            padding: 1px 6px;
+            font-size: 0.7em;
+            /* Smaller font size */
+            padding: 0px 4px;
+            /* Reduced padding */
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -145,11 +185,13 @@
         }
 
         .reservation-card .content {
-            margin-top: 20px;
-            padding: 4px 8px;
+            margin-top: 18px;
+            /* Match the time-indicator height */
+            padding: 2px 4px;
+            /* Reduced padding */
             display: flex;
             flex-direction: column;
-            gap: 2px;
+            gap: 1px;
         }
 
         .reservation-card .name-row {
@@ -653,6 +695,21 @@
         }
 
         /* Calendar reservation count styling */
+        /* Flatpickr customization */
+        .flatpickr-input {
+            background-color: #ffffff !important;
+            /* Use white background to indicate it's editable */
+            cursor: text !important;
+            /* Use text cursor to indicate it's editable */
+        }
+
+        /* Make time inputs look more editable */
+        #start_time,
+        #end_time {
+            border: 1px solid #ced4da;
+            background-color: #ffffff !important;
+        }
+
         .fc-daygrid-day-frame {
             position: relative;
             min-height: 70px;
@@ -797,7 +854,7 @@
 
 <body>
     <div class="container-fluid">
-        <h1 class="my-4 text-center">Karaoke Room Reservation System</h1>
+        <h1 class="my-1 text-center">Karaoke Room Reservation System</h1>
 
         <div class="main-container">
             <!-- Calendar View -->
@@ -856,7 +913,7 @@
                                 data-room-id="{{ room.id }}" data-hour="{{ hour }}"
                                 data-start-time="{{ reservation.start_time }}"
                                 data-end-time="{{ reservation.end_time }}" data-duration="{{ reservation.duration }}"
-                                style="height: {{ (reservation.duration * 30) }}px;">
+                                style="height: calc({{ reservation.duration }} * 40px); top: -1px;">
                                 <div class="time-indicator">
                                     <span class="time-range">{{ reservation.start_time }} - {{ reservation.end_time
                                         }}</span>
@@ -1352,6 +1409,10 @@
                         endHour += 24;
                     }
 
+                    // Allow reservations between 11 AM and 1 AM next day
+                    // Start time must be at least 11 AM
+                    // End time must be at most 1 AM (25 in 24-hour notation)
+                    // End time must be after start time
                     if (startHour < 11 || endHour > 25 || (startHour >= endHour)) {
                         alert('Invalid time range. Reservations must be between 11:00 AM and 1:00 AM the next day, and end time must be after start time.');
                         return;
@@ -1497,7 +1558,8 @@
                                     const h = hour % 24;
                                     const ampm = h >= 12 ? 'PM' : 'AM';
                                     const displayHour = h % 12 || 12;
-                                    timeLabel.textContent = `${displayHour}${ampm}`;
+                                    timeLabel.textContent = `${displayHour}:00 ${ampm}`;
+                                    timeLabel.style.top = '-20px'; // Ensure consistent positioning with CSS
                                     timeSlot.appendChild(timeLabel);
 
                                     // Add reservations for this hour
@@ -1508,7 +1570,12 @@
                                             card.dataset.reservationId = reservation.id;
                                             card.dataset.roomId = room.id;
                                             card.dataset.hour = hour;
-                                            card.style.height = `${(reservation.duration * 30)}px`;
+                                            // Use the same height calculation as in the HTML template
+                                            // Use fixed height calculation to match time slots exactly
+                                            // Each time slot is 40px tall
+                                            card.style.height = `calc(${reservation.duration} * 40px)`;
+                                            card.style.boxSizing = 'border-box';
+                                            card.style.top = '-1px'; // Align with the top border line
                                             card.onclick = function () {
                                                 showEditReservationModal(reservation.id);
                                             };
@@ -1616,7 +1683,8 @@
                 defaultHour: 11,
                 defaultMinute: 0,
                 disableMobile: "true",
-                allowInput: false,
+                allowInput: true, // Allow direct input
+                clickOpens: true, // Open the picker when clicking on the input
                 onChange: function (selectedDates, dateStr) {
                     updatePriceEstimate();
                 }
@@ -1631,7 +1699,8 @@
                 defaultHour: 13,
                 defaultMinute: 0,
                 disableMobile: "true",
-                allowInput: false,
+                allowInput: true, // Allow direct input
+                clickOpens: true, // Open the picker when clicking on the input
                 onChange: function (selectedDates, dateStr) {
                     updatePriceEstimate();
                 }
@@ -1817,8 +1886,11 @@
 
                 // Helper function to format time for display
                 const formatTimeDisplay = (hours, minutes) => {
-                    const period = hours >= 12 ? 'PM' : 'AM';
-                    const displayHours = hours % 12 || 12;
+                    // Handle hours >= 24 for overnight reservations (e.g., 1 AM next day)
+                    const normalizedHours = hours % 24;
+                    // For hours >= 24, it's always AM (early morning next day)
+                    const period = hours >= 24 ? 'AM' : (normalizedHours >= 12 ? 'PM' : 'AM');
+                    const displayHours = normalizedHours % 12 || 12;
                     return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
                 };
 
@@ -1839,7 +1911,10 @@
 
                     // Determine rate based on time period
                     let rate;
-                    if (segmentStart.hours >= 18 || segmentStart.hours < 1) { // 6pm-1am
+                    // Normalize hours for rate calculation (handle hours >= 24)
+                    const normalizedHour = segmentStart.hours % 24;
+
+                    if (normalizedHour >= 18 || normalizedHour < 1 || normalizedHour === 0) { // 6pm-1am (including midnight)
                         rate = eveningRate;
                     } else { // 11am-6pm
                         rate = earlyBirdRate;
@@ -1856,17 +1931,23 @@
 
                 // Handle time periods
                 let currentTime = { ...start };
-                const endTime24 = end.hours === 1 ? 25 : end.hours; // Convert 1 AM to 25:00 for calculation
+
+                // Convert end hours for overnight reservations (12 AM becomes 24, 1 AM becomes 25)
+                let endTime24 = end.hours;
+                if (end.hours < start.hours || end.hours === 0) {
+                    // If end time is earlier than start time or is midnight (0), it's an overnight reservation
+                    endTime24 = end.hours === 0 ? 24 : end.hours + 24;
+                }
 
                 while (currentTime.hours < endTime24) {
                     let periodEnd;
 
-                    if (currentTime.hours < 18 && end.hours >= 18) {
+                    if (currentTime.hours < 18 && endTime24 > 18) {
                         // If reservation crosses 6 PM boundary
                         periodEnd = { hours: 18, minutes: 0 };
                     } else {
                         // Otherwise go to end time
-                        periodEnd = end;
+                        periodEnd = { hours: endTime24, minutes: end.minutes };
                     }
 
                     const segment = calculateSegmentCost(currentTime, periodEnd);

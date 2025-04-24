@@ -30,19 +30,18 @@ CREATE TABLE IF NOT EXISTS reservations (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (room_id) REFERENCES rooms(id),
     CHECK (num_people > 0),
-    CHECK (start_time >= '11:00' AND end_time <= '25:00'),
-    CHECK (julianday(end_time) > julianday(start_time))
+    CHECK (start_time >= '11:00' AND (end_time <= '25:00' OR end_time <= '01:00'))
 );
 
 -- Only insert default rooms if the table is empty
-INSERT INTO rooms (name, capacity, hourly_rate, peak_hour_rate) 
+INSERT INTO rooms (name, capacity, hourly_rate, peak_hour_rate)
 SELECT 'Room 1', 8, 35.00, 50.00
 WHERE NOT EXISTS (SELECT 1 FROM rooms WHERE id = 1);
 
-INSERT INTO rooms (name, capacity, hourly_rate, peak_hour_rate) 
+INSERT INTO rooms (name, capacity, hourly_rate, peak_hour_rate)
 SELECT 'Room 2', 8, 35.00, 50.00
 WHERE NOT EXISTS (SELECT 1 FROM rooms WHERE id = 2);
 
-INSERT INTO rooms (name, capacity, hourly_rate, peak_hour_rate) 
+INSERT INTO rooms (name, capacity, hourly_rate, peak_hour_rate)
 SELECT 'Room 3', 8, 35.00, 50.00
-WHERE NOT EXISTS (SELECT 1 FROM rooms WHERE id = 3); 
+WHERE NOT EXISTS (SELECT 1 FROM rooms WHERE id = 3);
