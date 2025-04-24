@@ -583,7 +583,11 @@ def get_reservation(reservation_id):
         'contact_name': reservation['contact_name'],
         'contact_phone': reservation['contact_phone'],
         'contact_email': reservation['contact_email'],
-        'room_id': reservation['room_id']
+        'room_id': reservation['room_id'],
+        'language': reservation['language'],
+        'notes': reservation['notes'],
+        'status': reservation['status'],
+        'total_cost': reservation['total_cost']
     })
 
 
@@ -598,12 +602,16 @@ def delete_reservation(reservation_id):
         if not reservation:
             return jsonify({'error': 'Reservation not found'}), 404
 
+        # Also check if the reservation is in the idle area and remove it if it is
+        conn.execute('DELETE FROM idle_reservations WHERE reservation_id = ?',
+                     (reservation_id,))
+
         # Delete the reservation
         conn.execute('DELETE FROM reservations WHERE id = ?',
                      (reservation_id,))
         conn.commit()
 
-        return jsonify({'message': 'Reservation deleted successfully'}), 200
+        return jsonify({'message': 'Reservation deleted successfully', 'id': reservation_id}), 200
     except Exception as e:
         conn.rollback()
         return jsonify({'error': str(e)}), 500
@@ -615,41 +623,119 @@ def delete_reservation(reservation_id):
 def update_reservation(reservation_id):
     data = request.get_json()
     conn = get_db()
+    print(f"Updating reservation {reservation_id} with data: {data}")
 
     try:
-        # Check if we need to update the time
-        if 'start_time' in data and 'end_time' in data:
-            # Calculate new duration and total cost
-            start_time = data['start_time']
-            end_time = data['end_time']
-            room_id = data.get('room_id')
+        # Get the existing reservation to fill in any missing fields
+        existing_reservation = conn.execute(
+            'SELECT * FROM reservations WHERE id = ?',
+            (reservation_id,)).fetchone()
 
-            # If room_id is not provided, get it from the reservation
-            if not room_id:
-                room_id = conn.execute(
-                    'SELECT room_id FROM reservations WHERE id = ?',
-                    (reservation_id,)).fetchone()['room_id']
+        if not existing_reservation:
+            return jsonify({'error': 'Reservation not found'}), 404
 
-            # Calculate new cost
+        # Extract time and room data for conflict checking
+        start_time = data.get('start_time', existing_reservation['start_time'])
+        end_time = data.get('end_time', existing_reservation['end_time'])
+        room_id = data.get('room_id', existing_reservation['room_id'])
+        date = data.get('date', existing_reservation['date'])
+
+        # Check for conflicts with other reservations (excluding the current one)
+        # Only check for conflicts if time or room has changed
+        if (start_time != existing_reservation['start_time'] or
+            end_time != existing_reservation['end_time'] or
+            room_id != existing_reservation['room_id'] or
+                date != existing_reservation['date']):
+
+            # Log the conflict check parameters
+            print(f"Checking conflicts for reservation {reservation_id}:")
+            print(f"  Room: {room_id}, Date: {date}")
+            print(f"  Time: {start_time} - {end_time}")
+
+            # Improved conflict detection query
+            # For debugging, let's print all reservations in this room on this date
+            all_reservations = conn.execute('''
+                SELECT id, start_time, end_time FROM reservations
+                WHERE room_id = ? AND date = ?
+            ''', (room_id, date)).fetchall()
+
+            print(f"All reservations in room {room_id} on {date}:")
+            for res in all_reservations:
+                print(
+                    f"  ID: {res['id']}, Time: {res['start_time']} - {res['end_time']}")
+
+            # Now check for conflicts
+            conflict = conn.execute('''
+                SELECT * FROM reservations
+                WHERE room_id = ? AND date = ? AND id != ? AND
+                NOT (end_time <= ? OR start_time >= ?)
+            ''', (room_id, date, reservation_id,
+                  start_time, end_time)).fetchone()
+
+            # Log the conflict check for debugging
+            if conflict:
+                print(
+                    f"Conflict detected for reservation {reservation_id}: {conflict['id']} ({conflict['start_time']} - {conflict['end_time']})")
+                print(f"Attempted time: {start_time} - {end_time}")
+
+            if conflict:
+                return jsonify({
+                    'error': 'The selected time slot is already occupied by another reservation',
+                    'conflict': True
+                }), 409
+
+        # Calculate new cost if time or room has changed
+        if (start_time != existing_reservation['start_time'] or
+            end_time != existing_reservation['end_time'] or
+                room_id != existing_reservation['room_id']):
             total_cost = calculate_cost(start_time, end_time, room_id)
+        else:
+            total_cost = existing_reservation['total_cost']
 
-            # Update the reservation time and cost
-            conn.execute('''
-                UPDATE reservations
-                SET start_time = ?, end_time = ?, total_cost = ?
-                WHERE id = ?
-            ''', (start_time, end_time, total_cost, reservation_id))
+        # Prepare all fields for update
+        contact_name = data.get(
+            'contact_name', existing_reservation['contact_name'])
+        contact_phone = data.get(
+            'contact_phone', existing_reservation['contact_phone'])
+        contact_email = data.get(
+            'contact_email', existing_reservation['contact_email'])
+        num_people = data.get('num_people', existing_reservation['num_people'])
+        language = data.get('language', existing_reservation['language'])
+        notes = data.get('notes', existing_reservation['notes'])
+        status = data.get('status', existing_reservation['status'])
 
-        # If room_id is provided, update it
-        if 'room_id' in data:
-            conn.execute('''
-                UPDATE reservations
-                SET room_id = ?
-                WHERE id = ?
-            ''', (data['room_id'], reservation_id))
+        # Update all reservation fields
+        conn.execute('''
+            UPDATE reservations
+            SET room_id = ?, date = ?, start_time = ?, end_time = ?,
+                contact_name = ?, contact_phone = ?, contact_email = ?,
+                num_people = ?, language = ?, notes = ?, status = ?, total_cost = ?
+            WHERE id = ?
+        ''', (room_id, date, start_time, end_time,
+              contact_name, contact_phone, contact_email,
+              num_people, language, notes, status, total_cost,
+              reservation_id))
 
         conn.commit()
-        return jsonify({'success': True}), 200
+        return jsonify({
+            'success': True,
+            'message': 'Reservation updated successfully',
+            'reservation': {
+                'id': reservation_id,
+                'room_id': room_id,
+                'date': date,
+                'start_time': start_time,
+                'end_time': end_time,
+                'contact_name': contact_name,
+                'contact_phone': contact_phone,
+                'contact_email': contact_email,
+                'num_people': num_people,
+                'language': language,
+                'notes': notes,
+                'status': status,
+                'total_cost': total_cost
+            }
+        }), 200
     except Exception as e:
         conn.rollback()
         return jsonify({'error': str(e)}), 500

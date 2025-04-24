@@ -9,850 +9,13 @@
     <link href="https://cdn.jsdelivr.net/npm/fullcalendar@5.10.1/main.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/material_blue.css">
-    <style>
-        .main-container {
-            display: flex;
-            gap: 20px;
-            padding: 20px;
-            height: calc(100vh - 60px);
-            /* Full viewport height minus padding */
-            min-height: 600px;
-            /* Minimum height */
-        }
-
-        .calendar-container {
-            flex: 0 0 400px;
-            height: 100%;
-            min-height: 600px;
-            /* Match the min-height of rooms-container */
-        }
-
-        .rooms-container {
-            flex: 1;
-            display: flex;
-            gap: 20px;
-            overflow-x: auto;
-            height: 100%;
-            /* Match the height of the calendar */
-            min-height: 600px;
-            /* Ensure minimum height */
-        }
-
-        .room-container {
-            flex: 1;
-            min-width: 250px;
-            max-width: 300px;
-            display: flex;
-            flex-direction: column;
-            height: 100%;
-            /* Match the height of the calendar */
-        }
-
-        .room-header {
-            background: #f8f9fa;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-bottom: none;
-            text-align: center;
-        }
-
-        .room-timeline {
-            flex: 1;
-            position: relative;
-            border: 1px solid #ddd;
-            background: #f8f9fa;
-            overflow-y: auto;
-            height: 100%;
-            /* Ensure it takes full height */
-        }
-
-        .time-slot {
-            height: 40px;
-            /* Fixed height to ensure consistency */
-            border-bottom: 1px solid #ddd;
-            border-top: 1px solid #ddd;
-            /* Add top border for better alignment */
-            position: relative;
-            font-size: 0.9em;
-            background-color: #ffffff;
-            cursor: default;
-            /* Default cursor to indicate it's not draggable */
-            pointer-events: auto;
-            /* Allow interactions with the time slot */
-            box-sizing: border-box;
-            /* Ensure consistent sizing */
-            padding: 0;
-            /* Remove any padding */
-            margin: 0;
-            /* Remove any margin */
-        }
-
-        .time-label {
-            position: absolute;
-            left: 0;
-            top: -20px;
-            /* Position the label at the top border line */
-            width: 80px;
-            /* Increased width to accommodate full time format */
-            padding: 0;
-            margin: 0;
-            height: 20px;
-            /* Reduced height */
-            background: #f8f9fa;
-            border-right: 1px solid #ddd;
-            font-size: 0.75em;
-            color: #495057;
-            font-weight: 500;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            text-align: center;
-            line-height: 20px;
-            /* Adjusted line height */
-            pointer-events: none;
-            /* Make time labels non-interactive for drag operations */
-            user-select: none;
-            /* Prevent text selection */
-            z-index: 10;
-            /* Ensure labels appear above grid lines */
-        }
-
-        .reservation-card {
-            position: absolute;
-            width: calc(100% - 80px);
-            /* Match the time-label width */
-            margin-left: 80px;
-            /* Match the time-label width */
-            background: #e3f2fd;
-            color: #1976d2;
-            padding: 6px;
-            /* Reduced padding to better fit content */
-            border-radius: 4px;
-            cursor: grab;
-            /* Change cursor to grab to indicate it's draggable */
-            z-index: 100;
-            font-size: 0.85em;
-            overflow: hidden;
-            border: 1px solid #1976d2;
-            /* Thinner border to save space */
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            transition: all 0.2s ease;
-            box-sizing: border-box;
-            /* Ensure padding and border are included in width calculation */
-            top: -1px;
-            /* Adjust to align with the top border line */
-        }
-
-        .reservation-card:active {
-            cursor: grabbing;
-            /* Change cursor when actively dragging */
-        }
-
-        .reservation-card:hover {
-            background: #bbdefb;
-            border-color: #1565c0;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
-        }
-
-        .reservation-card .time-indicator {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 18px;
-            /* Slightly smaller height */
-            background: #1976d2;
-            color: white;
-            font-size: 0.7em;
-            /* Smaller font size */
-            padding: 0px 4px;
-            /* Reduced padding */
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-weight: 500;
-        }
-
-        .reservation-card .time-indicator .time-range {
-            background: rgba(255, 255, 255, 0.2);
-            padding: 2px 6px;
-            border-radius: 3px;
-            display: inline-block;
-            width: 100%;
-            text-align: center;
-            font-weight: 500;
-        }
-
-        .reservation-card .content {
-            margin-top: 18px;
-            /* Match the time-indicator height */
-            padding: 2px 4px;
-            /* Reduced padding */
-            display: flex;
-            flex-direction: column;
-            gap: 1px;
-        }
-
-        .reservation-card .name-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            width: 100%;
-        }
-
-        .reservation-card .content strong {
-            font-size: 0.85em;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            flex: 1;
-        }
-
-        .reservation-card .people-count {
-            font-size: 0.75em;
-            color: #555;
-            margin-left: 5px;
-            white-space: nowrap;
-            font-weight: normal;
-        }
-
-        .reservation-card strong {
-            display: block;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            color: #1565c0;
-            font-weight: 600;
-            margin-bottom: 4px;
-        }
-
-        .reservation-card .bilingual-label {
-            font-size: 0.8em;
-            color: #1976d2;
-        }
-
-        .reservation-card .remove-btn {
-            position: absolute;
-            top: 2px;
-            right: 2px;
-            background: rgba(255, 0, 0, 0.8);
-            color: white;
-            border: none;
-            border-radius: 50%;
-            width: 20px;
-            height: 20px;
-            font-size: 12px;
-            cursor: pointer;
-            display: none;
-        }
-
-        .reservation-card:hover .remove-btn {
-            display: block;
-        }
-
-        .reservation-card:hover .remove-btn:hover {
-            background: red;
-        }
-
-        .fc {
-            font-size: 0.9em;
-            height: 100%;
-        }
-
-        .fc .fc-toolbar {
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-
-        .fc .fc-toolbar-title {
-            font-size: 1.2em;
-        }
-
-        .fc .fc-button {
-            padding: 0.3em 0.6em;
-            font-size: 0.9em;
-        }
-
-        .fc-view-harness {
-            height: calc(100% - 50px) !important;
-        }
-
-        .bilingual-label {
-            display: flex;
-            flex-direction: column;
-        }
-
-        .bilingual-label .en {
-            font-size: 0.9em;
-        }
-
-        .bilingual-label .zh {
-            font-size: 0.8em;
-            color: #666;
-        }
-
-        .stats-container {
-            display: none;
-        }
-
-        .quick-actions {
-            display: none;
-        }
-
-        .quick-action-btn {
-            display: none;
-        }
-
-        .quick-action-btn:hover {
-            display: none;
-        }
-
-        .unavailable {
-            color: #999;
-            background-color: #f5f5f5;
-        }
-
-        .form-group {
-            margin-bottom: 1.5rem;
-        }
-
-        .form-group label.required::after {
-            content: "*";
-            color: red;
-            margin-left: 4px;
-        }
-
-        .form-control {
-            border-radius: 4px;
-            border: 1px solid #ced4da;
-            padding: 0.75rem 1rem;
-            font-size: 1rem;
-            transition: all 0.2s ease-in-out;
-            background-color: #fff;
-        }
-
-        .form-control:focus {
-            border-color: #80bdff;
-            outline: 0;
-            box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
-        }
-
-        .form-control::placeholder {
-            color: #6c757d;
-            opacity: 0.7;
-        }
-
-        .form-control:required:invalid {
-            border-color: #dc3545;
-        }
-
-        .form-control:required:valid {
-            border-color: #28a745;
-        }
-
-        .text-muted {
-            font-size: 0.875rem;
-            color: #6c757d;
-        }
-
-        .bilingual-label {
-            display: flex;
-            flex-direction: column;
-            margin-bottom: 0.5rem;
-        }
-
-        .bilingual-label .en {
-            font-weight: 500;
-            color: #212529;
-        }
-
-        .bilingual-label .zh {
-            font-size: 0.875rem;
-            color: #6c757d;
-        }
-
-        .quick-duration-buttons {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 1rem;
-        }
-
-        .duration-btn {
-            flex: 1;
-            padding: 0.5rem;
-            border: 1px solid #007bff;
-            border-radius: 4px;
-            background: white;
-            color: #007bff;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .duration-btn:hover,
-        .duration-btn.active {
-            background: #007bff;
-            color: white;
-        }
-
-        .price-estimate {
-            margin-top: 1rem;
-            padding: 1rem;
-            background: #f8f9fa;
-            border-radius: 4px;
-            border: 1px solid #ddd;
-        }
-
-        .price-estimate h4 {
-            margin-bottom: 0.5rem;
-            color: #333;
-        }
-
-        .price-breakdown {
-            font-size: 0.9em;
-            color: #666;
-        }
-
-        .room-suggestion {
-            margin-top: 1rem;
-            padding: 1rem;
-            background: #e3f2fd;
-            border-radius: 4px;
-            border: 1px solid #90caf9;
-        }
-
-        .room-suggestion h4 {
-            margin-bottom: 0.5rem;
-            color: #1976d2;
-        }
-
-        .suggestion-reason {
-            font-size: 0.9em;
-            color: #1976d2;
-        }
-
-        .time-suggestion {
-            margin-top: 1rem;
-            padding: 1rem;
-            background: #f3e5f5;
-            border-radius: 4px;
-            border: 1px solid #ce93d8;
-        }
-
-        .time-suggestion h4 {
-            margin-bottom: 0.5rem;
-            color: #7b1fa2;
-        }
-
-        .suggestion-times {
-            display: flex;
-            gap: 10px;
-            margin-top: 0.5rem;
-        }
-
-        .suggestion-time-btn {
-            padding: 0.5rem 1rem;
-            border: 1px solid #7b1fa2;
-            border-radius: 4px;
-            background: white;
-            color: #7b1fa2;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .suggestion-time-btn:hover {
-            background: #7b1fa2;
-            color: white;
-        }
-
-        .loading-indicator {
-            display: none;
-            text-align: center;
-            padding: 1rem;
-        }
-
-        .loading-indicator.active {
-            display: block;
-        }
-
-        .spinner {
-            width: 40px;
-            height: 40px;
-            margin: 0 auto;
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #007bff;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            0% {
-                transform: rotate(0deg);
-            }
-
-            100% {
-                transform: rotate(360deg);
-            }
-        }
-
-        .quick-time-buttons {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 10px;
-            margin: 1rem 0;
-        }
-
-        .time-preset-btn {
-            padding: 0.75rem;
-            border: 1px solid #007bff;
-            border-radius: 4px;
-            background: white;
-            color: #007bff;
-            cursor: pointer;
-            transition: all 0.2s;
-            text-align: center;
-        }
-
-        .time-preset-btn:hover {
-            background: #007bff;
-            color: white;
-        }
-
-        .time-preset-btn .chinese {
-            font-size: 0.9em;
-            color: #666;
-        }
-
-        .time-preset-btn:hover .chinese {
-            color: #fff;
-        }
-
-        .breakdown-item {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 0.5rem;
-            padding: 0.5rem 0;
-            border-bottom: 1px solid #eee;
-        }
-
-        .breakdown-item.total {
-            border-top: 2px solid #ddd;
-            border-bottom: none;
-            font-weight: bold;
-            font-size: 1.1em;
-            margin-top: 1rem;
-        }
-
-        .breakdown-label {
-            display: flex;
-            flex-direction: column;
-        }
-
-        .breakdown-label .chinese {
-            font-size: 0.8em;
-            color: #666;
-        }
-
-        #period-charges {
-            flex: 1;
-            margin-left: 1rem;
-            font-size: 0.9em;
-            color: #666;
-        }
-
-        .modal-dialog {
-            max-width: 500px;
-        }
-
-        .modal-body {
-            padding: 1rem;
-        }
-
-        .form-group {
-            margin-bottom: 0.5rem;
-        }
-
-        .form-control {
-            padding: 0.375rem 0.75rem;
-            font-size: 0.9rem;
-        }
-
-        .quick-duration-buttons {
-            display: flex;
-            gap: 0.5rem;
-        }
-
-        .duration-btn {
-            flex: 1;
-            padding: 0.25rem;
-            border: 1px solid #007bff;
-            border-radius: 4px;
-            background: white;
-            color: #007bff;
-            cursor: pointer;
-            transition: all 0.2s;
-            font-size: 0.9rem;
-        }
-
-        .duration-btn:hover,
-        .duration-btn.active {
-            background: #007bff;
-            color: white;
-        }
-
-        .accordion-button {
-            padding: 0.5rem 1rem;
-            font-size: 0.9rem;
-        }
-
-        .accordion-body {
-            padding: 0.5rem;
-        }
-
-        .breakdown-item {
-            display: flex;
-            justify-content: space-between;
-            padding: 0.25rem 0;
-            font-size: 0.9rem;
-        }
-
-        .breakdown-item.total {
-            border-top: 1px solid #dee2e6;
-            margin-top: 0.5rem;
-            padding-top: 0.5rem;
-            font-weight: bold;
-        }
-
-        .chinese {
-            font-size: 0.85em;
-            color: #666;
-        }
-
-        label {
-            margin-bottom: 0.25rem;
-            font-size: 0.9rem;
-        }
-
-        .time-slot.occupied {
-            background-color: #fff3f3;
-        }
-
-        .time-slot.occupied .time-label {
-            color: #dc3545;
-            font-weight: bold;
-        }
-
-        .time-slot.selected {
-            background: #e3f2fd;
-            border: 1px solid #1976d2;
-        }
-
-        .time-slot.selected .time-label {
-            background: #e3f2fd;
-            color: #1976d2;
-            font-weight: bold;
-        }
-
-        .cost-summary {
-            position: absolute;
-            right: 5px;
-            top: 5px;
-            background: rgba(0, 123, 255, 0.1);
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-size: 0.8em;
-            color: #007bff;
-        }
-
-        .period-charge {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 0.25rem;
-            font-size: 0.9em;
-        }
-
-        .bilingual-label.horizontal {
-            flex-direction: row;
-            gap: 0.5rem;
-            align-items: center;
-        }
-
-        .bilingual-label.horizontal .en {
-            margin-right: 0.5rem;
-        }
-
-        .bilingual-label.horizontal .zh {
-            font-size: 0.9em;
-        }
-
-        select.form-control {
-            appearance: none;
-            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
-            background-repeat: no-repeat;
-            background-position: right 0.75rem center;
-            background-size: 16px 12px;
-            padding-right: 2.5rem;
-        }
-
-        /* Calendar reservation count styling */
-        /* Flatpickr customization */
-        .flatpickr-input {
-            background-color: #ffffff !important;
-            /* Use white background to indicate it's editable */
-            cursor: text !important;
-            /* Use text cursor to indicate it's editable */
-        }
-
-        /* Make time inputs look more editable */
-        #start_time,
-        #end_time {
-            border: 1px solid #ced4da;
-            background-color: #ffffff !important;
-        }
-
-        .fc-daygrid-day-frame {
-            position: relative;
-            min-height: 70px;
-            display: flex !important;
-            flex-direction: column;
-        }
-
-        .fc-daygrid-day-top {
-            text-align: left;
-            padding: 4px;
-        }
-
-        .reservation-count {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: #1976d2;
-            color: white;
-            border-radius: 50%;
-            width: 28px;
-            height: 28px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 14px;
-            font-weight: bold;
-            z-index: 1;
-        }
-
-        /* Hide events area since we're using our own count display */
-        .fc-daygrid-day-events {
-            display: none !important;
-        }
-
-        .fc-daygrid-day-bg {
-            display: none !important;
-        }
-
-        /* Ensure proper height and positioning */
-        .fc .fc-daygrid-day-frame {
-            min-height: 80px;
-        }
-
-        .fc .fc-daygrid-day {
-            max-height: none !important;
-        }
-
-        /* Idle Area Styles */
-        .idle-area-container {
-            width: 250px;
-            min-height: 120px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            background-color: #f8f9fa;
-            margin: 0 auto 20px;
-        }
-
-        .idle-area-header {
-            background: #e9ecef;
-            padding: 10px;
-            border-bottom: 1px solid #ddd;
-            text-align: center;
-        }
-
-        .idle-area {
-            position: relative;
-            padding: 15px;
-            min-height: 80px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-
-        .idle-area .reservation-card {
-            position: relative;
-            width: 220px;
-            height: auto !important;
-            min-height: 60px;
-            margin-left: 0;
-            cursor: grab;
-            margin-top: -40px;
-            transition: margin-top 0.3s ease;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-        }
-
-        .idle-area .reservation-card:first-child {
-            margin-top: 0;
-            z-index: 10;
-        }
-
-        .idle-area .reservation-card:nth-child(2) {
-            z-index: 9;
-        }
-
-        .idle-area .reservation-card:nth-child(3) {
-            z-index: 8;
-        }
-
-        .idle-area .reservation-card:nth-child(4) {
-            z-index: 7;
-        }
-
-        .idle-area .reservation-card:nth-child(5) {
-            z-index: 6;
-        }
-
-        .idle-area .reservation-card:hover {
-            margin-top: 5px;
-            z-index: 20;
-        }
-
-        .idle-area .reservation-card:active {
-            cursor: grabbing;
-            z-index: 30;
-        }
-
-        /* Draggable styles */
-        .reservation-card.draggable {
-            cursor: grab;
-        }
-
-        .reservation-card.draggable:active {
-            cursor: grabbing;
-        }
-
-        .reservation-card.ghost {
-            opacity: 0.5;
-            background: #bbdefb;
-        }
-
-        .reservation-card.drag-source {
-            opacity: 0.3;
-        }
-
-        .time-slot.drag-over {
-            background-color: #e3f2fd;
-            border: 1px dashed #1976d2;
-        }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/reservation.css') }}">
 </head>
 
 <body>
+    <!-- Toast container for notifications -->
+    <div class="toast-container"></div>
+
     <div class="container-fluid">
         <h1 class="my-1 text-center">Karaoke Room Reservation System</h1>
 
@@ -1099,7 +262,7 @@
                             </div>
 
                             <div class="d-flex justify-content-between">
-                                <button type="button" class="btn btn-danger" onclick="deleteReservation()">
+                                <button type="button" class="btn btn-danger" id="delete-reservation-btn">
                                     <span class="en">Delete</span>
                                     <span class="zh">删除</span>
                                 </button>
@@ -1123,22 +286,24 @@
     <!-- Update Flatpickr script -->
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/zh.js"></script>
+    <script src="{{ url_for('static', filename='js/reservation.js') }}"></script>
     <script>
         let currentReservationId = null;
         let startTimePicker, endTimePicker;
 
-        document.addEventListener('DOMContentLoaded', function () {
-            // Initialize drag and drop functionality
-            initDragAndDrop();
+        // Make calendar globally accessible
+        window.calendar = null;
+        window.calendarEl = null;
 
+        document.addEventListener('DOMContentLoaded', function () {
             // Initialize FullCalendar
-            var calendarEl = document.getElementById('calendar');
-            var calendar = new FullCalendar.Calendar(calendarEl, {
+            window.calendarEl = document.getElementById('calendar');
+            window.calendar = new FullCalendar.Calendar(window.calendarEl, {
                 initialView: 'dayGridMonth',
                 initialDate: '{{ selected_date }}',
                 selectable: true,
                 select: function (info) {
-                    calendarEl.dataset.selectedDate = info.startStr;
+                    window.calendarEl.dataset.selectedDate = info.startStr;
                     updateRoomTimelines(info.startStr);
                 },
                 headerToolbar: {
@@ -1199,7 +364,7 @@
                     }
                 }
             });
-            calendar.render();
+            window.calendar.render();
 
             // Optimize the update functions
             let lastFetchPromises = {};
@@ -1272,17 +437,17 @@
                 // 4. Today's date as a fallback
                 let selectedDate = document.getElementById('reservationModal').dataset.reservationDate ||
                     document.getElementById('date').value ||
-                    calendarEl.dataset.selectedDate;
+                    window.calendarEl.dataset.selectedDate;
 
                 if (!selectedDate) {
                     selectedDate = new Date().toISOString().split('T')[0]; // Format: YYYY-MM-DD
                 }
 
                 // Store the selected date in the calendar element for persistence
-                calendarEl.dataset.selectedDate = selectedDate;
+                window.calendarEl.dataset.selectedDate = selectedDate;
 
                 // Update the calendar to show the selected date
-                calendar.gotoDate(new Date(selectedDate));
+                window.calendar.gotoDate(new Date(selectedDate));
 
                 // Update the date input field to match
                 document.getElementById('date').value = selectedDate;
@@ -1304,59 +469,74 @@
             }
 
             // Update the deleteReservation function to be more efficient
-            deleteReservation = function () {
-                if (!currentReservationId || !confirm('Are you sure you want to delete this reservation?')) {
+            window.deleteReservation = function () {
+                console.log('Delete function called, currentReservationId:', currentReservationId, 'window.currentReservationId:', window.currentReservationId);
+
+                // Get the reservation ID from the form
+                const formReservationId = document.getElementById('reservation_id').value;
+                console.log('Form reservation ID in deleteReservation:', formReservationId);
+
+                // Use either the form ID, local variable, or global variable
+                const reservationIdToDelete = formReservationId || currentReservationId || window.currentReservationId;
+
+                console.log('Attempting to delete reservation ID:', reservationIdToDelete);
+
+                if (!reservationIdToDelete) {
+                    console.error('No reservation ID found for deletion');
+                    window.showToast('Error: No reservation selected for deletion', 'error');
                     return;
                 }
 
-                // Get the reservation date from the modal's data attribute
-                // This is the date of the reservation being deleted, not necessarily today's date
-                const reservationDate = document.getElementById('reservationModal').dataset.reservationDate;
+                // Use a simple browser confirmation dialog instead of a toast
+                if (confirm('Are you sure you want to delete this reservation?')) {
+                    console.log('Confirm delete button clicked');
 
-                fetch(`/delete_reservation/${currentReservationId}`, {
-                    method: 'POST'
-                })
-                    .then(response => {
-                        if (!response.ok) {
-                            throw new Error('Failed to delete reservation');
+                    // Get the reservation date from the modal's data attribute
+                    // This is the date of the reservation being deleted, not necessarily today's date
+                    const reservationDate = document.getElementById('reservationModal').dataset.reservationDate;
+                    console.log('Reservation date from modal:', reservationDate);
+
+                    console.log(`Sending DELETE request to /delete_reservation/${reservationIdToDelete}`);
+
+                    fetch(`/delete_reservation/${reservationIdToDelete}`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
                         }
-
-                        // Store the reservation date before closing the modal
-                        const dateToKeep = reservationDate || document.getElementById('date').value;
-
-                        // Set a flag to keep the reservation date when closing the modal
-                        window.keepReservationDate = true;
-
-                        // Close the modal
-                        closeReservationModal();
-
-                        // Make sure the calendar stays on the reservation's date
-                        if (dateToKeep) {
-                            // Store the date in the calendar element
-                            calendarEl.dataset.selectedDate = dateToKeep;
-
-                            // Update the calendar view to show the reservation's date
-                            calendar.gotoDate(new Date(dateToKeep));
-
-                            // Update the date input field
-                            document.getElementById('date').value = dateToKeep;
-
-                            // Update the URL to reflect the current date
-                            const urlParams = new URLSearchParams(window.location.search);
-                            urlParams.set('date', dateToKeep);
-                            window.history.replaceState({}, '', `${window.location.pathname}?${urlParams}`);
-                        }
-
-                        // Refresh the calendar with the reservation's date
-                        refreshCalendar();
-
-                        // Show success message
-                        alert('Reservation deleted successfully!');
                     })
-                    .catch(error => {
-                        console.error('Error deleting reservation:', error);
-                        alert('Error deleting reservation. Please try again.');
-                    });
+                        .then(response => {
+                            console.log('Delete response status:', response.status);
+                            if (!response.ok) {
+                                return response.text().then(text => {
+                                    console.error('Error response text:', text);
+                                    throw new Error(`Failed to delete reservation: ${response.status}`);
+                                });
+                            }
+                            return response.json();
+                        })
+                        .then(data => {
+                            console.log('Delete response:', data);
+
+                            // Store the reservation date before closing the modal
+                            const dateToKeep = reservationDate || document.getElementById('date').value;
+
+                            // Set a flag to keep the reservation date when closing the modal
+                            window.keepReservationDate = true;
+
+                            // Close the modal
+                            closeReservationModal();
+
+                            // Refresh the page to ensure all data is updated correctly
+                            window.location.href = `/?date=${dateToKeep}`;
+
+                            // Show success message
+                            window.showToast('Reservation deleted successfully!');
+                        })
+                        .catch(error => {
+                            console.error('Error deleting reservation:', error);
+                            window.showToast('Error deleting reservation. Please try again.', 'error');
+                        });
+                }
             };
 
             // Optimize the form submission handler
@@ -1373,7 +553,7 @@
 
                 // Validate required fields
                 if (!startTime || !endTime || !date || !roomId) {
-                    alert('Please fill in all required fields.');
+                    window.showToast('Please fill in all required fields.', 'error');
                     return;
                 }
 
@@ -1414,7 +594,7 @@
                     // End time must be at most 1 AM (25 in 24-hour notation)
                     // End time must be after start time
                     if (startHour < 11 || endHour > 25 || (startHour >= endHour)) {
-                        alert('Invalid time range. Reservations must be between 11:00 AM and 1:00 AM the next day, and end time must be after start time.');
+                        window.showToast('Invalid time range. Reservations must be between 11:00 AM and 1:00 AM the next day, and end time must be after start time.', 'error');
                         return;
                     }
 
@@ -1430,7 +610,16 @@
 
                             // Check for conflicts
                             const hasConflict = room.reservations.some(res => {
+                                // Skip the current reservation when checking for conflicts
                                 if (reservationId && res.id === parseInt(reservationId)) return false;
+
+                                // For editing an existing reservation, we need to check if the time has changed
+                                // If we're not changing the time, there's no need to check for conflicts
+                                if (reservationId) {
+                                    console.log('Editing reservation:', reservationId);
+                                    console.log('Current reservation times:', start24, end24);
+                                    console.log('Existing reservation in room:', res.id, res.start_time, res.end_time);
+                                }
 
                                 const resStart = parseInt(res.start_time.split(':')[0]);
                                 let resEnd = parseInt(res.end_time.split(':')[0]);
@@ -1440,6 +629,38 @@
                             });
 
                             if (hasConflict) {
+                                // Create a more prominent conflict notification
+                                const conflictAlert = document.createElement('div');
+                                conflictAlert.className = 'alert alert-danger conflict-alert';
+                                conflictAlert.innerHTML = `
+                                    <strong>Time Conflict!</strong>
+                                    <p>This time slot is already occupied by another reservation.</p>
+                                    <p>Please choose a different time or room.</p>
+                                `;
+
+                                // Add the alert to the modal body
+                                const modalBody = document.querySelector('.modal-body');
+
+                                // Remove any existing conflict alerts
+                                const existingAlert = modalBody.querySelector('.conflict-alert');
+                                if (existingAlert) {
+                                    existingAlert.remove();
+                                }
+
+                                // Insert the alert at the top of the modal body
+                                modalBody.insertBefore(conflictAlert, modalBody.firstChild);
+
+                                // Highlight the conflicting fields
+                                document.getElementById('start_time').classList.add('is-invalid');
+                                document.getElementById('end_time').classList.add('is-invalid');
+
+                                // Scroll to the top of the modal to ensure the alert is visible
+                                modalBody.scrollTop = 0;
+
+                                // Also show a toast notification
+                                window.showToast('Time conflict detected. Please choose a different time.', 'error');
+
+                                // Prevent form submission
                                 throw new Error('This time slot is not available. Please choose a different time.');
                             }
 
@@ -1448,7 +669,15 @@
                             formData.set('start_time', start24);
                             formData.set('end_time', end24);
 
+                            // Make sure the language field is included
+                            const languageSelect = document.getElementById('language');
+                            if (languageSelect) {
+                                console.log('Language value:', languageSelect.value);
+                                formData.set('language', languageSelect.value);
+                            }
+
                             const jsonData = Object.fromEntries(formData.entries());
+                            console.log('Form data being submitted:', jsonData);
 
                             // Validate required fields before submission
                             const requiredFields = ['contact_name', 'contact_phone', 'date', 'start_time', 'end_time', 'room_id', 'num_people'];
@@ -1458,23 +687,79 @@
                                 throw new Error(`Please fill in all required fields: ${missingFields.join(', ')}`);
                             }
 
-                            return fetch(this.action, {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                },
-                                body: JSON.stringify(jsonData)
-                            });
+                            // If this is an update to an existing reservation
+                            if (reservationId) {
+                                // Use all form data for updates, not just time and room
+                                console.log('Updating reservation with data:', jsonData);
+                                return fetch(`/update_reservation/${reservationId}`, {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                    },
+                                    body: JSON.stringify(jsonData)
+                                });
+                            } else {
+                                // This is a new reservation
+                                return fetch(this.action, {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                    },
+                                    body: JSON.stringify(jsonData)
+                                });
+                            }
                         })
                         .then(response => {
                             if (!response.ok) {
                                 return response.json().then(data => {
-                                    throw new Error(data.error || 'Failed to save reservation');
+                                    console.log('Error response:', data, 'Status:', response.status);
+
+                                    if (response.status === 409 || data.conflict) {
+                                        // Create a more prominent conflict notification
+                                        const conflictAlert = document.createElement('div');
+                                        conflictAlert.className = 'alert alert-danger conflict-alert';
+                                        conflictAlert.innerHTML = `
+                                            <strong>Time Conflict!</strong>
+                                            <p>This time slot is already occupied by another reservation.</p>
+                                            <p>Please choose a different time or room.</p>
+                                        `;
+
+                                        // Add the alert to the modal body
+                                        const modalBody = document.querySelector('.modal-body');
+
+                                        // Remove any existing conflict alerts
+                                        const existingAlert = modalBody.querySelector('.conflict-alert');
+                                        if (existingAlert) {
+                                            existingAlert.remove();
+                                        }
+
+                                        // Insert the alert at the top of the modal body
+                                        modalBody.insertBefore(conflictAlert, modalBody.firstChild);
+
+                                        // Highlight the conflicting fields
+                                        document.getElementById('start_time').classList.add('is-invalid');
+                                        document.getElementById('end_time').classList.add('is-invalid');
+
+                                        // Scroll to the top of the modal to ensure the alert is visible
+                                        modalBody.scrollTop = 0;
+
+                                        throw new Error('This time slot is already occupied by another reservation. Please choose a different time.');
+                                    } else {
+                                        throw new Error(data.error || 'Failed to save reservation');
+                                    }
+                                }).catch(err => {
+                                    // If JSON parsing fails, throw a generic error with the status
+                                    if (err instanceof SyntaxError) {
+                                        throw new Error(`Server error (${response.status}): Please try again.`);
+                                    }
+                                    throw err;
                                 });
                             }
                             return response.json();
                         })
                         .then((data) => {
+                            console.log('Reservation saved successfully:', data);
+
                             // Store the current date before closing the modal
                             const currentDate = document.getElementById('date').value;
 
@@ -1483,24 +768,29 @@
 
                             // Make sure the calendar stays on the same date
                             if (currentDate) {
-                                calendarEl.dataset.selectedDate = currentDate;
+                                window.calendarEl.dataset.selectedDate = currentDate;
                                 // Update the calendar view to show the current date
-                                calendar.gotoDate(new Date(currentDate));
+                                window.calendar.gotoDate(new Date(currentDate));
                             }
 
                             // Refresh the calendar with the current date
                             refreshCalendar();
 
                             // Show success message
-                            alert('Reservation created successfully!');
+                            if (typeof window.showToast === 'function') {
+                                window.showToast('Reservation ' + (reservationId ? 'updated' : 'created') + ' successfully!');
+                            } else {
+                                console.error('showToast function not found');
+                                alert('Reservation ' + (reservationId ? 'updated' : 'created') + ' successfully!');
+                            }
                         })
                         .catch(error => {
                             console.error('Error:', error);
-                            alert(error.message || 'Error saving reservation. Please try again.');
+                            window.showToast(error.message || 'Error saving reservation. Please try again.', 'error');
                         });
                 } catch (error) {
                     console.error('Error:', error);
-                    alert(error.message || 'Invalid time format. Please use the time picker to select times.');
+                    window.showToast(error.message || 'Invalid time format. Please use the time picker to select times.', 'error');
                 }
             });
 
@@ -1525,10 +815,10 @@
                 });
 
                 // Store the selected date
-                calendarEl.dataset.selectedDate = date;
+                window.calendarEl.dataset.selectedDate = date;
 
                 // Update the calendar view to show the selected date
-                calendar.gotoDate(new Date(date));
+                window.calendar.gotoDate(new Date(date));
 
                 // Fetch reservations for the selected date
                 fetch(`/api/daily_reservations?date=${date}`)
@@ -1709,6 +999,11 @@
             // Update the form inputs to have type="text" instead of type="time"
             document.querySelector('#start_time').type = 'text';
             document.querySelector('#end_time').type = 'text';
+
+            // Initialize drag and drop functionality
+            initDragAndDrop();
+
+            // Delete button event listener is now defined elsewhere
         });
 
         function showNewReservationModal(hour, roomId, selectedDate) {
@@ -1763,34 +1058,66 @@
         }
 
         function closeReservationModal() {
-            const modal = bootstrap.Modal.getInstance(document.getElementById('reservationModal'));
+            const modalEl = document.getElementById('reservationModal');
+            const modal = bootstrap.Modal.getInstance(modalEl);
+
             if (modal) {
-                modal.hide();
+                // Store the current date before closing the modal
+                const currentDate = document.getElementById('date').value;
+
+                // Set window.keepReservationDate to true to preserve the date
+                window.keepReservationDate = true;
+
+                // We'll keep the reservation date in the dataset for future use
+                modalEl.dataset.reservationDate = currentDate;
+
                 // Reset form and clear any validation states
                 document.getElementById('reservationForm').reset();
                 document.querySelectorAll('.form-control').forEach(input => {
                     input.classList.remove('is-invalid', 'is-valid');
                 });
+
                 // Remove any temporary visual indicators
                 document.querySelectorAll('.time-slot').forEach(slot => {
                     slot.classList.remove('selected');
                 });
 
-                // Clear the stored reservation date after we've used it
-                // This prevents it from affecting future operations
-                if (!window.keepReservationDate) {
-                    document.getElementById('reservationModal').dataset.reservationDate = '';
-                }
-                window.keepReservationDate = false;
+                // Properly close the modal
+                modal.hide();
+
+                // Remove aria-hidden attribute to fix accessibility issue
+                setTimeout(() => {
+                    if (modalEl.classList.contains('show')) {
+                        modalEl.classList.remove('show');
+                    }
+                    if (modalEl.getAttribute('aria-hidden') === 'true') {
+                        modalEl.removeAttribute('aria-hidden');
+                    }
+                    document.body.classList.remove('modal-open');
+                    const backdrop = document.querySelector('.modal-backdrop');
+                    if (backdrop) {
+                        backdrop.remove();
+                    }
+                }, 300);
             }
         }
 
         function showEditReservationModal(reservationId) {
+            // Set the current reservation ID globally
+            window.currentReservationId = reservationId;
             currentReservationId = reservationId;
+
+            // Set the form's hidden input
             document.getElementById('reservation_id').value = reservationId;
+
+            // Update the modal title
             document.querySelector('.modal-title .en').textContent = 'Edit Reservation';
             document.querySelector('.modal-title .zh').textContent = '编辑预订';
+
+            // Show the delete button
             document.querySelector('.btn-danger').style.display = 'block';
+
+            console.log('Edit modal opened for reservation ID:', reservationId);
 
             // Fetch reservation details
             fetch(`/get_reservation/${reservationId}`)
@@ -1802,23 +1129,38 @@
 
                     // Convert 24-hour times to 12-hour format for display
                     const startTime = new Date(`2000-01-01T${data.start_time}`);
-                    const endTime = new Date(`2000-01-01T${data.end_time}`);
+
+                    // Handle end time that might be after midnight (e.g., 01:00)
+                    let endTimeStr = data.end_time;
+                    let endTimeDate;
+
+                    // If end time is earlier than start time (e.g., 01:00 vs 22:00), it's likely the next day
+                    if (data.end_time < data.start_time) {
+                        // Use the next day (2000-01-02) for the end time
+                        endTimeDate = new Date(`2000-01-02T${data.end_time}`);
+                    } else {
+                        // Use the same day for the end time
+                        endTimeDate = new Date(`2000-01-01T${data.end_time}`);
+                    }
 
                     startTimePicker.setDate(startTime);
-                    endTimePicker.setDate(endTime);
+                    endTimePicker.setDate(endTimeDate);
 
                     document.getElementById('num_people').value = data.num_people;
                     document.getElementById('contact_name').value = data.contact_name;
                     document.getElementById('contact_phone').value = data.contact_phone;
                     document.getElementById('contact_email').value = data.contact_email;
                     document.getElementById('room_id').value = data.room_id;
+                    // Set the language dropdown value and log it for debugging
+                    console.log('Language from server:', data.language);
                     document.getElementById('language').value = data.language || 'en';
+                    console.log('Language dropdown set to:', document.getElementById('language').value);
 
                     // Update price estimate with the new times
                     updatePriceEstimate();
 
                     // Update the calendar to show the reservation's date
-                    calendar.gotoDate(new Date(data.date));
+                    window.calendar.gotoDate(new Date(data.date));
                 });
 
             var modal = new bootstrap.Modal(document.getElementById('reservationModal'), {
@@ -2072,22 +1414,26 @@
         // Add event listeners for quick duration buttons
         document.querySelectorAll('.duration-btn').forEach(button => {
             button.addEventListener('click', function () {
-                // Remove active class from all duration buttons
-                document.querySelectorAll('.duration-btn').forEach(btn => {
-                    btn.classList.remove('active');
-                });
-
-                // Add active class to clicked button
-                this.classList.add('active');
-
+                // Get the hours from the button's data attribute
                 const hours = parseInt(this.dataset.hours);
                 const startTime = startTimePicker.selectedDates[0];
 
                 if (startTime) {
+                    // Calculate the end time based on the start time and duration
                     const endTime = new Date(startTime);
                     endTime.setHours(endTime.getHours() + hours);
+
+                    // Set the end time in the picker
                     endTimePicker.setDate(endTime);
+
+                    // Update the price estimate
                     updatePriceEstimate();
+
+                    // Briefly add active class for visual feedback, then remove it
+                    this.classList.add('active');
+                    setTimeout(() => {
+                        this.classList.remove('active');
+                    }, 200);
                 }
             });
         });
@@ -2167,6 +1513,23 @@
 
         // Update the modal's close button to use closeReservationModal
         document.querySelector('#reservationModal .btn-close').addEventListener('click', closeReservationModal);
+
+        // Add event listener for the delete button
+        document.getElementById('delete-reservation-btn').addEventListener('click', function () {
+            console.log('Delete button clicked');
+
+            // Get the reservation ID from the form for logging
+            const reservationId = document.getElementById('reservation_id').value;
+            console.log('Form reservation ID before deletion:', reservationId);
+
+            // Call the window.deleteReservation function which handles confirmation
+            try {
+                window.deleteReservation();
+            } catch (error) {
+                console.error('Error in deleteReservation function:', error);
+                alert('Error in delete function: ' + error.message);
+            }
+        });
 
         // Initialize drag and drop functionality
         function initDragAndDrop() {
@@ -2382,23 +1745,32 @@
                 body: JSON.stringify({
                     room_id: roomId,
                     start_time: startTime,
-                    end_time: endTime
+                    end_time: endTime,
+                    date: selectedDate
                 })
             })
                 .then(response => {
                     if (!response.ok) {
-                        throw new Error('Failed to update reservation');
+                        return response.json().then(data => {
+                            if (data.conflict) {
+                                throw new Error('This time slot is already occupied by another reservation. Please choose a different time.');
+                            } else {
+                                throw new Error(data.error || 'Failed to update reservation');
+                            }
+                        });
                     }
                     return response.json();
                 })
                 .then(data => {
                     console.log('Reservation updated successfully:', data);
+                    // Show success message
+                    showToast('Reservation updated successfully!');
                     // Refresh the room timelines to show the updated reservation
                     updateRoomTimelines(selectedDate);
                 })
                 .catch(error => {
                     console.error('Error updating reservation:', error);
-                    alert('Error updating reservation. Please try again.');
+                    showToast(error.message || 'Error updating reservation. Please try again.', 'error');
                     // Refresh to restore the original state
                     updateRoomTimelines(selectedDate);
                 });
