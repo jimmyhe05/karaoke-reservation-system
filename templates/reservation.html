@@ -916,37 +916,50 @@
                     // Add a data attribute to the cell for debugging
                     arg.el.setAttribute('data-date', date);
 
-                    fetch(`/api/daily_reservations?date=${date}`)
-                        .then(response => response.json())
-                        .then(data => {
-                            // Count total reservations for this date
-                            let totalReservations = 0;
-                            data.rooms.forEach(room => {
-                                totalReservations += room.reservations.length;
-                            });
+                    // Skip API call for dates too far in the past or future (optional optimization)
+                    const today = new Date();
+                    const cellDate = new Date(date);
+                    const diffDays = Math.abs(Math.floor((today - cellDate) / (1000 * 60 * 60 * 24)));
 
-                            // Clear any existing count
-                            const existingCount = arg.el.querySelector('.reservation-count');
-                            if (existingCount) {
-                                existingCount.remove();
-                            }
-
-                            // Only show count if there are reservations
-                            if (totalReservations > 0) {
-                                const countElement = document.createElement('div');
-                                countElement.className = 'reservation-count';
-                                countElement.textContent = totalReservations;
-
-                                // Get the frame element to ensure proper positioning
-                                const frame = arg.el.querySelector('.fc-daygrid-day-frame');
-                                if (frame) {
-                                    frame.appendChild(countElement);
+                    // Only fetch data for dates within 60 days of today
+                    if (diffDays <= 60) {
+                        fetch(`/api/daily_reservations?date=${date}`)
+                            .then(response => {
+                                if (!response.ok) {
+                                    throw new Error(`Failed to fetch reservations: ${response.status}`);
                                 }
-                            }
-                        })
-                        .catch(error => {
-                            console.error('Error fetching reservations:', error);
-                        });
+                                return response.json();
+                            })
+                            .then(data => {
+                                // Count total reservations for this date
+                                let totalReservations = 0;
+                                data.rooms.forEach(room => {
+                                    totalReservations += room.reservations.length;
+                                });
+
+                                // Clear any existing count
+                                const existingCount = arg.el.querySelector('.reservation-count');
+                                if (existingCount) {
+                                    existingCount.remove();
+                                }
+
+                                // Only show count if there are reservations
+                                if (totalReservations > 0) {
+                                    const countElement = document.createElement('div');
+                                    countElement.className = 'reservation-count';
+                                    countElement.textContent = totalReservations;
+
+                                    // Get the frame element to ensure proper positioning
+                                    const frame = arg.el.querySelector('.fc-daygrid-day-frame');
+                                    if (frame) {
+                                        frame.appendChild(countElement);
+                                    }
+                                }
+                            })
+                            .catch(error => {
+                                console.error(`Error fetching reservations for ${date}:`, error);
+                            });
+                    }
                 }
             });
             calendar.render();
@@ -1015,7 +1028,33 @@
 
             // Optimized refresh calendar function
             function refreshCalendar() {
-                const selectedDate = document.getElementById('date').value;
+                // Get the selected date from various possible sources, in order of priority:
+                // 1. The reservation modal's data attribute (for editing/deleting reservations)
+                // 2. The date input field value
+                // 3. The calendar element's data attribute
+                // 4. Today's date as a fallback
+                let selectedDate = document.getElementById('reservationModal').dataset.reservationDate ||
+                    document.getElementById('date').value ||
+                    calendarEl.dataset.selectedDate;
+
+                if (!selectedDate) {
+                    selectedDate = new Date().toISOString().split('T')[0]; // Format: YYYY-MM-DD
+                }
+
+                // Store the selected date in the calendar element for persistence
+                calendarEl.dataset.selectedDate = selectedDate;
+
+                // Update the calendar to show the selected date
+                calendar.gotoDate(new Date(selectedDate));
+
+                // Update the date input field to match
+                document.getElementById('date').value = selectedDate;
+
+                // Update the URL to reflect the current date
+                const urlParams = new URLSearchParams(window.location.search);
+                urlParams.set('date', selectedDate);
+                window.history.replaceState({}, '', `${window.location.pathname}?${urlParams}`);
+
                 const dateCell = document.querySelector(`[data-date="${selectedDate}"]`);
 
                 // Only update the timeline and count for the affected date
@@ -1033,7 +1072,9 @@
                     return;
                 }
 
-                const selectedDate = document.getElementById('date').value;
+                // Get the reservation date from the modal's data attribute
+                // This is the date of the reservation being deleted, not necessarily today's date
+                const reservationDate = document.getElementById('reservationModal').dataset.reservationDate;
 
                 fetch(`/delete_reservation/${currentReservationId}`, {
                     method: 'POST'
@@ -1042,8 +1083,38 @@
                         if (!response.ok) {
                             throw new Error('Failed to delete reservation');
                         }
+
+                        // Store the reservation date before closing the modal
+                        const dateToKeep = reservationDate || document.getElementById('date').value;
+
+                        // Set a flag to keep the reservation date when closing the modal
+                        window.keepReservationDate = true;
+
+                        // Close the modal
                         closeReservationModal();
-                        return refreshCalendar();
+
+                        // Make sure the calendar stays on the reservation's date
+                        if (dateToKeep) {
+                            // Store the date in the calendar element
+                            calendarEl.dataset.selectedDate = dateToKeep;
+
+                            // Update the calendar view to show the reservation's date
+                            calendar.gotoDate(new Date(dateToKeep));
+
+                            // Update the date input field
+                            document.getElementById('date').value = dateToKeep;
+
+                            // Update the URL to reflect the current date
+                            const urlParams = new URLSearchParams(window.location.search);
+                            urlParams.set('date', dateToKeep);
+                            window.history.replaceState({}, '', `${window.location.pathname}?${urlParams}`);
+                        }
+
+                        // Refresh the calendar with the reservation's date
+                        refreshCalendar();
+
+                        // Show success message
+                        alert('Reservation deleted successfully!');
                     })
                     .catch(error => {
                         console.error('Error deleting reservation:', error);
@@ -1138,6 +1209,14 @@
 
                             const jsonData = Object.fromEntries(formData.entries());
 
+                            // Validate required fields before submission
+                            const requiredFields = ['contact_name', 'contact_phone', 'date', 'start_time', 'end_time', 'room_id', 'num_people'];
+                            const missingFields = requiredFields.filter(field => !jsonData[field]);
+
+                            if (missingFields.length > 0) {
+                                throw new Error(`Please fill in all required fields: ${missingFields.join(', ')}`);
+                            }
+
                             return fetch(this.action, {
                                 method: 'POST',
                                 headers: {
@@ -1154,9 +1233,25 @@
                             }
                             return response.json();
                         })
-                        .then(() => {
+                        .then((data) => {
+                            // Store the current date before closing the modal
+                            const currentDate = document.getElementById('date').value;
+
+                            // Close the modal
                             closeReservationModal();
+
+                            // Make sure the calendar stays on the same date
+                            if (currentDate) {
+                                calendarEl.dataset.selectedDate = currentDate;
+                                // Update the calendar view to show the current date
+                                calendar.gotoDate(new Date(currentDate));
+                            }
+
+                            // Refresh the calendar with the current date
                             refreshCalendar();
+
+                            // Show success message
+                            alert('Reservation created successfully!');
                         })
                         .catch(error => {
                             console.error('Error:', error);
@@ -1177,6 +1272,12 @@
             }
 
             function updateRoomTimelines(date) {
+                // Validate date parameter
+                if (!date) {
+                    console.error('Invalid date parameter for updateRoomTimelines');
+                    date = new Date().toISOString().split('T')[0]; // Use today's date as fallback
+                }
+
                 // Show loading state
                 document.querySelectorAll('.room-timeline').forEach(timeline => {
                     timeline.style.opacity = '0.5';
@@ -1185,9 +1286,17 @@
                 // Store the selected date
                 calendarEl.dataset.selectedDate = date;
 
+                // Update the calendar view to show the selected date
+                calendar.gotoDate(new Date(date));
+
                 // Fetch reservations for the selected date
                 fetch(`/api/daily_reservations?date=${date}`)
-                    .then(response => response.json())
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error(`Failed to fetch reservations: ${response.status}`);
+                        }
+                        return response.json();
+                    })
                     .then(data => {
                         // Update room timelines
                         data.rooms.forEach(room => {
@@ -1254,6 +1363,9 @@
                         urlParams.set('date', date);
                         window.history.replaceState({}, '', `${window.location.pathname}?${urlParams}`);
                         document.getElementById('date').value = date;
+                    })
+                    .catch(error => {
+                        console.error('Error updating room timelines:', error);
                     })
                     .finally(() => {
                         // Remove loading state
@@ -1385,6 +1497,13 @@
                 document.querySelectorAll('.time-slot').forEach(slot => {
                     slot.classList.remove('selected');
                 });
+
+                // Clear the stored reservation date after we've used it
+                // This prevents it from affecting future operations
+                if (!window.keepReservationDate) {
+                    document.getElementById('reservationModal').dataset.reservationDate = '';
+                }
+                window.keepReservationDate = false;
             }
         }
 
@@ -1399,6 +1518,8 @@
             fetch(`/get_reservation/${reservationId}`)
                 .then(response => response.json())
                 .then(data => {
+                    // Store the reservation date in a data attribute for later use
+                    document.getElementById('reservationModal').dataset.reservationDate = data.date;
                     document.getElementById('date').value = data.date;
 
                     // Convert 24-hour times to 12-hour format for display
@@ -1417,6 +1538,9 @@
 
                     // Update price estimate with the new times
                     updatePriceEstimate();
+
+                    // Update the calendar to show the reservation's date
+                    calendar.gotoDate(new Date(data.date));
                 });
 
             var modal = new bootstrap.Modal(document.getElementById('reservationModal'), {
