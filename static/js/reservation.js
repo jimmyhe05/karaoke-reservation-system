@@ -923,6 +923,222 @@ function deleteReservation(reservationId) {
     });
 }
 
+// Function to add and update the current time indicator
+function updateCurrentTimeIndicator() {
+  console.log("Updating current time indicator");
+
+  try {
+    // Get the current time
+    const now = new Date();
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+    const currentSecond = now.getSeconds();
+
+    // Convert to minutes since midnight for easier positioning
+    const currentTimeInMinutes = currentHour * 60 + currentMinute;
+
+    // Always show the indicator during business hours (11 AM to 1 AM)
+    // For testing, we'll always show it
+    const isWithinBusinessHours = true;
+
+    console.log(
+      `Current time: ${currentHour}:${currentMinute}:${currentSecond} (${currentTimeInMinutes} minutes), Within business hours: ${isWithinBusinessHours}`
+    );
+
+    // Remove any existing time indicators
+    document
+      .querySelectorAll(".current-time-indicator")
+      .forEach((indicator) => {
+        indicator.remove();
+      });
+
+    // Get all room timelines
+    const roomTimelines = document.querySelectorAll(".room-timeline");
+
+    if (roomTimelines.length === 0) {
+      console.error("No room timelines found");
+
+      // If no timelines are found, try again in 1 second
+      // This helps when the page is still loading
+      setTimeout(updateCurrentTimeIndicator, 1000);
+      return;
+    }
+
+    roomTimelines.forEach((timeline) => {
+      // Create the time indicator element
+      const timeIndicator = document.createElement("div");
+      timeIndicator.className = "current-time-indicator";
+      timeIndicator.setAttribute("data-timestamp", now.getTime());
+
+      // Calculate position based on current time
+      // For 7:07 PM (19:07), we need to position it at the 19:00 slot plus a bit
+
+      // Find the corresponding time slot for the current hour
+      let timeSlot;
+      let displayHour = currentHour;
+
+      // Handle after midnight (0, 1) as 24, 25 in our timeline
+      if (currentHour >= 0 && currentHour < 2) {
+        displayHour = currentHour + 24;
+      }
+
+      // Find the time slot for the current hour
+      timeSlot = timeline.querySelector(
+        `.time-slot[data-hour="${displayHour}"]`
+      );
+
+      if (!timeSlot) {
+        // If we can't find the exact hour, find the closest one
+        const timeSlots = timeline.querySelectorAll(".time-slot");
+        let closestSlot = null;
+        let minDistance = Infinity;
+
+        timeSlots.forEach((slot) => {
+          const slotHour = parseInt(slot.dataset.hour);
+          const distance = Math.abs(slotHour - displayHour);
+
+          if (distance < minDistance) {
+            minDistance = distance;
+            closestSlot = slot;
+          }
+        });
+
+        timeSlot = closestSlot;
+      }
+
+      if (!timeSlot) {
+        console.error(`No time slot found for hour ${displayHour}`);
+        return;
+      }
+
+      // Get the position of the time slot
+      const slotTop = timeSlot.offsetTop;
+
+      // If the slot top is 0, it might not be fully rendered yet
+      if (slotTop === 0 && displayHour > 11) {
+        console.warn("Time slot position is 0, might not be fully rendered");
+        // Try again in 500ms
+        setTimeout(updateCurrentTimeIndicator, 500);
+        return;
+      }
+
+      // Calculate the position within the hour (0-59 minutes)
+      // Each hour slot is 40px tall, so each minute is 40/60 = 2/3 px
+      const minuteOffset = (currentMinute / 60) * 40;
+
+      // Calculate the final position
+      const topPosition = slotTop + minuteOffset;
+
+      console.log(
+        `Time slot for hour ${displayHour} found at position ${slotTop}px`
+      );
+      console.log(
+        `Minute offset: ${minuteOffset}px, Final position: ${topPosition}px`
+      );
+
+      // Set the position
+      timeIndicator.style.top = `${topPosition}px`;
+
+      // Add a time label to the indicator
+      const timeLabel = document.createElement("span");
+      timeLabel.className = "current-time-label";
+
+      // Format the time (12-hour format with AM/PM)
+      const hour12 = currentHour % 12 || 12;
+      const ampm = currentHour >= 12 ? "PM" : "AM";
+      timeLabel.textContent = `${hour12}:${currentMinute
+        .toString()
+        .padStart(2, "0")} ${ampm}`;
+
+      timeIndicator.appendChild(timeLabel);
+
+      // Add the indicator to the timeline
+      timeline.appendChild(timeIndicator);
+
+      // Highlight any current reservations
+      const currentReservations =
+        timeline.querySelectorAll(".reservation-card");
+      currentReservations.forEach((card) => {
+        // Get the card's start and end times
+        const startTime = card.dataset.startTime;
+        const endTime = card.dataset.endTime;
+
+        if (startTime && endTime) {
+          // Parse the times
+          const [startHour, startMinute] = startTime.split(":").map(Number);
+          const [endHour, endMinute] = endTime.split(":").map(Number);
+
+          // Check if current time is within this reservation
+          let isCurrentReservation = false;
+
+          // Handle normal case (e.g., 14:00-16:00)
+          if (endHour > startHour) {
+            isCurrentReservation =
+              (currentHour > startHour ||
+                (currentHour === startHour && currentMinute >= startMinute)) &&
+              (currentHour < endHour ||
+                (currentHour === endHour && currentMinute < endMinute));
+          }
+          // Handle overnight case (e.g., 22:00-01:00)
+          else if (endHour < startHour) {
+            isCurrentReservation =
+              currentHour > startHour ||
+              (currentHour === startHour && currentMinute >= startMinute) ||
+              currentHour < endHour ||
+              (currentHour === endHour && currentMinute < endMinute);
+          }
+
+          // Add or remove the 'current' class
+          if (isCurrentReservation) {
+            card.classList.add("current-reservation");
+          } else {
+            card.classList.remove("current-reservation");
+          }
+        }
+      });
+    });
+
+    // Update the document title to show we're keeping the time updated
+    document.title = document.title.replace(/ \[\d+:\d+\]$/, "");
+    document.title += ` [${currentHour}:${currentMinute
+      .toString()
+      .padStart(2, "0")}]`;
+  } catch (error) {
+    console.error("Error updating time indicator:", error);
+    // Try again in 2 seconds if there was an error
+    setTimeout(updateCurrentTimeIndicator, 2000);
+  }
+}
+
+// Function to initialize the current time indicator and update it continuously
+function initCurrentTimeIndicator() {
+  console.log("Initializing current time indicator");
+
+  // Update immediately
+  updateCurrentTimeIndicator();
+
+  // Update every 1 seconds for more responsive updates
+  setInterval(updateCurrentTimeIndicator, 1000);
+
+  // Also update whenever room timelines are updated
+  const originalUpdateRoomTimelines = window.updateRoomTimelines;
+  window.updateRoomTimelines = function (date) {
+    // Call the original function
+    originalUpdateRoomTimelines(date);
+
+    // Wait a short time for the DOM to update, then add the time indicator
+    setTimeout(updateCurrentTimeIndicator, 500);
+  };
+
+  // Also update when switching between calendar views or dates
+  document.addEventListener("visibilitychange", function () {
+    if (!document.hidden) {
+      // Page is now visible, update the time indicator
+      updateCurrentTimeIndicator();
+    }
+  });
+}
+
 // Export functions for use in HTML
 window.showToast = showToast;
 window.initDragAndDrop = initDragAndDrop;
@@ -933,3 +1149,5 @@ window.createIdleReservationCard = createIdleReservationCard;
 window.markOccupiedTimeSlots = markOccupiedTimeSlots;
 window.calculatePriceEstimate = calculatePriceEstimate;
 window.deleteReservation = deleteReservation;
+window.updateCurrentTimeIndicator = updateCurrentTimeIndicator;
+window.initCurrentTimeIndicator = initCurrentTimeIndicator;

@@ -855,6 +855,76 @@ select.form-control {
     max-width: 100%;
 }
 
+/* Current Time Indicator */
+.current-time-indicator {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background-color: rgba(255, 0, 0, 0.5);
+    z-index: 1000;
+    pointer-events: none;
+    border-radius: 0;
+    box-shadow: none;
+}
+
+@keyframes pulse {
+    0% {
+        opacity: 0.4;
+    }
+
+    50% {
+        opacity: 0.7;
+    }
+
+    100% {
+        opacity: 0.4;
+    }
+}
+
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+.current-time-indicator::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: -2px;
+    width: 5px;
+    height: 5px;
+    background-color: rgba(255, 0, 0, 0.5);
+    border-radius: 50%;
+    box-shadow: none;
+}
+
+.current-time-label {
+    position: absolute;
+    left: 10px;
+    top: -8px;
+    background-color: rgba(255, 0, 0, 0.5);
+    color: white;
+    font-size: 0.6em;
+    padding: 1px 3px;
+    border-radius: 2px;
+    font-weight: normal;
+    white-space: nowrap;
+    box-shadow: none;
+    opacity: 0.8;
+}
+
+/* Current reservation highlight */
+.current-reservation {
+    border: 1px solid rgba(255, 0, 0, 0.3) !important;
+    box-shadow: none !important;
+}
+
 /* Draggable styles */
 .reservation-card.draggable {
     cursor: grab;
