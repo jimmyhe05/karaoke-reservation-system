@@ -88,21 +88,17 @@
     display: flex;
     gap: 20px;
     overflow-x: auto;
-    overflow-y: auto;
-    /* Allow vertical scrolling for the entire container */
     height: 100%;
     min-height: 600px;
 }
 
 .room-container {
     flex: 1;
-    min-width: 200px;
-    max-width: 250px;
+    min-width: 250px;
+    max-width: 300px;
     display: flex;
     flex-direction: column;
     height: 100%;
-    min-height: 600px;
-    /* Ensure all rooms have the same minimum height */
 }
 
 .room-header {
@@ -118,8 +114,7 @@
     position: relative;
     border: 1px solid #ddd;
     background: #f8f9fa;
-    overflow-y: visible;
-    /* Changed from auto to visible to prevent individual scrolling */
+    overflow-y: auto;
     height: 100%;
 }
 
@@ -142,7 +137,7 @@
     position: absolute;
     left: 0;
     top: -20px;
-    width: 70px;
+    width: 80px;
     padding: 0;
     margin: 0;
     height: 20px;
@@ -164,8 +159,8 @@
 /* Reservation cards */
 .reservation-card {
     position: absolute;
-    width: calc(100% - 70px);
-    margin-left: 70px;
+    width: calc(100% - 80px);
+    margin-left: 80px;
     background: #e3f2fd;
     color: #1976d2;
     padding: 6px;
@@ -762,7 +757,7 @@ select.form-control {
 
 /* Idle Area Styles */
 .idle-area-container {
-    width: 180px;
+    width: 250px;
     min-height: 200px;
     border: 1px solid #ddd;
     border-radius: 4px;
@@ -782,7 +777,7 @@ select.form-control {
 
 .idle-area {
     position: relative;
-    padding: 10px;
+    padding: 15px;
     min-height: 150px;
     display: flex;
     flex-direction: column;
@@ -792,7 +787,7 @@ select.form-control {
 
 .idle-area .reservation-card {
     position: relative;
-    width: 150px;
+    width: 220px;
     height: auto !important;
     min-height: 80px;
     margin-left: 0;
@@ -972,10 +967,10 @@ select.form-control {
 
 @media (max-width: 768px) {
     .room-container {
-        min-width: 180px;
+        min-width: 200px;
     }
 
     .idle-area-container {
-        width: 150px;
+        width: 100%;
     }
 }
