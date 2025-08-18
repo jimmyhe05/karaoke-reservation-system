@@ -6,38 +6,51 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Karaoke Room Reservation System</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/fullcalendar@5.10.1/main.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@5.10.1/main.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/material_blue.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/reservation.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/enhanced-calendar.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/improved-layout.css') }}">
 </head>
 
-<body>
-    <!-- Toast container for notifications -->
-    <div class="toast-container"></div>
+<body class="lang-en">
+        <script>
+            window.initialSelectedDate = "{{ selected_date }}";
+        </script>
+    <div class="main-container">
+        <!-- Header -->
+        <header class="header">
+            <h1>
+                <span class="en">Karaoke Room Reservation System</span>
+                <span class="zh">卡拉OK房间预订系统</span>
+            </h1>
+            <div class="header-actions">
+                <button id="language-toggle" class="btn btn-sm btn-outline-light">中文</button>
+            </div>
+        </header>
 
-    <div class="container-fluid">
-        <h1 class="my-1 text-center">Karaoke Room Reservation System</h1>
-
-        <div class="main-container">
-            <!-- Calendar View -->
+    <!-- Sidebar (Calendar + Idle Area) -->
+    <div class="sidebar">
+            <!-- Calendar -->
             <div class="calendar-container">
+                <div class="calendar-controls simple d-flex justify-content-between align-items-center">
+                    <button class="btn btn-sm btn-outline-secondary" id="prev-day-btn">◀</button>
+                    <button class="btn btn-sm btn-outline-secondary" id="today-btn">Today</button>
+                    <button class="btn btn-sm btn-outline-secondary" id="next-day-btn">▶</button>
+                </div>
+                <div class="selected-date-display text-center mb-1"><span id="selected-date-label"></span></div>
                 <div id="calendar"></div>
             </div>
 
-            <!-- Idle Area for Temporary Reservations -->
-            <div class="idle-area-container mb-3">
+            <!-- Idle Reservations (renamed to match improved-layout.css expectation) -->
+            <div class="idle-area-container">
                 <div class="idle-area-header">
-                    <h3 class="m-0">
-                        <span class="en">Idle Reservations</span>
-                        <span class="zh">闲置预订</span>
-                    </h3>
+                    <span class="en">Idle Reservations</span>
+                    <span class="zh">闲置预订</span>
                 </div>
-                <div class="idle-area" id="idle-area">
-                    <!-- Idle reservations will be placed here -->
+                <div id="idle-area" class="idle-area">
                     {% for reservation in idle_reservations %}
-                    <div class="reservation-card" data-reservation-id="{{ reservation.id }}"
-                        data-room-id="{{ reservation.room_id }}" data-hour="{{ reservation.start_hour }}"
+                    <div class="reservation-card" data-reservation-id="{{ reservation.id }}" data-room-id="idle"
                         data-start-time="{{ reservation.start_time }}" data-end-time="{{ reservation.end_time }}"
                         data-duration="{{ reservation.duration }}">
                         <div class="time-indicator">
@@ -46,1739 +59,283 @@
                         <div class="content">
                             <div class="name-row">
                                 <strong>{{ reservation.contact_name }}</strong>
-                                <span class="people-count">({{ reservation.num_people }})</span>
+                                <span class="people-count">{{ reservation.num_people }}</span>
                             </div>
                         </div>
                     </div>
                     {% endfor %}
                 </div>
             </div>
+        </div>
 
+        <!-- Content Area with Room Timelines -->
+        <div class="content-area">
             <!-- Room Timelines -->
             <div class="rooms-container">
                 {% for room in rooms %}
                 <div class="room-container">
                     <div class="room-header">
-                        <h3 class="m-0">
-                            <span class="en">Room {{ room.id }}</span>
-                            <span class="zh">房间 {{ room.id }}</span>
-                        </h3>
+                        <span class="en">Room {{ room.id }}</span>
+                        <span class="zh">房间 {{ room.id }}</span>
                     </div>
-                    <div class="room-timeline" id="room-{{ room.id }}" data-room-id="{{ room.id }}">
-                        {% for hour in range(11, 25) %}
-                        <div class="time-slot" data-hour="{{ hour }}">
-                            <div class="time-label">
-                                {{ "%02d:00"|format(hour % 24) }}
-                            </div>
-                            {% for reservation in room.reservations %}
-                            {% if reservation.start_hour == hour %}
-                            <div class="reservation-card" data-reservation-id="{{ reservation.id }}"
-                                data-room-id="{{ room.id }}" data-hour="{{ hour }}"
-                                data-start-time="{{ reservation.start_time }}"
-                                data-end-time="{{ reservation.end_time }}" data-duration="{{ reservation.duration }}"
-                                style="height: calc({{ reservation.duration }} * 40px); top: -1px;">
-                                <div class="time-indicator">
-                                    <span class="time-range">{{ reservation.start_time }} - {{ reservation.end_time
-                                        }}</span>
-                                </div>
-                                <div class="content">
-                                    <div class="name-row">
-                                        <strong>{{ reservation.contact_name }}</strong>
-                                        <span class="people-count">({{ reservation.num_people }})</span>
-                                    </div>
-                                </div>
-                            </div>
-                            {% endif %}
+                    <div class="room-timeline-wrapper">
+                        <div class="time-labels">
+                            {% set start_hour = 11 %}
+                            {% set end_hour = 25 %}
+                            {% for h in range(start_hour, end_hour) %}
+                            <div class="time-label">{{ (h-1) % 12 + 1 }}:00 {{ 'AM' if h < 12 or h==24 else 'PM' }}</div>
+                            <div class="time-label">{{ (h-1) % 12 + 1 }}:30 {{ 'AM' if h < 12 or h==24 else 'PM' }}</div>
                             {% endfor %}
                         </div>
-                        {% endfor %}
+                        <div class="room-timeline" id="room-{{ room.id }}" data-room-id="{{ room.id }}">
+                            {# Create 30‑minute granular time slots (two per hour) so labels & slots align #}
+                            {% for h in range(start_hour, end_hour) %}
+                                <div class="time-slot" data-hour="{{ h }}" data-minute="0"></div>
+                                <div class="time-slot" data-hour="{{ h }}" data-minute="30"></div>
+                            {% endfor %}
+
+                            {# Render reservation cards positioned relative to their start slot #}
+                            {% for reservation in room.reservations %}
+                                {% set res_start_parts = reservation.start_time.split(':') %}
+                                {% set res_start_hour = res_start_parts[0]|int %}
+                                {% set res_start_min = res_start_parts[1]|int %}
+                                {% set slot_index = (res_start_hour - 11) * 2 + (res_start_min // 30) %}
+                                {% set top_pos = slot_index * 20 %}
+                                {% set card_height = reservation.duration * 40 %}
+                                <div class="reservation-card" data-reservation-id="{{ reservation.id }}" data-room-id="{{ room.id }}" data-hour="{{ res_start_hour }}" data-minute="{{ res_start_min }}" data-start-time="{{ reservation.start_time }}" data-end-time="{{ reservation.end_time }}" data-duration="{{ reservation.duration }}" data-top="{{ top_pos }}" data-height="{{ card_height }}">
+                                    <div class="time-indicator">
+                                        <span class="time-range">{{ reservation.start_time }} - {{ reservation.end_time }}</span>
+                                    </div>
+                                    <div class="content">
+                                        <div class="name-row">
+                                            <strong>{{ reservation.contact_name }}</strong>
+                                            <span class="people-count">{{ reservation.num_people }}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
                     </div>
                 </div>
                 {% endfor %}
             </div>
         </div>
+    </div>
 
-        <!-- Reservation Form Modal -->
-        <div class="modal fade" id="reservationModal" tabindex="-1">
-            <div class="modal-dialog">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title">
-                            <span class="en">New Reservation</span>
-                            <span class="zh">新预订</span>
-                        </h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                    </div>
-                    <div class="modal-body">
-                        <form id="reservationForm" method="POST" action="{{ url_for('reservation') }}">
-                            <input type="hidden" id="reservation_id" name="reservation_id">
+    <!-- Reservation Form Modal -->
+    <div class="modal fade" id="reservationModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <span class="en">New Reservation</span>
+                        <span class="zh">新预订</span>
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="reservationForm" method="POST" action="{{ url_for('reservation') }}">
+                        <input type="hidden" id="reservation_id" name="reservation_id">
 
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <div class="form-group mb-2">
-                                        <label for="date">Date <span class="chinese">日期</span></label>
-                                        <input type="text" id="date" name="date" class="form-control" required>
-                                    </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group mb-2">
+                                    <label for="date">Date <span class="chinese">日期</span></label>
+                                    <input type="text" id="date" name="date" class="form-control" required>
                                 </div>
-                                <div class="col-md-6">
-                                    <div class="form-group mb-2">
-                                        <label class="bilingual-label horizontal">
-                                            <span class="en">Room</span>
-                                            <span class="zh">房间</span>
-                                        </label>
-                                        <select id="room_id" name="room_id" class="form-control">
-                                            {% for room in rooms %}
-                                            <option value="{{ room.id }}">Room {{ room.id }}</option>
-                                            {% endfor %}
-                                        </select>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group mb-2">
+                                    <label class="bilingual-label horizontal">
+                                        <span class="en">Room</span>
+                                        <span class="zh">房间</span>
+                                    </label>
+                                    <select id="room_id" name="room_id" class="form-control">
+                                        {% for room in rooms %}
+                                        <option value="{{ room.id }}">Room {{ room.id }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group mb-2">
+                                    <label for="start_time">Start Time <span class="chinese">开始时间</span></label>
+                                    <input type="text" id="start_time" name="start_time" class="form-control"
+                                        required>
+                                    <div class="invalid-feedback">
+                                        Start time must be between 11:00 AM and 12:00 AM (midnight)
                                     </div>
                                 </div>
                             </div>
-
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <div class="form-group mb-2">
-                                        <label for="start_time">Start Time <span class="chinese">开始时间</span></label>
-                                        <input type="text" id="start_time" name="start_time" class="form-control"
-                                            required>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="form-group mb-2">
-                                        <label for="end_time">End Time <span class="chinese">结束时间</span></label>
-                                        <input type="text" id="end_time" name="end_time" class="form-control" required>
+                            <div class="col-md-6">
+                                <div class="form-group mb-2">
+                                    <label for="end_time">End Time <span class="chinese">结束时间</span></label>
+                                    <input type="text" id="end_time" name="end_time" class="form-control"
+                                        required>
+                                    <div class="invalid-feedback">
+                                        End time must be after start time and no later than 1:00 AM
                                     </div>
                                 </div>
                             </div>
+                        </div>
 
-                            <div class="quick-duration-buttons mb-2">
-                                <button type="button" class="duration-btn" data-hours="1">1h</button>
-                                <button type="button" class="duration-btn" data-hours="2">2h</button>
-                                <button type="button" class="duration-btn" data-hours="3">3h</button>
-                                <button type="button" class="duration-btn" data-hours="4">4h</button>
-                            </div>
+                        <div class="alert alert-info mb-2" role="alert">
+                            <small><strong>Business Hours:</strong> Reservations are only available between
+                                11:00 AM
+                                and 1:00 AM</small>
+                        </div>
 
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <div class="form-group mb-3">
-                                        <label class="bilingual-label">
-                                            <span class="en">Number of People</span>
-                                            <span class="zh">人数</span>
-                                        </label>
-                                        <input type="number" id="num_people" name="num_people" min="1" max="20"
-                                            class="form-control" value="1" required>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="form-group mb-3">
-                                        <label class="bilingual-label">
-                                            <span class="en">Language</span>
-                                            <span class="zh">语言</span>
-                                        </label>
-                                        <select id="language" name="language" class="form-control">
-                                            <option value="en" selected>English</option>
-                                            <option value="zh">Mandarin (普通话)</option>
-                                            <option value="ja">Japanese (日本語)</option>
-                                            <option value="ko">Korean (한국어)</option>
-                                            <option value="vi">Vietnamese (Tiếng Việt)</option>
-                                            <option value="th">Thai (ไทย)</option>
-                                            <option value="other">Other (其他)</option>
-                                        </select>
-                                    </div>
+                        <div class="quick-duration-buttons mb-2">
+                            <button type="button" class="duration-btn" data-hours="0.5">30m</button>
+                            <button type="button" class="duration-btn" data-hours="1">1h</button>
+                            <button type="button" class="duration-btn" data-hours="2">2h</button>
+                            <button type="button" class="duration-btn" data-hours="3">3h</button>
+                            <button type="button" class="duration-btn" data-hours="4">4h</button>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group mb-3">
+                                    <label class="bilingual-label">
+                                        <span class="en">Number of People</span>
+                                        <span class="zh">人数</span>
+                                    </label>
+                                    <input type="number" id="num_people" name="num_people" min="1" max="20"
+                                        class="form-control" value="1" required>
                                 </div>
                             </div>
-
-                            <div class="row">
-                                <div class="col-md-12">
-                                    <div class="form-group mb-3">
-                                        <label class="bilingual-label">
-                                            <span class="en">Contact Name</span>
-                                            <span class="zh">联系人姓名</span>
-                                        </label>
-                                        <input type="text" id="contact_name" name="contact_name" required
-                                            class="form-control" placeholder="Required *">
-                                    </div>
+                            <div class="col-md-6">
+                                <div class="form-group mb-3">
+                                    <label class="bilingual-label">
+                                        <span class="en">Language</span>
+                                        <span class="zh">语言</span>
+                                    </label>
+                                    <select id="language" name="language" class="form-control">
+                                        <option value="en" selected>English</option>
+                                        <option value="zh">Mandarin (普通话)</option>
+                                        <option value="ja">Japanese (日本語)</option>
+                                        <option value="ko">Korean (한국어)</option>
+                                        <option value="vi">Vietnamese (Tiếng Việt)</option>
+                                        <option value="th">Thai (ไทย)</option>
+                                        <option value="other">Other (其他)</option>
+                                    </select>
                                 </div>
                             </div>
+                        </div>
 
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <div class="form-group mb-3">
-                                        <label class="bilingual-label">
-                                            <span class="en">Contact Phone</span>
-                                            <span class="zh">联系电话</span>
-                                        </label>
-                                        <input type="tel" id="contact_phone" name="contact_phone" required
-                                            class="form-control" placeholder="Required *">
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="form-group mb-3">
-                                        <label class="bilingual-label">
-                                            <span class="en">Contact Email</span>
-                                            <span class="zh">电子邮箱</span>
-                                        </label>
-                                        <input type="email" id="contact_email" name="contact_email" class="form-control"
-                                            placeholder="Optional">
+                        <div class="row">
+                            <div class="col-md-12">
+                                <div class="form-group mb-3">
+                                    <label class="bilingual-label">
+                                        <span class="en">Contact Name</span>
+                                        <span class="zh">联系人姓名</span>
+                                    </label>
+                                    <input type="text" id="contact_name" name="contact_name" required
+                                        class="form-control" placeholder="Required *">
+                                    <div class="invalid-feedback">
+                                        Please enter a contact name
                                     </div>
                                 </div>
                             </div>
+                        </div>
 
-                            <div class="accordion mt-2 mb-2">
-                                <div class="accordion-item">
-                                    <h2 class="accordion-header" id="costBreakdownHeader">
-                                        <button class="accordion-button collapsed" type="button"
-                                            data-bs-toggle="collapse" data-bs-target="#costBreakdown">
-                                            Cost Breakdown <span class="chinese ms-2">费用明细</span>
-                                        </button>
-                                    </h2>
-                                    <div id="costBreakdown" class="accordion-collapse collapse">
-                                        <div class="accordion-body p-2">
-                                            <div class="price-breakdown">
-                                                <div class="breakdown-item">
-                                                    <span class="breakdown-label">Room Rate <span
-                                                            class="chinese">房间费用</span></span>
-                                                    <span id="room-rate">$0</span>
-                                                </div>
-                                                <div class="breakdown-item">
-                                                    <span class="breakdown-label">Time Period Charges <span
-                                                            class="chinese">时段费用</span></span>
-                                                    <div id="period-charges"></div>
-                                                </div>
-                                                <div class="breakdown-item">
-                                                    <span class="breakdown-label">Tax (5.5%) <span
-                                                            class="chinese">税费</span></span>
-                                                    <span id="tax-amount">$0</span>
-                                                </div>
-                                                <div class="breakdown-item total">
-                                                    <span class="breakdown-label">Total <span
-                                                            class="chinese">总计</span></span>
-                                                    <span id="total-cost">$0</span>
-                                                </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group mb-3">
+                                    <label class="bilingual-label">
+                                        <span class="en">Contact Phone</span>
+                                        <span class="zh">联系电话</span>
+                                    </label>
+                                    <input type="tel" id="contact_phone" name="contact_phone" required
+                                        class="form-control" placeholder="Required *">
+                                    <div class="invalid-feedback">
+                                        Please enter a valid phone number
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group mb-3">
+                                    <label class="bilingual-label">
+                                        <span class="en">Contact Email</span>
+                                        <span class="zh">电子邮箱</span>
+                                    </label>
+                                    <input type="email" id="contact_email" name="contact_email"
+                                        class="form-control" placeholder="Optional">
+                                    <div class="invalid-feedback">
+                                        Please enter a valid email address or leave it empty
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="accordion mt-2 mb-2">
+                            <div class="accordion-item">
+                                <h2 class="accordion-header" id="costBreakdownHeader">
+                                    <button class="accordion-button collapsed" type="button"
+                                        data-bs-toggle="collapse" data-bs-target="#costBreakdown">
+                                        Cost Breakdown <span class="chinese ms-2">费用明细</span>
+                                    </button>
+                                </h2>
+                                <div id="costBreakdown" class="accordion-collapse collapse">
+                                    <div class="accordion-body p-2">
+                                        <div class="price-breakdown">
+                                            <div class="breakdown-item">
+                                                <span class="breakdown-label">Room Rate <span
+                                                        class="chinese">房间费用</span></span>
+                                                <span id="room-rate">$0</span>
+                                            </div>
+                                            <div class="breakdown-item">
+                                                <span class="breakdown-label">Time Period Charges <span
+                                                        class="chinese">时段费用</span></span>
+                                                <div id="period-charges"></div>
+                                            </div>
+                                            <div class="breakdown-item">
+                                                <span class="breakdown-label">Tax (5.5%) <span
+                                                        class="chinese">税费</span></span>
+                                                <span id="tax-amount">$0</span>
+                                            </div>
+                                            <div class="breakdown-item total">
+                                                <span class="breakdown-label">Total <span
+                                                        class="chinese">总计</span></span>
+                                                <span id="total-cost">$0</span>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
                             </div>
+                        </div>
 
-                            <div class="d-flex justify-content-between">
-                                <button type="button" class="btn btn-danger" id="delete-reservation-btn">
-                                    <span class="en">Delete</span>
-                                    <span class="zh">删除</span>
-                                </button>
-                                <button type="submit" class="btn btn-primary">
-                                    <span class="en">Save</span>
-                                    <span class="zh">保存</span>
-                                </button>
-                            </div>
-                        </form>
-                    </div>
+                        <div class="d-flex justify-content-between">
+                            <button type="button" class="btn btn-danger" id="delete-reservation-btn">
+                                <span class="en">Delete</span>
+                                <span class="zh">删除</span>
+                            </button>
+                            <button type="submit" class="btn btn-primary">
+                                <span class="en">Save</span>
+                                <span class="zh">保存</span>
+                            </button>
+                        </div>
+                    </form>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Move scripts before closing body tag -->
+    <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@5.10.1/main.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
-    <!-- Update Flatpickr script -->
+    <script src="https://cdn.jsdelivr.net/npm/tippy.js@6/dist/tippy-bundle.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/zh.js"></script>
     <script src="{{ url_for('static', filename='js/reservation.js') }}"></script>
-    <script>
-        let currentReservationId = null;
-        let startTimePicker, endTimePicker;
-
-        // Make calendar globally accessible
-        window.calendar = null;
-        window.calendarEl = null;
-
-        document.addEventListener('DOMContentLoaded', function () {
-            // Initialize FullCalendar
-            window.calendarEl = document.getElementById('calendar');
-            window.calendar = new FullCalendar.Calendar(window.calendarEl, {
-                initialView: 'dayGridMonth',
-                initialDate: '{{ selected_date }}',
-                selectable: true,
-                select: function (info) {
-                    window.calendarEl.dataset.selectedDate = info.startStr;
-                    updateRoomTimelines(info.startStr);
-                },
-                headerToolbar: {
-                    left: 'prev,next today',
-                    center: 'title',
-                    right: 'dayGridMonth,timeGridWeek'
-                },
-                dayCellDidMount: function (arg) {
-                    // Format the date to match the API's expected format (YYYY-MM-DD)
-                    const date = arg.date.toISOString().split('T')[0];
-
-                    // Add a data attribute to the cell for debugging
-                    arg.el.setAttribute('data-date', date);
-
-                    // Skip API call for dates too far in the past or future (optional optimization)
-                    const today = new Date();
-                    const cellDate = new Date(date);
-                    const diffDays = Math.abs(Math.floor((today - cellDate) / (1000 * 60 * 60 * 24)));
-
-                    // Only fetch data for dates within 60 days of today
-                    if (diffDays <= 60) {
-                        fetch(`/api/daily_reservations?date=${date}`)
-                            .then(response => {
-                                if (!response.ok) {
-                                    throw new Error(`Failed to fetch reservations: ${response.status}`);
-                                }
-                                return response.json();
-                            })
-                            .then(data => {
-                                // Count total reservations for this date
-                                let totalReservations = 0;
-                                data.rooms.forEach(room => {
-                                    totalReservations += room.reservations.length;
-                                });
-
-                                // Clear any existing count
-                                const existingCount = arg.el.querySelector('.reservation-count');
-                                if (existingCount) {
-                                    existingCount.remove();
-                                }
-
-                                // Only show count if there are reservations
-                                if (totalReservations > 0) {
-                                    const countElement = document.createElement('div');
-                                    countElement.className = 'reservation-count';
-                                    countElement.textContent = totalReservations;
-
-                                    // Get the frame element to ensure proper positioning
-                                    const frame = arg.el.querySelector('.fc-daygrid-day-frame');
-                                    if (frame) {
-                                        frame.appendChild(countElement);
-                                    }
-                                }
-                            })
-                            .catch(error => {
-                                console.error(`Error fetching reservations for ${date}:`, error);
-                            });
-                    }
-                }
-            });
-            window.calendar.render();
-
-            // Optimize the update functions
-            let lastFetchPromises = {};
-
-            function updateDateCell(dateCell, date) {
-                if (!dateCell) return;
-
-                // Cancel any pending fetch for this date
-                if (lastFetchPromises[date]) {
-                    lastFetchPromises[date].aborted = true;
-                }
-
-                const fetchPromise = fetch(`/api/daily_reservations?date=${date}`)
-                    .then(response => response.json())
-                    .then(data => {
-                        // If this fetch was aborted, don't update UI
-                        if (fetchPromise.aborted) return;
-
-                        let totalReservations = 0;
-                        data.rooms.forEach(room => {
-                            totalReservations += room.reservations.length;
-                        });
-
-                        // Clear existing count
-                        const existingCount = dateCell.querySelector('.reservation-count');
-                        if (existingCount) {
-                            existingCount.remove();
-                        }
-
-                        // Add new count if there are reservations
-                        if (totalReservations > 0) {
-                            const countElement = document.createElement('div');
-                            countElement.className = 'reservation-count';
-                            countElement.textContent = totalReservations;
-
-                            const frame = dateCell.querySelector('.fc-daygrid-day-frame');
-                            if (frame) {
-                                frame.appendChild(countElement);
-                            }
-                        }
-                    })
-                    .catch(error => {
-                        if (!fetchPromise.aborted) {
-                            console.error('Error updating reservation count:', error);
-                        }
-                    });
-
-                lastFetchPromises[date] = fetchPromise;
-            }
-
-            // Batch update function for multiple dates
-            function batchUpdateDates(dates) {
-                const uniqueDates = [...new Set(dates)];
-                const updates = uniqueDates.map(date => {
-                    const dateCell = document.querySelector(`[data-date="${date}"]`);
-                    if (dateCell) {
-                        return updateDateCell(dateCell, date);
-                    }
-                    return Promise.resolve();
-                });
-                return Promise.all(updates);
-            }
-
-            // Optimized refresh calendar function
-            function refreshCalendar() {
-                // Get the selected date from various possible sources, in order of priority:
-                // 1. The reservation modal's data attribute (for editing/deleting reservations)
-                // 2. The date input field value
-                // 3. The calendar element's data attribute
-                // 4. Today's date as a fallback
-                let selectedDate = document.getElementById('reservationModal').dataset.reservationDate ||
-                    document.getElementById('date').value ||
-                    window.calendarEl.dataset.selectedDate;
-
-                if (!selectedDate) {
-                    selectedDate = new Date().toISOString().split('T')[0]; // Format: YYYY-MM-DD
-                }
-
-                // Store the selected date in the calendar element for persistence
-                window.calendarEl.dataset.selectedDate = selectedDate;
-
-                // Update the calendar to show the selected date
-                window.calendar.gotoDate(new Date(selectedDate));
-
-                // Update the date input field to match
-                document.getElementById('date').value = selectedDate;
-
-                // Update the URL to reflect the current date
-                const urlParams = new URLSearchParams(window.location.search);
-                urlParams.set('date', selectedDate);
-                window.history.replaceState({}, '', `${window.location.pathname}?${urlParams}`);
-
-                const dateCell = document.querySelector(`[data-date="${selectedDate}"]`);
-
-                // Only update the timeline and count for the affected date
-                Promise.all([
-                    updateRoomTimelines(selectedDate),
-                    dateCell ? updateDateCell(dateCell, selectedDate) : Promise.resolve()
-                ]).catch(error => {
-                    console.error('Error refreshing calendar:', error);
-                });
-            }
-
-            // Update the deleteReservation function to be more efficient
-            window.deleteReservation = function () {
-                console.log('Delete function called, currentReservationId:', currentReservationId, 'window.currentReservationId:', window.currentReservationId);
-
-                // Get the reservation ID from the form
-                const formReservationId = document.getElementById('reservation_id').value;
-                console.log('Form reservation ID in deleteReservation:', formReservationId);
-
-                // Use either the form ID, local variable, or global variable
-                const reservationIdToDelete = formReservationId || currentReservationId || window.currentReservationId;
-
-                console.log('Attempting to delete reservation ID:', reservationIdToDelete);
-
-                if (!reservationIdToDelete) {
-                    console.error('No reservation ID found for deletion');
-                    window.showToast('Error: No reservation selected for deletion', 'error');
-                    return;
-                }
-
-                // Use a simple browser confirmation dialog instead of a toast
-                if (confirm('Are you sure you want to delete this reservation?')) {
-                    console.log('Confirm delete button clicked');
-
-                    // Get the reservation date from the modal's data attribute
-                    // This is the date of the reservation being deleted, not necessarily today's date
-                    const reservationDate = document.getElementById('reservationModal').dataset.reservationDate;
-                    console.log('Reservation date from modal:', reservationDate);
-
-                    console.log(`Sending DELETE request to /delete_reservation/${reservationIdToDelete}`);
-
-                    fetch(`/delete_reservation/${reservationIdToDelete}`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        }
-                    })
-                        .then(response => {
-                            console.log('Delete response status:', response.status);
-                            if (!response.ok) {
-                                return response.text().then(text => {
-                                    console.error('Error response text:', text);
-                                    throw new Error(`Failed to delete reservation: ${response.status}`);
-                                });
-                            }
-                            return response.json();
-                        })
-                        .then(data => {
-                            console.log('Delete response:', data);
-
-                            // Store the reservation date before closing the modal
-                            const dateToKeep = reservationDate || document.getElementById('date').value;
-
-                            // Set a flag to keep the reservation date when closing the modal
-                            window.keepReservationDate = true;
-
-                            // Close the modal
-                            closeReservationModal();
-
-                            // Refresh the page to ensure all data is updated correctly
-                            window.location.href = `/?date=${dateToKeep}`;
-
-                            // Show success message
-                            window.showToast('Reservation deleted successfully!');
-                        })
-                        .catch(error => {
-                            console.error('Error deleting reservation:', error);
-                            window.showToast('Error deleting reservation. Please try again.', 'error');
-                        });
-                }
-            };
-
-            // Optimize the form submission handler
-            const reservationForm = document.getElementById('reservationForm');
-            reservationForm.addEventListener('submit', function (e) {
-                e.preventDefault();
-
-                // Get form values
-                const startTime = startTimePicker.input.value;
-                const endTime = endTimePicker.input.value;
-                const date = document.getElementById('date').value;
-                const roomId = document.getElementById('room_id').value;
-                const reservationId = document.getElementById('reservation_id').value;
-
-                // Validate required fields
-                if (!startTime || !endTime || !date || !roomId) {
-                    window.showToast('Please fill in all required fields.', 'error');
-                    return;
-                }
-
-                // Convert times to 24-hour format
-                const convertTo24Hour = (timeStr) => {
-                    try {
-                        const [time, period] = timeStr.split(' ');
-                        let [hours, minutes] = time.split(':').map(num => parseInt(num, 10));
-
-                        if (isNaN(hours) || isNaN(minutes)) {
-                            throw new Error('Invalid time format');
-                        }
-
-                        if (period === 'PM' && hours !== 12) hours += 12;
-                        if (period === 'AM' && hours === 12) hours = 0;
-
-                        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-                    } catch (error) {
-                        throw new Error('Invalid time format. Please use the time picker to select times.');
-                    }
-                };
-
-                try {
-                    const start24 = convertTo24Hour(startTime);
-                    const end24 = convertTo24Hour(endTime);
-
-                    // Validate business hours (11 AM to 1 AM next day)
-                    const startHour = parseInt(start24.split(':')[0]);
-                    let endHour = parseInt(end24.split(':')[0]);
-
-                    // Adjust end hour for after midnight
-                    if (endHour < startHour && endHour <= 1) {
-                        endHour += 24;
-                    }
-
-                    // Allow reservations between 11 AM and 1 AM next day
-                    // Start time must be at least 11 AM
-                    // End time must be at most 1 AM (25 in 24-hour notation)
-                    // End time must be after start time
-                    if (startHour < 11 || endHour > 25 || (startHour >= endHour)) {
-                        window.showToast('Invalid time range. Reservations must be between 11:00 AM and 1:00 AM the next day, and end time must be after start time.', 'error');
-                        return;
-                    }
-
-                    // Check availability and submit
-                    fetch(`/api/daily_reservations?date=${date}`)
-                        .then(response => {
-                            if (!response.ok) throw new Error('Failed to check availability');
-                            return response.json();
-                        })
-                        .then(data => {
-                            const room = data.rooms.find(r => r.id === parseInt(roomId));
-                            if (!room) throw new Error('Room not found');
-
-                            // Check for conflicts
-                            const hasConflict = room.reservations.some(res => {
-                                // Skip the current reservation when checking for conflicts
-                                if (reservationId && res.id === parseInt(reservationId)) return false;
-
-                                // For editing an existing reservation, we need to check if the time has changed
-                                // If we're not changing the time, there's no need to check for conflicts
-                                if (reservationId) {
-                                    console.log('Editing reservation:', reservationId);
-                                    console.log('Current reservation times:', start24, end24);
-                                    console.log('Existing reservation in room:', res.id, res.start_time, res.end_time);
-                                }
-
-                                const resStart = parseInt(res.start_time.split(':')[0]);
-                                let resEnd = parseInt(res.end_time.split(':')[0]);
-                                if (resEnd < resStart && resEnd <= 1) resEnd += 24;
-
-                                return (startHour < resEnd && endHour > resStart);
-                            });
-
-                            if (hasConflict) {
-                                // Create a more prominent conflict notification
-                                const conflictAlert = document.createElement('div');
-                                conflictAlert.className = 'alert alert-danger conflict-alert';
-                                conflictAlert.innerHTML = `
-                                    <strong>Time Conflict!</strong>
-                                    <p>This time slot is already occupied by another reservation.</p>
-                                    <p>Please choose a different time or room.</p>
-                                `;
-
-                                // Add the alert to the modal body
-                                const modalBody = document.querySelector('.modal-body');
-
-                                // Remove any existing conflict alerts
-                                const existingAlert = modalBody.querySelector('.conflict-alert');
-                                if (existingAlert) {
-                                    existingAlert.remove();
-                                }
-
-                                // Insert the alert at the top of the modal body
-                                modalBody.insertBefore(conflictAlert, modalBody.firstChild);
-
-                                // Highlight the conflicting fields
-                                document.getElementById('start_time').classList.add('is-invalid');
-                                document.getElementById('end_time').classList.add('is-invalid');
-
-                                // Scroll to the top of the modal to ensure the alert is visible
-                                modalBody.scrollTop = 0;
-
-                                // Also show a toast notification
-                                window.showToast('Time conflict detected. Please choose a different time.', 'error');
-
-                                // Prevent form submission
-                                throw new Error('This time slot is not available. Please choose a different time.');
-                            }
-
-                            // Prepare and submit form data
-                            const formData = new FormData(this);
-                            formData.set('start_time', start24);
-                            formData.set('end_time', end24);
-
-                            // Make sure the language field is included
-                            const languageSelect = document.getElementById('language');
-                            if (languageSelect) {
-                                console.log('Language value:', languageSelect.value);
-                                formData.set('language', languageSelect.value);
-                            }
-
-                            const jsonData = Object.fromEntries(formData.entries());
-                            console.log('Form data being submitted:', jsonData);
-
-                            // Validate required fields before submission
-                            const requiredFields = ['contact_name', 'contact_phone', 'date', 'start_time', 'end_time', 'room_id', 'num_people'];
-                            const missingFields = requiredFields.filter(field => !jsonData[field]);
-
-                            if (missingFields.length > 0) {
-                                throw new Error(`Please fill in all required fields: ${missingFields.join(', ')}`);
-                            }
-
-                            // If this is an update to an existing reservation
-                            if (reservationId) {
-                                // Use all form data for updates, not just time and room
-                                console.log('Updating reservation with data:', jsonData);
-                                return fetch(`/update_reservation/${reservationId}`, {
-                                    method: 'POST',
-                                    headers: {
-                                        'Content-Type': 'application/json',
-                                    },
-                                    body: JSON.stringify(jsonData)
-                                });
-                            } else {
-                                // This is a new reservation
-                                return fetch(this.action, {
-                                    method: 'POST',
-                                    headers: {
-                                        'Content-Type': 'application/json',
-                                    },
-                                    body: JSON.stringify(jsonData)
-                                });
-                            }
-                        })
-                        .then(response => {
-                            if (!response.ok) {
-                                return response.json().then(data => {
-                                    console.log('Error response:', data, 'Status:', response.status);
-
-                                    if (response.status === 409 || data.conflict) {
-                                        // Create a more prominent conflict notification
-                                        const conflictAlert = document.createElement('div');
-                                        conflictAlert.className = 'alert alert-danger conflict-alert';
-                                        conflictAlert.innerHTML = `
-                                            <strong>Time Conflict!</strong>
-                                            <p>This time slot is already occupied by another reservation.</p>
-                                            <p>Please choose a different time or room.</p>
-                                        `;
-
-                                        // Add the alert to the modal body
-                                        const modalBody = document.querySelector('.modal-body');
-
-                                        // Remove any existing conflict alerts
-                                        const existingAlert = modalBody.querySelector('.conflict-alert');
-                                        if (existingAlert) {
-                                            existingAlert.remove();
-                                        }
-
-                                        // Insert the alert at the top of the modal body
-                                        modalBody.insertBefore(conflictAlert, modalBody.firstChild);
-
-                                        // Highlight the conflicting fields
-                                        document.getElementById('start_time').classList.add('is-invalid');
-                                        document.getElementById('end_time').classList.add('is-invalid');
-
-                                        // Scroll to the top of the modal to ensure the alert is visible
-                                        modalBody.scrollTop = 0;
-
-                                        throw new Error('This time slot is already occupied by another reservation. Please choose a different time.');
-                                    } else {
-                                        throw new Error(data.error || 'Failed to save reservation');
-                                    }
-                                }).catch(err => {
-                                    // If JSON parsing fails, throw a generic error with the status
-                                    if (err instanceof SyntaxError) {
-                                        throw new Error(`Server error (${response.status}): Please try again.`);
-                                    }
-                                    throw err;
-                                });
-                            }
-                            return response.json();
-                        })
-                        .then((data) => {
-                            console.log('Reservation saved successfully:', data);
-
-                            // Store the current date before closing the modal
-                            const currentDate = document.getElementById('date').value;
-
-                            // Close the modal
-                            closeReservationModal();
-
-                            // Make sure the calendar stays on the same date
-                            if (currentDate) {
-                                window.calendarEl.dataset.selectedDate = currentDate;
-                                // Update the calendar view to show the current date
-                                window.calendar.gotoDate(new Date(currentDate));
-                            }
-
-                            // Refresh the calendar with the current date
-                            refreshCalendar();
-
-                            // Show success message
-                            if (typeof window.showToast === 'function') {
-                                window.showToast('Reservation ' + (reservationId ? 'updated' : 'created') + ' successfully!');
-                            } else {
-                                console.error('showToast function not found');
-                                alert('Reservation ' + (reservationId ? 'updated' : 'created') + ' successfully!');
-                            }
-                        })
-                        .catch(error => {
-                            console.error('Error:', error);
-                            window.showToast(error.message || 'Error saving reservation. Please try again.', 'error');
-                        });
-                } catch (error) {
-                    console.error('Error:', error);
-                    window.showToast(error.message || 'Invalid time format. Please use the time picker to select times.', 'error');
-                }
-            });
-
-            function formatTime(timeStr) {
-                const [hours, minutes] = timeStr.split(':');
-                const hour = parseInt(hours);
-                const ampm = hour >= 12 ? 'PM' : 'AM';
-                const displayHour = hour % 12 || 12;
-                return `${displayHour}:${minutes} ${ampm}`;
-            }
-
-            function updateRoomTimelines(date) {
-                // Validate date parameter
-                if (!date) {
-                    console.error('Invalid date parameter for updateRoomTimelines');
-                    date = new Date().toISOString().split('T')[0]; // Use today's date as fallback
-                }
-
-                // Show loading state
-                document.querySelectorAll('.room-timeline').forEach(timeline => {
-                    timeline.style.opacity = '0.5';
-                });
-
-                // Store the selected date
-                window.calendarEl.dataset.selectedDate = date;
-
-                // Update the calendar view to show the selected date
-                window.calendar.gotoDate(new Date(date));
-
-                // Fetch reservations for the selected date
-                fetch(`/api/daily_reservations?date=${date}`)
-                    .then(response => {
-                        if (!response.ok) {
-                            throw new Error(`Failed to fetch reservations: ${response.status}`);
-                        }
-                        return response.json();
-                    })
-                    .then(data => {
-                        // Update room timelines
-                        data.rooms.forEach(room => {
-                            const timeline = document.getElementById(`room-${room.id}`);
-                            if (timeline) {
-                                // Clear existing reservations
-                                timeline.innerHTML = '';
-
-                                // Add time slots
-                                for (let hour = 11; hour < 25; hour++) {
-                                    const timeSlot = document.createElement('div');
-                                    timeSlot.className = 'time-slot';
-                                    timeSlot.dataset.hour = hour;
-
-                                    const timeLabel = document.createElement('div');
-                                    timeLabel.className = 'time-label';
-                                    // Use a more compact format for time labels
-                                    const h = hour % 24;
-                                    const ampm = h >= 12 ? 'PM' : 'AM';
-                                    const displayHour = h % 12 || 12;
-                                    timeLabel.textContent = `${displayHour}:00 ${ampm}`;
-                                    timeLabel.style.top = '-20px'; // Ensure consistent positioning with CSS
-                                    timeSlot.appendChild(timeLabel);
-
-                                    // Add reservations for this hour
-                                    room.reservations.forEach(reservation => {
-                                        if (reservation.start_hour === hour) {
-                                            const card = document.createElement('div');
-                                            card.className = 'reservation-card draggable';
-                                            card.dataset.reservationId = reservation.id;
-                                            card.dataset.roomId = room.id;
-                                            card.dataset.hour = hour;
-                                            // Use the same height calculation as in the HTML template
-                                            // Use fixed height calculation to match time slots exactly
-                                            // Each time slot is 40px tall
-                                            card.style.height = `calc(${reservation.duration} * 40px)`;
-                                            card.style.boxSizing = 'border-box';
-                                            card.style.top = '-1px'; // Align with the top border line
-                                            card.onclick = function () {
-                                                showEditReservationModal(reservation.id);
-                                            };
-
-                                            // Add time indicator
-                                            const timeIndicator = document.createElement('div');
-                                            timeIndicator.className = 'time-indicator';
-                                            timeIndicator.innerHTML = `
-                                                <span class="time-range">${formatTime(reservation.start_time)} - ${formatTime(reservation.end_time)}</span>
-                                            `;
-                                            card.appendChild(timeIndicator);
-
-                                            // Create content container
-                                            const content = document.createElement('div');
-                                            content.className = 'content';
-
-                                            // Format name to show first name and last initial
-                                            const nameParts = reservation.contact_name.split(' ');
-                                            let displayName = reservation.contact_name;
-
-                                            if (nameParts.length > 1) {
-                                                const firstName = nameParts[0];
-                                                const lastInitial = nameParts[nameParts.length - 1][0] + '.';
-                                                displayName = `${firstName} ${lastInitial}`;
-                                            }
-
-                                            // Create a name row that contains both name and people count
-                                            const nameRow = document.createElement('div');
-                                            nameRow.className = 'name-row';
-
-                                            // Add name
-                                            const name = document.createElement('strong');
-                                            name.textContent = displayName;
-                                            nameRow.appendChild(name);
-
-                                            // Add people count on the same line
-                                            const people = document.createElement('span');
-                                            people.className = 'people-count';
-                                            people.textContent = `(${reservation.num_people})`;
-                                            nameRow.appendChild(people);
-
-                                            content.appendChild(nameRow);
-
-                                            card.appendChild(content);
-
-                                            timeSlot.appendChild(card);
-                                            timeSlot.classList.add('occupied');
-                                        }
-                                    });
-
-                                    timeline.appendChild(timeSlot);
-                                }
-                            }
-                        });
-
-                        // Update URL and form date
-                        const urlParams = new URLSearchParams(window.location.search);
-                        urlParams.set('date', date);
-                        window.history.replaceState({}, '', `${window.location.pathname}?${urlParams}`);
-                        document.getElementById('date').value = date;
-                    })
-                    .catch(error => {
-                        console.error('Error updating room timelines:', error);
-                    })
-                    .finally(() => {
-                        // Remove loading state
-                        document.querySelectorAll('.room-timeline').forEach(timeline => {
-                            timeline.style.opacity = '1';
-                        });
-                    });
-            }
-
-            // Update the time slot click handler
-            document.querySelectorAll('.room-timeline').forEach(timeline => {
-                timeline.addEventListener('click', function (e) {
-                    if (e.target.classList.contains('time-slot')) {
-                        // Check if the time slot is already occupied
-                        const isOccupied = e.target.classList.contains('occupied');
-                        if (isOccupied) {
-                            return; // Don't allow new reservations on occupied slots
-                        }
-
-                        const hour = e.target.dataset.hour;
-                        const roomId = this.id.replace('room-', '');
-                        // Use the calendar's selected date if available, otherwise use current date
-                        const selectedDate = calendarEl.dataset.selectedDate || '{{ selected_date }}';
-                        showNewReservationModal(hour, roomId, selectedDate);
-                    }
-                });
-            });
-
-            // Initialize with current date's reservations
-            updateRoomTimelines('{{ selected_date }}');
-
-            // Initialize drag and drop functionality
-            initDragAndDrop();
-
-            // Initialize the current time indicator
-            initCurrentTimeIndicator();
-
-            // Initialize flatpickr for time inputs with 12-hour format
-            startTimePicker = flatpickr("#start_time", {
-                enableTime: true,
-                noCalendar: true,
-                dateFormat: "h:i K", // 12-hour format with AM/PM
-                time_24hr: false,
-                minuteIncrement: 30,
-                defaultHour: 11,
-                defaultMinute: 0,
-                disableMobile: "true",
-                allowInput: true, // Allow direct input
-                clickOpens: true, // Open the picker when clicking on the input
-                onChange: function (selectedDates, dateStr) {
-                    updatePriceEstimate();
-                }
-            });
-
-            endTimePicker = flatpickr("#end_time", {
-                enableTime: true,
-                noCalendar: true,
-                dateFormat: "h:i K", // 12-hour format with AM/PM
-                time_24hr: false,
-                minuteIncrement: 30,
-                defaultHour: 13,
-                defaultMinute: 0,
-                disableMobile: "true",
-                allowInput: true, // Allow direct input
-                clickOpens: true, // Open the picker when clicking on the input
-                onChange: function (selectedDates, dateStr) {
-                    updatePriceEstimate();
-                }
-            });
-
-            // Update the form inputs to have type="text" instead of type="time"
-            document.querySelector('#start_time').type = 'text';
-            document.querySelector('#end_time').type = 'text';
-
-            // Initialize drag and drop functionality
-            initDragAndDrop();
-
-            // Delete button event listener is now defined elsewhere
-        });
-
-        function showNewReservationModal(hour, roomId, selectedDate) {
-            currentReservationId = null;
-            document.getElementById('reservationForm').reset();
-            document.getElementById('reservation_id').value = '';
-            document.getElementById('num_people').value = '1'; // Set default to 1 person
-            document.querySelector('.modal-title .en').textContent = 'New Reservation';
-            document.querySelector('.modal-title .zh').textContent = '新预订';
-            document.querySelector('.btn-danger').style.display = 'none';
-
-            // Set the date if provided
-            if (selectedDate) {
-                document.getElementById('date').value = selectedDate;
-            }
-
-            // Set the room if provided
-            if (roomId) {
-                document.getElementById('room_id').value = roomId;
-            }
-
-            // Set the start time and calculate end time (default to 2 hours)
-            if (hour) {
-                const date = new Date();
-                date.setHours(hour, 0, 0, 0);
-                startTimePicker.setDate(date);
-
-                // Set a default end time 2 hours after start time
-                const endDate = new Date(date);
-                endDate.setHours(date.getHours() + 2);
-                endTimePicker.setDate(endDate);
-
-                // Calculate initial price estimate
-                updatePriceEstimate();
-            }
-
-            var modal = new bootstrap.Modal(document.getElementById('reservationModal'), {
-                backdrop: 'static',
-                focus: true
-            });
-
-            // Show the modal
-            modal.show();
-
-            // Set focus to the first input field
-            setTimeout(() => {
-                const firstInput = document.querySelector('#reservationModal input:not([type="hidden"])');
-                if (firstInput) {
-                    firstInput.focus();
-                }
-            }, 100);
-        }
-
-        function closeReservationModal() {
-            const modalEl = document.getElementById('reservationModal');
-            const modal = bootstrap.Modal.getInstance(modalEl);
-
-            if (modal) {
-                // Store the current date before closing the modal
-                const currentDate = document.getElementById('date').value;
-
-                // Set window.keepReservationDate to true to preserve the date
-                window.keepReservationDate = true;
-
-                // We'll keep the reservation date in the dataset for future use
-                modalEl.dataset.reservationDate = currentDate;
-
-                // Reset form and clear any validation states
-                document.getElementById('reservationForm').reset();
-                document.querySelectorAll('.form-control').forEach(input => {
-                    input.classList.remove('is-invalid', 'is-valid');
-                });
-
-                // Remove any temporary visual indicators
-                document.querySelectorAll('.time-slot').forEach(slot => {
-                    slot.classList.remove('selected');
-                });
-
-                // Properly close the modal
-                modal.hide();
-
-                // Remove aria-hidden attribute to fix accessibility issue
-                setTimeout(() => {
-                    if (modalEl.classList.contains('show')) {
-                        modalEl.classList.remove('show');
-                    }
-                    if (modalEl.getAttribute('aria-hidden') === 'true') {
-                        modalEl.removeAttribute('aria-hidden');
-                    }
-                    document.body.classList.remove('modal-open');
-                    const backdrop = document.querySelector('.modal-backdrop');
-                    if (backdrop) {
-                        backdrop.remove();
-                    }
-                }, 300);
-            }
-        }
-
-        function showEditReservationModal(reservationId) {
-            // Set the current reservation ID globally
-            window.currentReservationId = reservationId;
-            currentReservationId = reservationId;
-
-            // Set the form's hidden input
-            document.getElementById('reservation_id').value = reservationId;
-
-            // Update the modal title
-            document.querySelector('.modal-title .en').textContent = 'Edit Reservation';
-            document.querySelector('.modal-title .zh').textContent = '编辑预订';
-
-            // Show the delete button
-            document.querySelector('.btn-danger').style.display = 'block';
-
-            console.log('Edit modal opened for reservation ID:', reservationId);
-
-            // Fetch reservation details
-            fetch(`/get_reservation/${reservationId}`)
-                .then(response => response.json())
-                .then(data => {
-                    // Store the reservation date in a data attribute for later use
-                    document.getElementById('reservationModal').dataset.reservationDate = data.date;
-                    document.getElementById('date').value = data.date;
-
-                    // Convert 24-hour times to 12-hour format for display
-                    const startTime = new Date(`2000-01-01T${data.start_time}`);
-
-                    // Handle end time that might be after midnight (e.g., 01:00)
-                    let endTimeStr = data.end_time;
-                    let endTimeDate;
-
-                    // If end time is earlier than start time (e.g., 01:00 vs 22:00), it's likely the next day
-                    if (data.end_time < data.start_time) {
-                        // Use the next day (2000-01-02) for the end time
-                        endTimeDate = new Date(`2000-01-02T${data.end_time}`);
-                    } else {
-                        // Use the same day for the end time
-                        endTimeDate = new Date(`2000-01-01T${data.end_time}`);
-                    }
-
-                    startTimePicker.setDate(startTime);
-                    endTimePicker.setDate(endTimeDate);
-
-                    document.getElementById('num_people').value = data.num_people;
-                    document.getElementById('contact_name').value = data.contact_name;
-                    document.getElementById('contact_phone').value = data.contact_phone;
-                    document.getElementById('contact_email').value = data.contact_email;
-                    document.getElementById('room_id').value = data.room_id;
-                    // Set the language dropdown value and log it for debugging
-                    console.log('Language from server:', data.language);
-                    document.getElementById('language').value = data.language || 'en';
-                    console.log('Language dropdown set to:', document.getElementById('language').value);
-
-                    // Update price estimate with the new times
-                    updatePriceEstimate();
-
-                    // Update the calendar to show the reservation's date
-                    window.calendar.gotoDate(new Date(data.date));
-                });
-
-            var modal = new bootstrap.Modal(document.getElementById('reservationModal'), {
-                backdrop: 'static',
-                focus: true
-            });
-
-            // Show the modal
-            modal.show();
-
-            // Set focus to the first input field
-            setTimeout(() => {
-                const firstInput = document.querySelector('#reservationModal input:not([type="hidden"])');
-                if (firstInput) {
-                    firstInput.focus();
-                }
-            }, 100);
-        }
-
-        function showTodaySummary() {
-            // Implementation for showing today's summary
-            // This could open a modal with detailed statistics
-        }
-
-        // Function to update room availability
-        function updateRoomAvailability(date) {
-            fetch(`/api/room_availability?date=${date}`)
-                .then(response => response.json())
-                .then(data => {
-                    const roomSelect = document.querySelector("#room_id");
-                    Array.from(roomSelect.options).forEach(option => {
-                        const roomId = option.value;
-                        if (data.available_rooms.includes(parseInt(roomId))) {
-                            option.disabled = false;
-                            option.classList.remove('unavailable');
-                        } else {
-                            option.disabled = true;
-                            option.classList.add('unavailable');
-                        }
-                    });
-                });
-        }
-
-        function updatePriceEstimate() {
-            const startTime = document.getElementById('start_time').value;
-            const endTime = document.getElementById('end_time').value;
-
-            if (startTime && endTime) {
-                // Convert times to 24-hour format for calculation
-                const formatTimeFor24Hour = (timeStr) => {
-                    const [time, period] = timeStr.split(' ');
-                    let [hours, minutes] = time.split(':');
-                    hours = parseInt(hours);
-                    if (period === 'PM' && hours !== 12) hours += 12;
-                    if (period === 'AM' && hours === 12) hours = 0;
-                    return { hours: parseInt(hours), minutes: parseInt(minutes) };
-                };
-
-                const start = formatTimeFor24Hour(startTime);
-                const end = formatTimeFor24Hour(endTime);
-
-                // Calculate duration and costs for different time periods
-                let totalCost = 0;
-                let periodCharges = [];
-
-                // Helper function to format time for display
-                const formatTimeDisplay = (hours, minutes) => {
-                    // Handle hours >= 24 for overnight reservations (e.g., 1 AM next day)
-                    const normalizedHours = hours % 24;
-                    // For hours >= 24, it's always AM (early morning next day)
-                    const period = hours >= 24 ? 'AM' : (normalizedHours >= 12 ? 'PM' : 'AM');
-                    const displayHours = normalizedHours % 12 || 12;
-                    return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
-                };
-
-                // Function to calculate cost for a time segment
-                const calculateSegmentCost = (segmentStart, segmentEnd) => {
-                    const earlyBirdRate = 35; // $35/hour for early bird (11am-6pm)
-                    const eveningRate = 50;    // $50/hour for evening (6pm-1am)
-
-                    let hours = segmentEnd.hours - segmentStart.hours;
-                    let minutes = segmentEnd.minutes - segmentStart.minutes;
-
-                    if (minutes < 0) {
-                        hours -= 1;
-                        minutes += 60;
-                    }
-
-                    const duration = hours + (minutes / 60);
-
-                    // Determine rate based on time period
-                    let rate;
-                    // Normalize hours for rate calculation (handle hours >= 24)
-                    const normalizedHour = segmentStart.hours % 24;
-
-                    if (normalizedHour >= 18 || normalizedHour < 1 || normalizedHour === 0) { // 6pm-1am (including midnight)
-                        rate = eveningRate;
-                    } else { // 11am-6pm
-                        rate = earlyBirdRate;
-                    }
-
-                    return {
-                        startTime: formatTimeDisplay(segmentStart.hours, segmentStart.minutes),
-                        endTime: formatTimeDisplay(segmentEnd.hours, segmentEnd.minutes),
-                        rate: rate,
-                        duration: duration.toFixed(1),
-                        cost: rate * duration
-                    };
-                };
-
-                // Handle time periods
-                let currentTime = { ...start };
-
-                // Convert end hours for overnight reservations (12 AM becomes 24, 1 AM becomes 25)
-                let endTime24 = end.hours;
-                if (end.hours < start.hours || end.hours === 0) {
-                    // If end time is earlier than start time or is midnight (0), it's an overnight reservation
-                    endTime24 = end.hours === 0 ? 24 : end.hours + 24;
-                }
-
-                while (currentTime.hours < endTime24) {
-                    let periodEnd;
-
-                    if (currentTime.hours < 18 && endTime24 > 18) {
-                        // If reservation crosses 6 PM boundary
-                        periodEnd = { hours: 18, minutes: 0 };
-                    } else {
-                        // Otherwise go to end time
-                        periodEnd = { hours: endTime24, minutes: end.minutes };
-                    }
-
-                    const segment = calculateSegmentCost(currentTime, periodEnd);
-                    periodCharges.push(segment);
-                    totalCost += segment.cost;
-
-                    if (periodEnd.hours === 18) {
-                        // Start next segment from 6 PM
-                        currentTime = { hours: 18, minutes: 0 };
-                    } else {
-                        break;
-                    }
-                }
-
-                // Calculate tax
-                const tax = totalCost * 0.055;
-                const finalTotal = totalCost + tax;
-
-                // Update the display
-                document.getElementById('period-charges').innerHTML = periodCharges.map(period => `
-                    <div class="period-charge">
-                        <div>${period.startTime} - ${period.endTime}</div>
-                        <div>$${period.rate}/hr × ${period.duration}hr = $${period.cost.toFixed(2)}</div>
-                    </div>
-                `).join('');
-
-                document.getElementById('room-rate').textContent = `$${totalCost.toFixed(2)}`;
-                document.getElementById('tax-amount').textContent = `$${tax.toFixed(2)}`;
-                document.getElementById('total-cost').textContent = `$${finalTotal.toFixed(2)}`;
-
-                // Update the cost summary in the timeline if it exists
-                const timeSlot = document.querySelector('.time-slot.selected');
-                if (timeSlot) {
-                    const costSummary = timeSlot.querySelector('.cost-summary') || document.createElement('div');
-                    costSummary.className = 'cost-summary';
-                    costSummary.textContent = `$${finalTotal.toFixed(2)}`;
-                    if (!timeSlot.querySelector('.cost-summary')) {
-                        timeSlot.appendChild(costSummary);
-                    }
-                }
-            }
-        }
-
-        function suggestRoom() {
-            const numPeople = document.getElementById('num_people').value;
-            if (numPeople) {
-                fetch('/api/room_suggestion', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        num_people: numPeople
-                    })
-                })
-                    .then(response => response.json())
-                    .then(data => {
-                        const roomSelect = document.getElementById('room_id');
-                        const suggestionReason = document.getElementById('room-suggestion-reason');
-
-                        // Update room selection
-                        Array.from(roomSelect.options).forEach(option => {
-                            if (data.suggested_rooms.includes(parseInt(option.value))) {
-                                option.classList.add('suggested');
-                            } else {
-                                option.classList.remove('suggested');
-                            }
-                        });
-
-                        suggestionReason.textContent = data.reason;
-                    });
-            }
-        }
-
-        function findAlternativeTimes() {
-            const date = document.getElementById('date').value;
-            const startTime = document.getElementById('start_time').value;
-            const roomId = document.getElementById('room_id').value;
-
-            if (date && startTime && roomId) {
-                document.querySelector('.loading-indicator').classList.add('active');
-
-                fetch('/api/alternative_times', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        date: date,
-                        start_time: startTime,
-                        room_id: roomId
-                    })
-                })
-                    .then(response => response.json())
-                    .then(data => {
-                        const timeSuggestion = document.querySelector('.time-suggestion');
-                        const alternativeTimes = document.getElementById('alternative-times');
-
-                        if (data.alternatives && data.alternatives.length > 0) {
-                            alternativeTimes.innerHTML = data.alternatives.map(time => `
-                            <button class="suggestion-time-btn" onclick="selectAlternativeTime('${time}')">
-                                ${time}
-                            </button>
-                        `).join('');
-                            timeSuggestion.style.display = 'block';
-                        } else {
-                            timeSuggestion.style.display = 'none';
-                        }
-                    })
-                    .finally(() => {
-                        document.querySelector('.loading-indicator').classList.remove('active');
-                    });
-            }
-        }
-
-        function selectAlternativeTime(time) {
-            document.getElementById('start_time').value = time;
-            updatePriceEstimate();
-            findAlternativeTimes();
-        }
-
-        // Add event listeners for quick duration buttons
-        document.querySelectorAll('.duration-btn').forEach(button => {
-            button.addEventListener('click', function () {
-                // Get the hours from the button's data attribute
-                const hours = parseInt(this.dataset.hours);
-                const startTime = startTimePicker.selectedDates[0];
-
-                if (startTime) {
-                    // Calculate the end time based on the start time and duration
-                    const endTime = new Date(startTime);
-                    endTime.setHours(endTime.getHours() + hours);
-
-                    // Set the end time in the picker
-                    endTimePicker.setDate(endTime);
-
-                    // Update the price estimate
-                    updatePriceEstimate();
-
-                    // Briefly add active class for visual feedback, then remove it
-                    this.classList.add('active');
-                    setTimeout(() => {
-                        this.classList.remove('active');
-                    }, 200);
-                }
-            });
-        });
-
-        // Add event listeners for form inputs
-        document.getElementById('num_people').addEventListener('change', suggestRoom);
-        document.getElementById('start_time').addEventListener('change', () => {
-            updatePriceEstimate();
-            findAlternativeTimes();
-        });
-        document.getElementById('end_time').addEventListener('change', updatePriceEstimate);
-        document.getElementById('room_id').addEventListener('change', findAlternativeTimes);
-
-        // Update the reservation card creation
-        function createReservationCard(reservation) {
-            const card = document.createElement('div');
-            card.className = 'reservation-card';
-            card.dataset.reservationId = reservation.id;
-
-            // Calculate duration considering midnight crossing
-            let startHour = parseInt(reservation.start_time.split(':')[0]);
-            let endHour = parseInt(reservation.end_time.split(':')[0]);
-
-            // Adjust end hour for after midnight
-            if (endHour < startHour && endHour <= 1) {
-                endHour += 24;
-            }
-
-            const duration = endHour - startHour;
-            card.style.height = `${(duration * 30)}px`;
-
-            card.onclick = function () {
-                showEditReservationModal(reservation.id);
-            };
-
-            // Add time indicator
-            const timeIndicator = document.createElement('div');
-            timeIndicator.className = 'time-indicator';
-            timeIndicator.innerHTML = `
-                <span class="time-range">${formatTime(reservation.start_time)} - ${formatTime(reservation.end_time)}</span>
-            `;
-            card.appendChild(timeIndicator);
-
-            const content = document.createElement('div');
-            content.className = 'content';
-
-            // Format name to show first name and last initial
-            const nameParts = reservation.contact_name.split(' ');
-            let displayName = reservation.contact_name;
-
-            if (nameParts.length > 1) {
-                const firstName = nameParts[0];
-                const lastInitial = nameParts[nameParts.length - 1][0] + '.';
-                displayName = `${firstName} ${lastInitial}`;
-            }
-
-            // Create a name row that contains both name and people count
-            const nameRow = document.createElement('div');
-            nameRow.className = 'name-row';
-
-            // Add name
-            const name = document.createElement('strong');
-            name.textContent = displayName;
-            nameRow.appendChild(name);
-
-            // Add people count on the same line
-            const people = document.createElement('span');
-            people.className = 'people-count';
-            people.textContent = `(${reservation.num_people})`;
-            nameRow.appendChild(people);
-
-            content.appendChild(nameRow);
-
-            card.appendChild(content);
-            return card;
-        }
-
-        // Update the modal's close button to use closeReservationModal
-        document.querySelector('#reservationModal .btn-close').addEventListener('click', closeReservationModal);
-
-        // Add event listener for the delete button
-        document.getElementById('delete-reservation-btn').addEventListener('click', function () {
-            console.log('Delete button clicked');
-
-            // Get the reservation ID from the form for logging
-            const reservationId = document.getElementById('reservation_id').value;
-            console.log('Form reservation ID before deletion:', reservationId);
-
-            // Call the window.deleteReservation function which handles confirmation
-            try {
-                window.deleteReservation();
-            } catch (error) {
-                console.error('Error in deleteReservation function:', error);
-                alert('Error in delete function: ' + error.message);
-            }
-        });
-
-        // Initialize drag and drop functionality
-        function initDragAndDrop() {
-            // Initialize the idle area as a Sortable container
-            const idleArea = document.getElementById('idle-area');
-            if (!idleArea) return;
-
-            // Create sortable for the idle area
-            new Sortable(idleArea, {
-                group: 'reservations',
-                animation: 150,
-                ghostClass: 'ghost',
-                dragClass: 'drag-source',
-                handle: '.reservation-card', // Use reservation cards as handles
-                draggable: '.reservation-card', // Only reservation cards should be draggable
-                onEnd: function (evt) {
-                    handleReservationMove(evt);
-                    // Restack cards after drag ends
-                    restackIdleCards();
-                }
-            });
-
-            // Make each room timeline a sortable container
-            document.querySelectorAll('.room-timeline').forEach(timeline => {
-                new Sortable(timeline, {
-                    group: 'reservations',
-                    animation: 150,
-                    ghostClass: 'ghost',
-                    dragClass: 'drag-source',
-                    filter: '.time-label', // Prevent dragging time labels
-                    handle: '.reservation-card', // Use reservation cards as handles
-                    draggable: '.reservation-card', // Only reservation cards should be draggable
-                    onEnd: function (evt) {
-                        handleReservationMove(evt);
-                    }
-                });
-            });
-
-            // Make each time slot a drop target
-            document.querySelectorAll('.time-slot').forEach(timeSlot => {
-                timeSlot.addEventListener('dragover', function (e) {
-                    e.preventDefault();
-                    this.classList.add('drag-over');
-                });
-
-                timeSlot.addEventListener('dragleave', function () {
-                    this.classList.remove('drag-over');
-                });
-
-                timeSlot.addEventListener('drop', function (e) {
-                    e.preventDefault();
-                    this.classList.remove('drag-over');
-                });
-            });
-
-            // Add click handler for idle area cards to bring them to the top
-            idleArea.addEventListener('click', function (e) {
-                const card = e.target.closest('.reservation-card');
-                if (card) {
-                    // Remove the card and add it back to the top
-                    card.remove();
-                    idleArea.prepend(card);
-                    // Restack all cards
-                    restackIdleCards();
-
-                    // Prevent the click from triggering the modal
-                    e.stopPropagation();
-                }
-            });
-
-            // Initial stacking of cards
-            restackIdleCards();
-        }
-
-        // Function to restack cards in the idle area
-        function restackIdleCards() {
-            const idleArea = document.getElementById('idle-area');
-            if (!idleArea) return;
-
-            const cards = idleArea.querySelectorAll('.reservation-card');
-
-            // Reset z-index and margins
-            cards.forEach((card, index) => {
-                card.style.zIndex = 10 - index;
-
-                if (index === 0) {
-                    card.style.marginTop = '0';
-                } else {
-                    card.style.marginTop = '-40px';
-                }
-            });
-        }
-
-        // Handle reservation moves between containers
-        function handleReservationMove(evt) {
-            const reservationCard = evt.item;
-            const reservationId = reservationCard.dataset.reservationId;
-            const fromContainer = evt.from;
-            const toContainer = evt.to;
-
-            // Check if we have a valid reservation ID
-            if (!reservationId || reservationId === 'undefined') {
-                console.error('Invalid reservation ID');
-                return;
-            }
-
-            // If moved to idle area
-            if (toContainer.id === 'idle-area') {
-                console.log(`Reservation ${reservationId} moved to idle area`);
-
-                // Move the card to the top of the idle area
-                toContainer.removeChild(reservationCard);
-                toContainer.prepend(reservationCard);
-
-                // Update the backend to mark this reservation as idle
-                fetch(`/move_to_idle/${reservationId}`, {
-                    method: 'POST'
-                })
-                    .then(response => response.json())
-                    .then(data => {
-                        console.log('Moved to idle area:', data);
-                    })
-                    .catch(error => {
-                        console.error('Error moving to idle area:', error);
-                    });
-
-                return;
-            }
-
-            // If moved from idle area to a room timeline
-            if (fromContainer.id === 'idle-area' && toContainer.classList.contains('room-timeline')) {
-                const roomId = toContainer.dataset.roomId;
-                const timeSlot = reservationCard.closest('.time-slot');
-
-                if (timeSlot) {
-                    const hour = timeSlot.dataset.hour;
-
-                    // First remove from idle area in the backend
-                    fetch(`/remove_from_idle/${reservationId}`, {
-                        method: 'POST'
-                    })
-                        .then(response => response.json())
-                        .then(data => {
-                            console.log('Removed from idle area:', data);
-                            // Then update the reservation with new time and room
-                            moveReservation(reservationId, roomId, hour);
-                        })
-                        .catch(error => {
-                            console.error('Error removing from idle area:', error);
-                        });
-                }
-                return;
-            }
-
-            // If moved between time slots in the same or different room
-            if (toContainer.classList.contains('room-timeline')) {
-                const roomId = toContainer.dataset.roomId;
-                const timeSlot = reservationCard.closest('.time-slot');
-
-                if (timeSlot) {
-                    const hour = timeSlot.dataset.hour;
-                    moveReservation(reservationId, roomId, hour);
-                }
-            }
-        }
-
-        // Function to call the API to move a reservation
-        function moveReservation(reservationId, roomId, hour) {
-            // Check if we have a valid reservation ID
-            if (!reservationId || reservationId === 'undefined') {
-                console.error('Invalid reservation ID');
-                return;
-            }
-
-            // Get the current date from the calendar
-            const selectedDate = calendarEl.dataset.selectedDate || document.getElementById('date').value;
-
-            // Find the reservation card
-            const card = document.querySelector(`.reservation-card[data-reservation-id="${reservationId}"]`);
-            if (!card) {
-                console.error('Reservation card not found');
-                return;
-            }
-
-            // Get the current duration from the card
-            const duration = parseFloat(card.dataset.duration) || 1;
-
-            // Calculate new start and end times
-            const newStartHour = parseInt(hour);
-            const newEndHour = newStartHour + duration;
-
-            // Format times for API
-            const startTime = `${newStartHour.toString().padStart(2, '0')}:00`;
-            const endTime = `${Math.floor(newEndHour).toString().padStart(2, '0')}:${(newEndHour % 1 * 60).toString().padStart(2, '0')}`;
-
-            // Update the card's data attributes
-            card.dataset.hour = newStartHour;
-            card.dataset.startTime = startTime;
-            card.dataset.endTime = endTime;
-
-            // Update the card's display
-            const timeRange = card.querySelector('.time-range');
-            if (timeRange) {
-                timeRange.textContent = `${startTime} - ${endTime}`;
-            }
-
-            // Call the API to update the reservation
-            fetch(`/update_reservation/${reservationId}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    room_id: roomId,
-                    start_time: startTime,
-                    end_time: endTime,
-                    date: selectedDate
-                })
-            })
-                .then(response => {
-                    if (!response.ok) {
-                        return response.json().then(data => {
-                            if (data.conflict) {
-                                throw new Error('This time slot is already occupied by another reservation. Please choose a different time.');
-                            } else {
-                                throw new Error(data.error || 'Failed to update reservation');
-                            }
-                        });
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    console.log('Reservation updated successfully:', data);
-                    // Show success message
-                    showToast('Reservation updated successfully!');
-                    // Refresh the room timelines to show the updated reservation
-                    updateRoomTimelines(selectedDate);
-                })
-                .catch(error => {
-                    console.error('Error updating reservation:', error);
-                    showToast(error.message || 'Error updating reservation. Please try again.', 'error');
-                    // Refresh to restore the original state
-                    updateRoomTimelines(selectedDate);
-                });
-        }
-    </script>
+    <script src="{{ url_for('static', filename='js/form-validation.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/enhanced-calendar.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/improved-layout.js') }}"></script>
 </body>
 
 </html>

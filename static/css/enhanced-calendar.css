@@ -1,0 +1,184 @@
+/* Enhanced Calendar Styling */
+
+/* Calendar container */
+.calendar-container {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+    overflow: hidden;
+    background: white;
+}
+
+/* Calendar header */
+.fc .fc-toolbar {
+    padding: 16px;
+    background: #f8f9fa;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.fc .fc-toolbar-title {
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: #343a40;
+}
+
+/* Calendar buttons */
+.fc .fc-button-primary {
+    background-color: #007bff;
+    border-color: #007bff;
+    box-shadow: none;
+    transition: all 0.2s ease;
+}
+
+.fc .fc-button-primary:hover {
+    background-color: #0069d9;
+    border-color: #0062cc;
+}
+
+.fc .fc-button-primary:not(:disabled):active,
+.fc .fc-button-primary:not(:disabled).fc-button-active {
+    background-color: #0062cc;
+    border-color: #005cbf;
+}
+
+/* Day cells */
+.fc .fc-daygrid-day {
+    transition: all 0.2s ease;
+}
+
+.fc .fc-daygrid-day:hover {
+    background-color: #f8f9fa;
+}
+
+.fc .fc-daygrid-day.fc-day-today {
+    background-color: rgba(0, 123, 255, 0.1);
+}
+
+/* Selected date */
+.fc .fc-daygrid-day.selected-date {
+    background-color: rgba(0, 123, 255, 0.2);
+    box-shadow: inset 0 0 0 3px #007bff;
+    position: relative;
+    z-index: 5;
+}
+
+.fc .fc-daygrid-day.selected-date::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border: 2px solid #007bff;
+    border-radius: 4px;
+    pointer-events: none;
+    z-index: 10;
+}
+
+/* Day numbers */
+.fc .fc-daygrid-day-number {
+    font-weight: 500;
+    padding: 8px;
+    color: #495057;
+}
+
+.fc .fc-day-today .fc-daygrid-day-number {
+    color: #007bff;
+    font-weight: 700;
+}
+
+/* Availability indicators */
+.fc .fc-daygrid-day-events {
+    display: block !important;
+    margin-top: 0;
+    position: relative;
+    min-height: 0;
+}
+
+.fc .fc-daygrid-day-bg {
+    display: block !important;
+}
+
+/* Availability colors */
+.fc .availability-indicator {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    opacity: 0.7;
+    z-index: 1;
+}
+
+.fc .availability-high {
+    background-color: #28a745;
+}
+
+.fc .availability-medium {
+    background-color: #ffc107;
+}
+
+.fc .availability-low {
+    background-color: #fd7e14;
+}
+
+.fc .availability-none {
+    background-color: #dc3545;
+}
+
+/* Reservation count badge */
+.fc .reservation-count {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: white;
+    color: #343a40;
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: bold;
+    z-index: 2;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+/* Tooltip styling */
+.calendar-tooltip {
+    padding: 8px;
+    background: white;
+    border-radius: 4px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+    max-width: 200px;
+}
+
+.calendar-tooltip strong {
+    display: block;
+    margin-bottom: 5px;
+    color: #343a40;
+}
+
+.calendar-tooltip p {
+    margin: 3px 0;
+    color: #6c757d;
+    font-size: 0.9em;
+}
+
+/* Past dates */
+.fc .fc-day-past {
+    opacity: 0.6;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .fc .fc-toolbar {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .fc .fc-toolbar-title {
+        font-size: 1.2rem;
+    }
+}

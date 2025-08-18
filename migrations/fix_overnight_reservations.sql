@@ -15,13 +15,12 @@ CREATE TABLE reservations_new (
     language TEXT DEFAULT 'en',
     status TEXT CHECK(status IN ('confirmed', 'cancelled', 'completed', 'no_show')) DEFAULT 'confirmed',
     total_cost REAL NOT NULL,
-    deposit_paid REAL DEFAULT 0.00,
     notes TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (room_id) REFERENCES rooms(id),
     CHECK (num_people > 0),
-    CHECK (start_time >= '11:00' AND (end_time <= '25:00' OR end_time <= '01:00'))
+    CHECK (start_time >= '11:00' AND end_time <= '25:00')
 );
 
 -- Copy data from the old table to the new one

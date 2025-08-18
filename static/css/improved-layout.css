@@ -1,0 +1,719 @@
+/* Improved Layout CSS - Following CRAP Principles */
+
+/* ===== GLOBAL STYLES ===== */
+:root {
+  --primary-color: #3498db;
+  --primary-dark: #2980b9;
+  --secondary-color: #2ecc71;
+  --secondary-dark: #27ae60;
+  --accent-color: #e74c3c;
+  --light-gray: #f8f9fa;
+  --medium-gray: #e9ecef;
+  --dark-gray: #495057;
+  --text-color: #343a40;
+  --border-radius: 8px;
+  --box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  --transition: all 0.2s ease-in-out;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  color: var(--text-color);
+  background-color: #f5f7fa;
+  line-height: 1.5;
+}
+
+/* ===== HEADER (always single line) ===== */
+.header {
+  grid-area: header;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 4px 12px 0 4px;
+  min-width: 0; /* allow flex children to shrink */
+}
+.header h1 {
+  font-size: 1.35rem;
+  font-weight: 600;
+  margin: 0;
+  white-space: nowrap; /* keep on one line */
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.header-actions { flex-shrink: 0; }
+
+/* ===== LAYOUT IMPROVEMENTS ===== */
+.main-container {
+  display: grid;
+  grid-template-columns: 380px 1fr; /* widen sidebar (calendar) */
+  grid-template-rows: auto 1fr;
+  grid-template-areas:
+    "header header"
+    "sidebar content";
+  gap: 16px;
+  padding: 16px;
+  height: calc(100vh - 32px);
+  min-height: 600px;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.page-header {
+  grid-area: header;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.page-title {
+  font-size: 1.75rem;
+  font-weight: 600;
+  margin: 0;
+  color: var(--text-color);
+}
+
+.sidebar {
+  grid-area: sidebar;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.content-area {
+  grid-area: content;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ===== CALENDAR IMPROVEMENTS ===== */
+.calendar-container {
+  width: 100%;
+  height: 340px; /* bigger calendar */
+  background: white;
+  border-radius: var(--border-radius);
+  box-shadow: var(--box-shadow);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.calendar-controls.simple { display:flex; gap:6px; padding:6px 8px; border-bottom:1px solid var(--medium-gray); }
+.calendar-controls.simple .btn { flex:0 0 auto; }
+.calendar-container #calendar { flex:1; }
+
+.selected-date-display { font-weight:600; font-size:0.95rem; }
+
+/* Make calendar more compact */
+.fc .fc-toolbar {
+  padding: 8px;
+}
+
+.fc .fc-toolbar-title {
+  font-size: 1.1rem;
+}
+
+.fc .fc-button {
+  padding: 0.2rem 0.4rem;
+  font-size: 0.8rem;
+}
+
+.fc .fc-daygrid-day {
+  min-height: 32px;
+}
+
+.fc .fc-daygrid-day-number {
+  padding: 2px 4px;
+  font-size: 0.8rem;
+}
+
+/* Highlight selected date */
+.fc .fc-daygrid-day.fc-day-today {
+  background-color: rgba(52, 152, 219, 0.15);
+}
+
+/* Highlight available days */
+.fc .fc-day-future:not(.fc-day-other) {
+  background-color: rgba(46, 204, 113, 0.05);
+}
+
+/* Hover effect on days */
+.fc .fc-daygrid-day:hover {
+  background-color: rgba(52, 152, 219, 0.1);
+  cursor: pointer;
+}
+
+/* ===== IDLE AREA IMPROVEMENTS ===== */
+.idle-area-container {
+  width: 100%;
+  background: white;
+  border-radius: var(--border-radius);
+  box-shadow: var(--box-shadow);
+  overflow: hidden;
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.idle-area-header {
+  background: var(--primary-color);
+  color: white;
+  padding: 8px 12px;
+  font-weight: 500;
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.idle-area {
+  padding: 12px;
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Style for idle reservations */
+.idle-area .reservation-card {
+  position: relative;
+  width: 100%;
+  left: 0;
+  margin-bottom: 8px;
+  background: var(--secondary-color);
+}
+
+/* ===== ROOMS CONTAINER IMPROVEMENTS ===== */
+.rooms-container {
+  display: flex;
+  gap: 12px;
+  overflow-y: auto;
+  overflow-x: auto;
+  height: 100%;
+  padding-bottom: 12px;
+}
+
+.room-container {
+  flex: 0 0 230px; /* narrower columns */
+  max-width: 230px;
+  height: 100%;
+  background: white;
+  border-radius: var(--border-radius);
+  box-shadow: var(--box-shadow);
+  display: flex;
+  flex-direction: column;
+}
+
+.room-header {
+  background: var(--primary-color);
+  color: white;
+  padding: 10px;
+  text-align: center;
+  border-radius: var(--border-radius) var(--border-radius) 0 0;
+  font-weight: 500;
+  font-size: 1rem;
+}
+
+.room-timeline-wrapper {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.time-labels {
+  width: 70px;
+  background: var(--light-gray);
+  border-right: 1px solid var(--medium-gray);
+  overflow: hidden;
+  height: 100%;
+  position: sticky;
+  left: 0;
+  top: 0;
+  z-index: 5;
+}
+
+.time-label {
+  height: 30px;
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  font-size: 0.75rem;
+  color: var(--dark-gray);
+  border-bottom: 1px solid var(--medium-gray);
+  white-space: nowrap;
+}
+
+.room-timeline {
+  flex: 1;
+  overflow-y: auto;
+  position: relative;
+  height: 100%;
+  scroll-behavior: smooth;
+}
+
+/* ===== TIME SLOTS ===== */
+.time-slot {
+  height: 30px;
+  border-bottom: 1px solid var(--medium-gray);
+  position: relative;
+  cursor: pointer;
+}
+
+.time-slot:hover {
+  background-color: rgba(52, 152, 219, 0.1);
+}
+
+/* ===== RESERVATION CARDS ===== */
+.reservation-card {
+  position: absolute;
+  width: calc(100% - 8px);
+  left: 4px;
+  background: var(--primary-color);
+  color: white;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  cursor: grab;
+  z-index: 10;
+  transition: var(--transition);
+}
+
+.reservation-card:hover {
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  transform: translateY(-2px);
+}
+
+.reservation-card .time-indicator {
+  background: rgba(0, 0, 0, 0.2);
+  padding: 2px 6px;
+  font-size: 0.7rem;
+  font-weight: 500;
+}
+
+.reservation-card .content {
+  padding: 4px 6px;
+}
+
+.reservation-card .name-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 4px;
+}
+
+.reservation-card strong {
+  font-size: 0.8rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+.reservation-card .people-count {
+  font-size: 0.7rem;
+  background: rgba(255, 255, 255, 0.2);
+  padding: 1px 4px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+/* Drag and drop states */
+.reservation-ghost {
+  opacity: 0.5;
+}
+
+.reservation-chosen {
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+}
+
+.reservation-drag {
+  opacity: 0.8;
+}
+
+/* ===== CURRENT TIME INDICATOR ===== */
+.current-time-indicator {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background-color: var(--accent-color);
+  z-index: 5;
+  pointer-events: none;
+}
+
+.current-time-indicator::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: -3px;
+  width: 8px;
+  height: 8px;
+  background-color: var(--accent-color);
+  border-radius: 50%;
+}
+
+/* ===== RESPONSIVE ADJUSTMENTS ===== */
+@media (max-width: 992px) {
+  .main-container {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "header"
+      "sidebar"
+      "content";
+  }
+
+  .sidebar {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  .calendar-container {
+    height: 300px;
+  }
+}
+
+@media (max-width: 768px) {
+  .sidebar {
+    grid-template-columns: 1fr;
+  }
+
+  .rooms-container {
+    grid-template-columns: 1fr;
+    overflow-x: auto;
+  }
+}
+
+/* ===== MODAL IMPROVEMENTS ===== */
+.modal-content {
+  border-radius: var(--border-radius);
+  border: none;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  max-width: 500px;
+  margin: 0 auto;
+}
+
+.modal-header {
+  background: var(--primary-color);
+  color: white;
+  border-bottom: none;
+  border-radius: var(--border-radius) var(--border-radius) 0 0;
+  padding: 12px 16px;
+}
+
+.modal-header .modal-title {
+  font-size: 1.1rem;
+  font-weight: 500;
+}
+
+.modal-header .btn-close {
+  color: white;
+  opacity: 0.8;
+  transition: var(--transition);
+}
+
+.modal-header .btn-close:hover {
+  opacity: 1;
+}
+
+.modal-body {
+  padding: 20px;
+}
+
+.modal-footer {
+  border-top: 1px solid var(--medium-gray);
+  padding: 15px 20px;
+}
+
+/* Quick duration buttons */
+.quick-duration-buttons {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.duration-btn {
+  background-color: var(--light-gray);
+  border: 1px solid var(--medium-gray);
+  border-radius: 4px;
+  padding: 4px 12px;
+  font-size: 0.85rem;
+  transition: var(--transition);
+}
+
+.duration-btn:hover {
+  background-color: var(--medium-gray);
+}
+
+.duration-btn.active {
+  background-color: var(--primary-color);
+  color: white;
+  border-color: var(--primary-dark);
+}
+
+/* ===== FORM IMPROVEMENTS ===== */
+.form-control {
+  border-radius: 4px;
+  border: 1px solid var(--medium-gray);
+  padding: 8px 12px;
+  transition: var(--transition);
+  font-size: 0.9rem;
+}
+
+.form-control:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.25);
+}
+
+.form-group label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  margin-bottom: 4px;
+  color: var(--dark-gray);
+}
+
+.form-group .invalid-feedback {
+  font-size: 0.75rem;
+}
+
+.btn {
+  border-radius: 4px;
+  padding: 8px 16px;
+  font-weight: 500;
+  transition: var(--transition);
+  font-size: 0.9rem;
+}
+
+.btn-primary {
+  background-color: var(--primary-color);
+  border-color: var(--primary-color);
+}
+
+.btn-primary:hover {
+  background-color: var(--primary-dark);
+  border-color: var(--primary-dark);
+}
+
+.btn-danger {
+  background-color: var(--accent-color);
+  border-color: var(--accent-color);
+}
+
+.btn-danger:hover {
+  background-color: #c0392b;
+  border-color: #c0392b;
+}
+
+/* Cost breakdown styling */
+.accordion-button {
+  padding: 8px 12px;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.accordion-body {
+  padding: 12px;
+}
+
+.price-breakdown {
+  font-size: 0.85rem;
+}
+
+.breakdown-item {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--medium-gray);
+}
+
+.breakdown-item.total {
+  font-weight: 600;
+  border-top: 2px solid var(--medium-gray);
+  border-bottom: none;
+  padding-top: 6px;
+  margin-top: 6px;
+}
+
+/* ===== TOAST IMPROVEMENTS ===== */
+.toast-container {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 1050;
+}
+
+.toast {
+  border-radius: var(--border-radius);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  min-width: 250px;
+  max-width: 350px;
+  margin-bottom: 10px;
+  opacity: 0;
+  animation: fadeInToast 0.3s ease forwards;
+}
+
+.toast.show {
+  opacity: 1;
+}
+
+.toast .toast-header {
+  padding: 8px 12px;
+  border-bottom: none;
+}
+
+.toast .toast-body {
+  padding: 10px 12px;
+  font-size: 0.9rem;
+}
+
+@keyframes fadeInToast {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ===== UTILITY CLASSES ===== */
+.mb-0 {
+  margin-bottom: 0;
+}
+
+.mb-1 {
+  margin-bottom: 0.25rem;
+}
+
+.mb-2 {
+  margin-bottom: 0.5rem;
+}
+
+.mb-3 {
+  margin-bottom: 1rem;
+}
+
+.mb-4 {
+  margin-bottom: 1.5rem;
+}
+
+.mt-0 {
+  margin-top: 0;
+}
+
+.mt-1 {
+  margin-top: 0.25rem;
+}
+
+.mt-2 {
+  margin-top: 0.5rem;
+}
+
+.mt-3 {
+  margin-top: 1rem;
+}
+
+.mt-4 {
+  margin-top: 1.5rem;
+}
+
+.p-0 {
+  padding: 0;
+}
+
+.p-1 {
+  padding: 0.25rem;
+}
+
+.p-2 {
+  padding: 0.5rem;
+}
+
+.p-3 {
+  padding: 1rem;
+}
+
+.p-4 {
+  padding: 1.5rem;
+}
+
+.text-center {
+  text-align: center;
+}
+
+.text-right {
+  text-align: right;
+}
+
+.text-left {
+  text-align: left;
+}
+
+.d-flex {
+  display: flex;
+}
+
+.flex-column {
+  flex-direction: column;
+}
+
+.justify-content-between {
+  justify-content: space-between;
+}
+
+.align-items-center {
+  align-items: center;
+}
+
+.flex-grow-1 {
+  flex-grow: 1;
+}
+
+.w-100 {
+  width: 100%;
+}
+
+.h-100 {
+  height: 100%;
+}
+
+/* ===== LANGUAGE TOGGLE ===== */
+.lang-en .zh,
+.lang-zh .en {
+  display: none;
+}
+
+.lang-en .en,
+.lang-zh .zh {
+  display: inline-block;
+}
+
+.header-actions {
+  display: flex;
+  gap: 10px;
+}
+
+#language-toggle {
+  font-size: 0.8rem;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+/* ===== ANIMATIONS ===== */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.3s ease-in-out;
+}

@@ -63,15 +63,18 @@ function initDragAndDrop() {
     // Add click handler for idle area cards to bring them to the top
     idleArea.addEventListener("click", function (e) {
       const card = e.target.closest(".reservation-card");
-      if (card) {
+      if (card && !e.target.closest("button")) {
+        // Ensure not clicking a button inside
         console.log("Clicked on idle card", card.dataset.reservationId);
-        // Remove the card and add it back to the top
-        card.remove();
-        idleArea.prepend(card);
+        // Bring card to top visually
+        card.parentNode.prepend(card);
         // Restack all cards
         restackIdleCards();
 
-        // Prevent the click from triggering the modal
+        // Open modal for editing (moved logic here from createIdleReservationCard)
+        openModalForEditing(card.dataset.reservationId);
+
+        // Prevent the click from triggering other handlers if necessary
         e.stopPropagation();
       }
     });
@@ -98,29 +101,54 @@ function initDragAndDrop() {
         console.log("Drag ended in room timeline", evt);
         handleReservationMove(evt);
       },
+      // Add onMove callback for conflict prevention
+      onMove: function (evt) {
+        // evt.related is the element being dragged over
+        const targetSlot = evt.related.closest(".time-slot");
+        const draggedCard = evt.dragged;
+        const draggedReservationId = draggedCard.dataset.reservationId;
+
+        // Allow moving within the same timeline or to the idle area
+        if (evt.to.id === "idle-area") {
+          return true;
+        }
+
+        // Check if dragging over an occupied slot in a room timeline
+        if (targetSlot && targetSlot.classList.contains("occupied")) {
+          // Check if the occupied slot belongs to the card being dragged
+          if (targetSlot.dataset.reservationId === draggedReservationId) {
+            return true; // Allow moving within its own occupied slots
+          }
+          console.log(
+            "Preventing move: Target slot is occupied by another reservation."
+          );
+          return false; // Prevent dropping on an occupied slot
+        }
+
+        // Allow the move otherwise
+        return true;
+      },
+    });
+
+    // Add click listener for cards within timelines to open modal
+    timeline.addEventListener("click", function (e) {
+      const card = e.target.closest(".reservation-card");
+      if (card && !e.target.closest("button")) {
+        // Ensure not clicking a button inside
+        console.log("Clicked on timeline card", card.dataset.reservationId);
+        openModalForEditing(card.dataset.reservationId);
+        e.stopPropagation();
+      }
     });
   });
 
-  // Make each time slot a drop target
-  document.querySelectorAll(".time-slot").forEach((timeSlot) => {
-    timeSlot.addEventListener("dragover", function (e) {
-      e.preventDefault();
-      this.classList.add("drag-over");
-    });
-
-    timeSlot.addEventListener("dragleave", function () {
-      this.classList.remove("drag-over");
-    });
-
-    timeSlot.addEventListener("drop", function (e) {
-      e.preventDefault();
-      this.classList.remove("drag-over");
-      console.log(
-        "Dropped on time slot",
-        this.dataset.hour || this.dataset.time
-      );
-    });
-  });
+  // Remove individual time slot dragover/leave/drop listeners if not needed
+  // The SortableJS library handles the drop zones effectively.
+  // document.querySelectorAll(".time-slot").forEach((timeSlot) => {
+  //   timeSlot.removeEventListener("dragover", ...);
+  //   timeSlot.removeEventListener("dragleave", ...);
+  //   timeSlot.removeEventListener("drop", ...);
+  // });
 }
 
 // Function to restack cards in the idle area
@@ -225,8 +253,9 @@ function handleReservationMove(evt) {
     }
 
     if (timeSlot) {
-      const hour = timeSlot.dataset.hour || timeSlot.dataset.time.split(":")[0];
-      console.log(`Moving from idle to room ${roomId} at hour ${hour}`);
+  const hour = timeSlot.dataset.hour || timeSlot.dataset.time.split(":")[0];
+  const minute = timeSlot.dataset.minute || (timeSlot.dataset.time ? timeSlot.dataset.time.split(":")[1] : 0);
+  console.log(`Moving from idle to room ${roomId} at ${hour}:${minute}`);
 
       // First remove from idle area in the backend
       fetch(`/remove_from_idle/${reservationId}`, {
@@ -236,7 +265,7 @@ function handleReservationMove(evt) {
         .then((data) => {
           console.log("Removed from idle area:", data);
           // Then update the reservation with new time and room
-          moveReservation(reservationId, roomId, hour);
+          moveReservation(reservationId, roomId, hour, minute);
         })
         .catch((error) => {
           console.error("Error removing from idle area:", error);
@@ -283,9 +312,10 @@ function handleReservationMove(evt) {
     }
 
     if (timeSlot) {
-      const hour = timeSlot.dataset.hour || timeSlot.dataset.time.split(":")[0];
-      console.log(`Moving to room ${roomId} at hour ${hour}`);
-      moveReservation(reservationId, roomId, hour);
+  const hour = timeSlot.dataset.hour || timeSlot.dataset.time.split(":")[0];
+  const minute = timeSlot.dataset.minute || (timeSlot.dataset.time ? timeSlot.dataset.time.split(":")[1] : 0);
+  console.log(`Moving to room ${roomId} at ${hour}:${minute}`);
+  moveReservation(reservationId, roomId, hour, minute);
     } else {
       console.error("No time slot found for the reservation");
       showToast("Error: Could not determine the time slot", "error");
@@ -294,16 +324,14 @@ function handleReservationMove(evt) {
 }
 
 // Function to call the API to move a reservation
-function moveReservation(reservationId, roomId, hour) {
+function moveReservation(reservationId, roomId, hour, minute = 0) {
   // Check if we have a valid reservation ID
   if (!reservationId || reservationId === "undefined") {
     console.error("Invalid reservation ID");
     return;
   }
 
-  console.log(
-    `Moving reservation ${reservationId} to room ${roomId} at hour ${hour}`
-  );
+  console.log(`Moving reservation ${reservationId} to room ${roomId} at ${hour}:${minute}`);
 
   // Get the current date from the calendar
   const selectedDate =
@@ -324,19 +352,23 @@ function moveReservation(reservationId, roomId, hour) {
 
   // Calculate new start and end times
   const newStartHour = parseInt(hour);
-  const newEndHour = newStartHour + duration;
+  const newStartMinute = parseInt(minute) || 0;
+  const totalMinutes = Math.round(duration * 60);
+  const newEndTotalMinutes = newStartHour * 60 + newStartMinute + totalMinutes;
+  const newEndHour = Math.floor(newEndTotalMinutes / 60);
+  const newEndMinute = newEndTotalMinutes % 60;
 
   // Format times for API
-  const startTime = `${newStartHour.toString().padStart(2, "0")}:00`;
-  const endTime = `${Math.floor(newEndHour).toString().padStart(2, "0")}:${(
-    (newEndHour % 1) *
-    60
-  )
+  const startTime = `${newStartHour.toString().padStart(2, "0")}:${newStartMinute
+    .toString()
+    .padStart(2, "0")}`;
+  const endTime = `${newEndHour.toString().padStart(2, "0")}:${newEndMinute
     .toString()
     .padStart(2, "0")}`;
 
   // Update the card's data attributes
   card.dataset.hour = newStartHour;
+  card.dataset.minute = newStartMinute;
   card.dataset.startTime = startTime;
   card.dataset.endTime = endTime;
   card.dataset.roomId = roomId;
@@ -457,6 +489,8 @@ function updateRoomTimelines(date) {
             const timeSlot = document.createElement("div");
             timeSlot.className = "time-slot";
             timeSlot.dataset.time = timeValue;
+            timeSlot.dataset.hour = hour.toString();
+            timeSlot.dataset.minute = minute.toString();
 
             const timeLabelElement = document.createElement("div");
             timeLabelElement.className = "time-label";
@@ -490,11 +524,42 @@ function updateRoomTimelines(date) {
 
       // Re-initialize drag and drop
       initDragAndDrop();
+
+      // Re-initialize time slot click handlers
+      initTimeSlots();
+
+      // Update the current time indicator after creating new time slots
+      setTimeout(updateCurrentTimeIndicator, 100);
     })
     .catch((error) => {
       console.error("Error fetching reservations:", error);
       showToast("Error fetching reservations. Please try again.", "error");
     });
+}
+
+// Function to initialize time slots
+function initTimeSlots() {
+  console.log("Initializing time slot click handlers");
+  document.querySelectorAll(".room-timeline").forEach((timeline) => {
+    // Remove any existing click handlers
+    timeline.removeEventListener("click", timeSlotClickHandler);
+    // Add new click handler
+    timeline.addEventListener("click", timeSlotClickHandler);
+  });
+}
+
+// Time slot click handler function
+function timeSlotClickHandler(e) {
+  const timeSlot = e.target.closest(".time-slot");
+  if (timeSlot && !timeSlot.classList.contains("occupied")) {
+    const hour = parseInt(timeSlot.dataset.hour);
+    const roomId = this.dataset.roomId;
+    const selectedDate = window.calendarEl.selectedDates[0];
+    if (selectedDate) {
+      console.log("Time slot clicked:", { hour, roomId, selectedDate });
+      showNewReservationModal(hour, roomId, selectedDate);
+    }
+  }
 }
 
 // Function to update the idle area
@@ -618,18 +683,13 @@ function createReservationCard(reservation, roomTimeline) {
   card.dataset.hour = startHour;
   card.dataset.duration = (durationMinutes / 60).toFixed(1); // Store duration in hours
 
-  // Format the time for display
-  const startHour12 = startHour % 12 || 12;
-  const startAmPm = startHour >= 12 ? "PM" : "AM";
-  const endHour12 = endHour % 12 || 12;
-  const endAmPm = endHour >= 12 ? "PM" : "AM";
-
-  const displayStartTime = `${startHour12}:${startMinute
-    .toString()
-    .padStart(2, "0")} ${startAmPm}`;
-  const displayEndTime = `${endHour12}:${endMinute
-    .toString()
-    .padStart(2, "0")} ${endAmPm}`;
+  // Format the time for display using formatTime function if available
+  const displayStartTime =
+    typeof formatTime === "function"
+      ? formatTime(startHour, startMinute)
+      : startTime;
+  const displayEndTime =
+    typeof formatTime === "function" ? formatTime(endHour, endMinute) : endTime;
 
   // Set the card content
   card.innerHTML = `
@@ -767,54 +827,6 @@ function createIdleReservationCard(reservation, idleArea) {
 
   // Add the card to the idle area
   idleArea.appendChild(card);
-
-  // Make the card clickable to open the reservation modal
-  card.addEventListener("click", function (e) {
-    // Only handle clicks on the card itself, not on buttons inside it
-    if (e.target.closest(".remove-btn")) return;
-
-    // Prevent the event from bubbling up to the idle area
-    e.stopPropagation();
-
-    // Open the reservation modal for editing
-    const reservationId = this.dataset.reservationId;
-    if (reservationId) {
-      // Set the current reservation ID for the modal
-      window.currentReservationId = reservationId;
-
-      // Fetch the reservation details and open the modal
-      fetch(`/get_reservation/${reservationId}`)
-        .then((response) => response.json())
-        .then((data) => {
-          // Populate the modal with the reservation data
-          document.getElementById("reservation_id").value = data.id;
-          document.getElementById("date").value = data.date;
-          document.getElementById("start_time").value = data.start_time;
-          document.getElementById("end_time").value = data.end_time;
-          document.getElementById("room_id").value = data.room_id;
-          document.getElementById("num_people").value = data.num_people;
-          document.getElementById("contact_name").value = data.contact_name;
-          document.getElementById("contact_phone").value = data.contact_phone;
-          document.getElementById("contact_email").value =
-            data.contact_email || "";
-          document.getElementById("language").value = data.language || "en";
-
-          // Show the delete button
-          document.getElementById("delete-reservation-btn").style.display =
-            "block";
-
-          // Open the modal
-          const modal = new bootstrap.Modal(
-            document.getElementById("reservationModal")
-          );
-          modal.show();
-        })
-        .catch((error) => {
-          console.error("Error fetching reservation:", error);
-          showToast("Error fetching reservation details", "error");
-        });
-    }
-  });
 }
 
 // Function to mark occupied time slots
@@ -863,251 +875,352 @@ function markOccupiedTimeSlots(
   });
 }
 
-// Function to calculate price estimate
-function calculatePriceEstimate(startTime, endTime) {
-  return fetch("/api/price_estimate", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      start_time: startTime,
-      end_time: endTime,
-    }),
-  }).then((response) => {
-    if (!response.ok) {
-      throw new Error("Failed to calculate price estimate");
-    }
-    return response.json();
+// Function to handle quick duration buttons
+function initQuickDurationButtons() {
+  document.querySelectorAll(".duration-btn").forEach((button) => {
+    button.onclick = function () {
+  const hours = parseFloat(this.dataset.hours || this.textContent);
+      if (!window.startTimePicker || !window.endTimePicker) return;
+
+      const startDate = window.startTimePicker.selectedDates[0];
+      if (!startDate) return;
+
+      // Calculate new end time
+  const endDate = new Date(startDate);
+  endDate.setMinutes(startDate.getMinutes() + hours * 60);
+
+      // Update end time picker
+      window.endTimePicker.setDate(endDate);
+
+      // Update price estimate
+      updatePriceEstimate();
+
+      // Update button states
+  document.querySelectorAll(".duration-btn").forEach((btn) => btn.classList.remove("active"));
+      this.classList.add("active");
+    };
   });
 }
 
-// Function to delete a reservation
-function deleteReservation(reservationId) {
-  if (!reservationId) {
-    console.error("No reservation ID provided for deletion");
-    showToast("Error: No reservation selected for deletion", "error");
-    return Promise.reject(new Error("No reservation ID provided"));
+// Function to calculate price estimate
+function updatePriceEstimate() {
+  const startTimeInput = document.getElementById("start_time");
+  const endTimeInput = document.getElementById("end_time");
+
+  if (!startTimeInput || !endTimeInput) {
+    console.error("Time inputs not found");
+    return;
   }
 
-  console.log(`Sending DELETE request for reservation ID: ${reservationId}`);
+  // Use the underlying flatpickr selectedDates (reliable 24h values) if available
+  if (!window.startTimePicker || !window.endTimePicker) return;
+  const sDate = window.startTimePicker.selectedDates[0];
+  const eDate = window.endTimePicker.selectedDates[0];
+  if (!sDate || !eDate) return;
 
-  return fetch(`/delete_reservation/${reservationId}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-  })
-    .then((response) => {
-      console.log("Delete response status:", response.status);
-      if (!response.ok) {
-        return response.text().then((text) => {
-          console.error("Error response text:", text);
-          throw new Error(`Failed to delete reservation: ${response.status}`);
-        });
-      }
-      return response.json();
-    })
-    .then((data) => {
-      console.log("Delete successful:", data);
-      showToast("Reservation deleted successfully!");
-      return data;
-    })
-    .catch((error) => {
-      console.error("Error deleting reservation:", error);
-      showToast(
-        error.message || "Error deleting reservation. Please try again.",
-        "error"
-      );
-      throw error;
+  let startHour = sDate.getHours();
+  const startMinutes = sDate.getMinutes();
+  let endHour = eDate.getHours();
+  const endMinutes = eDate.getMinutes();
+
+  // Handle overnight case
+  if (endHour < startHour) endHour += 24;
+
+  // Calculate total duration in hours (including partial hours)
+  const startTimeInMinutes = startHour * 60 + startMinutes;
+  const endTimeInMinutes = endHour * 60 + endMinutes;
+  const durationInMinutes = endTimeInMinutes - startTimeInMinutes;
+  const durationInHours = durationInMinutes / 60;
+
+  // Initialize variables for period tracking
+  let earlyBirdHours = 0;
+  let eveningHours = 0;
+
+  // Process each 30-minute interval
+  for (let time = startTimeInMinutes; time < endTimeInMinutes; time += 30) {
+    let currentHour = Math.floor(time / 60);
+    if (currentHour >= 24) currentHour -= 24;
+
+    if (currentHour >= 11 && currentHour < 18) {
+      // Early Bird Special (11am-6pm)
+      earlyBirdHours += 0.5;
+    } else if (currentHour >= 18 || currentHour < 1) {
+      // Evening Rate (6pm-1am)
+      eveningHours += 0.5;
+    }
+  }
+
+  // Calculate charges for each period
+  const earlyBirdCharge = earlyBirdHours * 35;
+  const eveningCharge = eveningHours * 50;
+  const totalCharge = earlyBirdCharge + eveningCharge;
+
+  // Create period charges array
+  const periodCharges = [];
+  if (earlyBirdHours > 0) {
+    periodCharges.push({
+      label: "Early Bird Rate (11am-6pm)",
+      rate: 35,
+      duration: earlyBirdHours,
+      amount: earlyBirdCharge,
     });
+  }
+
+  if (eveningHours > 0) {
+    periodCharges.push({
+      label: "Evening Rate (6pm-1am)",
+      rate: 50,
+      duration: eveningHours,
+      amount: eveningCharge,
+    });
+  }
+
+  // Calculate tax and total
+  const taxRate = 0.055; // 5.5%
+  const taxAmount = totalCharge * taxRate;
+  const totalWithTax = totalCharge + taxAmount;
+
+  // Update displays
+  try {
+    // Update room rate
+  const roomRateElement = document.getElementById("room-rate");
+    if (roomRateElement) {
+      roomRateElement.textContent = `$${totalCharge.toFixed(2)}`;
+    }
+
+    // Update tax
+    const taxElement = document.getElementById("tax-amount");
+    if (taxElement) {
+      taxElement.textContent = `$${taxAmount.toFixed(2)}`;
+    }
+
+    // Update total
+  const totalElement = document.getElementById("total-cost");
+    if (totalElement) {
+      totalElement.textContent = `$${totalWithTax.toFixed(2)}`;
+    }
+
+    // Update period charges
+    const periodChargesContainer = document.getElementById("period-charges");
+    if (periodChargesContainer && periodCharges.length > 0) {
+      const periodChargesHtml = periodCharges
+        .map((charge) => {
+          return `
+          <div class="period-charge">
+            <div class="period-charge-row">
+              <div class="period-label">${charge.label}</div>
+              <div class="period-amount">$${charge.amount.toFixed(2)}</div>
+            </div>
+            <div class="period-details">
+              $${charge.rate}/hr × ${charge.duration} ${
+            charge.duration === 1 ? "hour" : "hours"
+          }
+            </div>
+          </div>
+        `;
+        })
+        .join("");
+      periodChargesContainer.innerHTML = periodChargesHtml;
+    } else {
+      periodChargesContainer.innerHTML =
+        '<div class="no-charges">No charges calculated</div>';
+    }
+
+    // Log the calculation for debugging
+    console.log("Price calculation:", {
+  startTime: `${startHour}:${startMinutes}`,
+  endTime: `${endHour}:${endMinutes}`,
+      durationInHours,
+      earlyBirdHours,
+      eveningHours,
+      earlyBirdCharge,
+      eveningCharge,
+      totalCharge,
+      taxAmount,
+      totalWithTax,
+    });
+  } catch (error) {
+    console.error("Error updating price display:", error);
+    console.error("Error details:", error.stack);
+  }
 }
 
-// Function to add and update the current time indicator
+// Function to delete a reservation
+window.deleteReservation = function () {
+  console.log(
+    "Delete function called, currentReservationId:",
+    currentReservationId,
+    "window.currentReservationId:",
+    window.currentReservationId
+  );
+
+  // Get the reservation ID from the form
+  const formReservationId = document.getElementById("reservation_id").value;
+  console.log("Form reservation ID in deleteReservation:", formReservationId);
+
+  // Use either the form ID, local variable, or global variable
+  const reservationIdToDelete =
+    formReservationId || currentReservationId || window.currentReservationId;
+
+  console.log("Attempting to delete reservation ID:", reservationIdToDelete);
+
+  if (!reservationIdToDelete) {
+    console.error("No reservation ID found for deletion");
+    window.showToast("Error: No reservation selected for deletion", "error");
+    return;
+  }
+
+  // Use a simple browser confirmation dialog instead of a toast
+  if (confirm("Are you sure you want to delete this reservation?")) {
+    console.log("Confirm delete button clicked");
+
+    // Get the reservation date from the modal's data attribute
+    // This is the date of the reservation being deleted, not necessarily today's date
+    const reservationDate =
+      document.getElementById("reservationModal").dataset.reservationDate;
+    console.log("Reservation date from modal:", reservationDate);
+
+    console.log(
+      `Sending DELETE request to /delete_reservation/${reservationIdToDelete}`
+    );
+
+    fetch(`/delete_reservation/${reservationIdToDelete}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    })
+      .then((response) => {
+        console.log("Delete response status:", response.status);
+        if (!response.ok) {
+          return response.text().then((text) => {
+            console.error("Error response text:", text);
+            throw new Error(`Failed to delete reservation: ${response.status}`);
+          });
+        }
+        return response.json();
+      })
+      .then((data) => {
+        console.log("Delete response:", data);
+
+        // Store the reservation date before closing the modal
+        const dateToKeep =
+          reservationDate || document.getElementById("date").value;
+
+        // Set a flag to keep the reservation date when closing the modal
+        window.keepReservationDate = true;
+
+        // Close the modal
+        closeReservationModal();
+
+        // Refresh the page to ensure all data is updated correctly
+        window.location.href = `/?date=${dateToKeep}`;
+
+        // Show success message
+        window.showToast("Reservation deleted successfully!");
+      })
+      .catch((error) => {
+        console.error("Error deleting reservation:", error);
+        window.showToast(
+          "Error deleting reservation. Please try again.",
+          "error"
+        );
+      });
+  }
+};
+
+// Function to update current time indicator
 function updateCurrentTimeIndicator() {
   console.log("Updating current time indicator");
 
-  try {
-    // Get the current time
-    const now = new Date();
-    const currentHour = now.getHours();
-    const currentMinute = now.getMinutes();
-    const currentSecond = now.getSeconds();
+  // Get the current time
+  const now = new Date();
+  const currentHour = now.getHours();
+  const currentMinute = now.getMinutes();
 
-    // Convert to minutes since midnight for easier positioning
-    const currentTimeInMinutes = currentHour * 60 + currentMinute;
+  // Check if we're within business hours (11 AM to 1 AM)
+  const isWithinBusinessHours = currentHour >= 11 || currentHour < 1;
 
-    // Always show the indicator during business hours (11 AM to 1 AM)
-    // For testing, we'll always show it
-    const isWithinBusinessHours = true;
+  // Remove any existing time indicators
+  document.querySelectorAll(".current-time-indicator").forEach((indicator) => {
+    indicator.remove();
+  });
 
-    console.log(
-      `Current time: ${currentHour}:${currentMinute}:${currentSecond} (${currentTimeInMinutes} minutes), Within business hours: ${isWithinBusinessHours}`
+  // Only show indicator during business hours
+  if (!isWithinBusinessHours) {
+    console.log("Outside business hours, not showing time indicator");
+    return;
+  }
+
+  // Get all room timelines
+  const roomTimelines = document.querySelectorAll(".room-timeline");
+  if (roomTimelines.length === 0) {
+    console.error("No room timelines found");
+    setTimeout(updateCurrentTimeIndicator, 1000);
+    return;
+  }
+
+  roomTimelines.forEach((timeline) => {
+    // Create the time indicator element
+    const timeIndicator = document.createElement("div");
+    timeIndicator.className = "current-time-indicator";
+    timeIndicator.setAttribute("data-timestamp", now.getTime());
+
+    // Find the corresponding time slot
+    let displayHour = currentHour;
+    if (currentHour >= 0 && currentHour < 1) {
+      displayHour = currentHour + 24;
+    }
+
+    // Find the time slot for the current hour
+    let timeSlot = timeline.querySelector(
+      `.time-slot[data-hour="${displayHour}"]`
     );
 
-    // Remove any existing time indicators
-    document
-      .querySelectorAll(".current-time-indicator")
-      .forEach((indicator) => {
-        indicator.remove();
+    if (!timeSlot) {
+      // If we can't find the exact hour, find the closest one
+      const timeSlots = timeline.querySelectorAll(".time-slot");
+      let closestSlot = null;
+      let minDistance = Infinity;
+
+      timeSlots.forEach((slot) => {
+        const slotHour = parseInt(slot.dataset.hour);
+        const distance = Math.abs(slotHour - displayHour);
+
+        if (distance < minDistance) {
+          minDistance = distance;
+          closestSlot = slot;
+        }
       });
 
-    // Get all room timelines
-    const roomTimelines = document.querySelectorAll(".room-timeline");
+      timeSlot = closestSlot;
+    }
 
-    if (roomTimelines.length === 0) {
-      console.error("No room timelines found");
-
-      // If no timelines are found, try again in 1 second
-      // This helps when the page is still loading
-      setTimeout(updateCurrentTimeIndicator, 1000);
+    if (!timeSlot) {
+      console.error(`No time slot found for hour ${displayHour}`);
       return;
     }
 
-    roomTimelines.forEach((timeline) => {
-      // Create the time indicator element
-      const timeIndicator = document.createElement("div");
-      timeIndicator.className = "current-time-indicator";
-      timeIndicator.setAttribute("data-timestamp", now.getTime());
+    // Calculate position
+    const slotTop = timeSlot.offsetTop;
+    const minuteOffset = (currentMinute / 60) * 40; // Each hour is 40px tall
+    const topPosition = slotTop + minuteOffset;
 
-      // Calculate position based on current time
-      // For 7:07 PM (19:07), we need to position it at the 19:00 slot plus a bit
+    // Set the position
+    timeIndicator.style.top = `${topPosition}px`;
 
-      // Find the corresponding time slot for the current hour
-      let timeSlot;
-      let displayHour = currentHour;
-
-      // Handle after midnight (0, 1) as 24, 25 in our timeline
-      if (currentHour >= 0 && currentHour < 2) {
-        displayHour = currentHour + 24;
-      }
-
-      // Find the time slot for the current hour
-      timeSlot = timeline.querySelector(
-        `.time-slot[data-hour="${displayHour}"]`
-      );
-
-      if (!timeSlot) {
-        // If we can't find the exact hour, find the closest one
-        const timeSlots = timeline.querySelectorAll(".time-slot");
-        let closestSlot = null;
-        let minDistance = Infinity;
-
-        timeSlots.forEach((slot) => {
-          const slotHour = parseInt(slot.dataset.hour);
-          const distance = Math.abs(slotHour - displayHour);
-
-          if (distance < minDistance) {
-            minDistance = distance;
-            closestSlot = slot;
-          }
-        });
-
-        timeSlot = closestSlot;
-      }
-
-      if (!timeSlot) {
-        console.error(`No time slot found for hour ${displayHour}`);
-        return;
-      }
-
-      // Get the position of the time slot
-      const slotTop = timeSlot.offsetTop;
-
-      // If the slot top is 0, it might not be fully rendered yet
-      if (slotTop === 0 && displayHour > 11) {
-        console.warn("Time slot position is 0, might not be fully rendered");
-        // Try again in 500ms
-        setTimeout(updateCurrentTimeIndicator, 500);
-        return;
-      }
-
-      // Calculate the position within the hour (0-59 minutes)
-      // Each hour slot is 40px tall, so each minute is 40/60 = 2/3 px
-      const minuteOffset = (currentMinute / 60) * 40;
-
-      // Calculate the final position
-      const topPosition = slotTop + minuteOffset;
-
-      console.log(
-        `Time slot for hour ${displayHour} found at position ${slotTop}px`
-      );
-      console.log(
-        `Minute offset: ${minuteOffset}px, Final position: ${topPosition}px`
-      );
-
-      // Set the position
-      timeIndicator.style.top = `${topPosition}px`;
-
-      // Add a time label to the indicator
-      const timeLabel = document.createElement("span");
-      timeLabel.className = "current-time-label";
-
-      // Format the time (12-hour format with AM/PM)
-      const hour12 = currentHour % 12 || 12;
-      const ampm = currentHour >= 12 ? "PM" : "AM";
-      timeLabel.textContent = `${hour12}:${currentMinute
-        .toString()
-        .padStart(2, "0")} ${ampm}`;
-
-      timeIndicator.appendChild(timeLabel);
-
-      // Add the indicator to the timeline
-      timeline.appendChild(timeIndicator);
-
-      // Highlight any current reservations
-      const currentReservations =
-        timeline.querySelectorAll(".reservation-card");
-      currentReservations.forEach((card) => {
-        // Get the card's start and end times
-        const startTime = card.dataset.startTime;
-        const endTime = card.dataset.endTime;
-
-        if (startTime && endTime) {
-          // Parse the times
-          const [startHour, startMinute] = startTime.split(":").map(Number);
-          const [endHour, endMinute] = endTime.split(":").map(Number);
-
-          // Check if current time is within this reservation
-          let isCurrentReservation = false;
-
-          // Handle normal case (e.g., 14:00-16:00)
-          if (endHour > startHour) {
-            isCurrentReservation =
-              (currentHour > startHour ||
-                (currentHour === startHour && currentMinute >= startMinute)) &&
-              (currentHour < endHour ||
-                (currentHour === endHour && currentMinute < endMinute));
-          }
-          // Handle overnight case (e.g., 22:00-01:00)
-          else if (endHour < startHour) {
-            isCurrentReservation =
-              currentHour > startHour ||
-              (currentHour === startHour && currentMinute >= startMinute) ||
-              currentHour < endHour ||
-              (currentHour === endHour && currentMinute < endMinute);
-          }
-
-          // Add or remove the 'current' class
-          if (isCurrentReservation) {
-            card.classList.add("current-reservation");
-          } else {
-            card.classList.remove("current-reservation");
-          }
-        }
-      });
-    });
-
-    // Update the document title to show we're keeping the time updated
-    document.title = document.title.replace(/ \[\d+:\d+\]$/, "");
-    document.title += ` [${currentHour}:${currentMinute
+    // Add time label
+    const timeLabel = document.createElement("span");
+    timeLabel.className = "current-time-label";
+    const hour12 = currentHour % 12 || 12;
+    const ampm = currentHour >= 12 ? "PM" : "AM";
+    timeLabel.textContent = `${hour12}:${currentMinute
       .toString()
-      .padStart(2, "0")}]`;
-  } catch (error) {
-    console.error("Error updating time indicator:", error);
-    // Try again in 2 seconds if there was an error
-    setTimeout(updateCurrentTimeIndicator, 2000);
-  }
+      .padStart(2, "0")} ${ampm}`;
+
+    timeIndicator.appendChild(timeLabel);
+    timeline.appendChild(timeIndicator);
+  });
 }
 
 // Function to initialize the current time indicator and update it continuously
@@ -1139,6 +1252,362 @@ function initCurrentTimeIndicator() {
   });
 }
 
+// Function to show new reservation modal
+function showNewReservationModal(hour, minute, roomId, selectedDate) {
+  // Clear any existing reservation ID
+  window.currentReservationId = null;
+
+  // Reset the form
+  document.getElementById("reservationForm").reset();
+
+  // Set the date, room, and start time
+  // selectedDate may already be a YYYY-MM-DD string; normalize
+  let dateStr = selectedDate;
+  if (selectedDate instanceof Date) {
+    dateStr = selectedDate.toISOString().split("T")[0];
+  }
+  document.getElementById("date").value = dateStr;
+  document.getElementById("room_id").value = roomId;
+
+  // Format the hour for display (handle after midnight cases)
+  let displayHour = parseInt(hour);
+  if (displayHour >= 24) {
+    displayHour = displayHour - 24;
+  }
+
+  // Initialize time pickers with default 2-hour duration including minute precision
+  initializeTimePickers(displayHour, 2, minute || 0);
+
+  // Hide the delete button for new reservations
+  document.getElementById("delete-reservation-btn").style.display = "none";
+
+  // Show the modal
+  const modal = new bootstrap.Modal(
+    document.getElementById("reservationModal")
+  );
+  modal.show();
+
+  // Initialize quick duration buttons
+  initQuickDurationButtons();
+
+  // Update price estimate
+  updatePriceEstimate();
+}
+
+// Refactored function to open modal for editing
+function openModalForEditing(reservationId) {
+  if (!reservationId || reservationId === "undefined") {
+    console.error("Invalid reservation ID for editing");
+    return;
+  }
+
+  console.log(`Opening modal to edit reservation ${reservationId}`);
+
+  // Set the current reservation ID for the modal
+  window.currentReservationId = reservationId;
+
+  // Fetch the reservation details and open the modal
+  fetch(`/get_reservation/${reservationId}`)
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error(`Failed to fetch reservation: ${response.status}`);
+      }
+      return response.json();
+    })
+    .then((data) => {
+      // Populate the modal with the reservation data
+      document.getElementById("reservation_id").value = data.id;
+      document.getElementById("date").value = data.date;
+      // Initialize time pickers with fetched times
+      if (typeof initializeTimePickers === "function") {
+        initializeTimePickers(null, data.start_time, data.end_time);
+      } else {
+        // Fallback if picker function not ready (shouldn't happen with DOMContentLoaded)
+        document.getElementById("start_time").value = data.start_time; // Use raw 24hr format for now
+        document.getElementById("end_time").value = data.end_time;
+      }
+      document.getElementById("room_id").value = data.room_id;
+      document.getElementById("num_people").value = data.num_people;
+      document.getElementById("contact_name").value = data.contact_name;
+      document.getElementById("contact_phone").value = data.contact_phone;
+      document.getElementById("contact_email").value = data.contact_email || "";
+      document.getElementById("language").value = data.language || "en";
+      // Add notes if the field exists in the modal
+      const notesField = document.getElementById("notes");
+      if (notesField) notesField.value = data.notes || "";
+
+      // Show the delete button
+      document.getElementById("delete-reservation-btn").style.display = "block";
+
+      // Open the modal
+      const modalElement = document.getElementById("reservationModal");
+      const modal =
+        bootstrap.Modal.getInstance(modalElement) ||
+        new bootstrap.Modal(modalElement);
+      modal.show();
+    })
+    .catch((error) => {
+      console.error("Error fetching reservation:", error);
+      showToast("Error fetching reservation details", "error");
+    });
+}
+
+// Function to initialize time pickers
+function initializeTimePickers(
+  initialHour,
+  durationHours = 2,
+  initialMinute = 0,
+  startTimeStr = null,
+  endTimeStr = null
+) {
+  const startTimeInput = document.getElementById("start_time");
+  const endTimeInput = document.getElementById("end_time");
+
+  if (!startTimeInput || !endTimeInput) {
+    console.error("Time picker input elements not found");
+    return;
+  }
+
+  // Destroy existing instances if they exist
+  if (window.startTimePicker) window.startTimePicker.destroy();
+  if (window.endTimePicker) window.endTimePicker.destroy();
+
+  // --- Start Time Picker ---
+  let defaultStartHour = 11;
+  let defaultStartMinute = 0;
+  if (startTimeStr) {
+    const [h, m] = startTimeStr.split(":").map(Number);
+    defaultStartHour = h;
+    defaultStartMinute = m;
+  } else if (initialHour !== null) {
+    defaultStartHour = initialHour;
+    defaultStartMinute = initialMinute || 0;
+  }
+
+  window.startTimePicker = flatpickr(startTimeInput, {
+    enableTime: true,
+    noCalendar: true,
+    dateFormat: "H:i", // 24-hour format for internal value
+    altInput: true,
+    altFormat: "h:i K", // 12-hour format for display
+    time_24hr: false,
+    minuteIncrement: 30,
+    minTime: "11:00",
+    maxTime: "23:59", // Allow up to 11:59 PM for start
+    defaultHour: defaultStartHour,
+    defaultMinute: defaultStartMinute,
+  onChange: function (selectedDates, dateStr) { updateEndTimeMinimum(dateStr); updatePriceEstimate(); },
+  onClose: function(){ updatePriceEstimate(); },
+  });
+
+  // --- End Time Picker ---
+  let defaultEndHour = defaultStartHour + durationHours;
+  let defaultEndMinute = defaultStartMinute;
+  if (endTimeStr) {
+    const [h, m] = endTimeStr.split(":").map(Number);
+    defaultEndHour = h;
+    defaultEndMinute = m;
+  }
+
+  window.endTimePicker = flatpickr(endTimeInput, {
+    enableTime: true,
+    noCalendar: true,
+    dateFormat: "H:i", // 24-hour format for internal value
+    altInput: true,
+    altFormat: "h:i K", // 12-hour format for display
+    time_24hr: false,
+    minuteIncrement: 30,
+    minTime: "11:30", // Initial minimum
+    maxTime: "01:00", // Allow up to 1:00 AM next day
+    defaultHour: defaultEndHour % 24, // Adjust for display if >= 24
+    defaultMinute: defaultEndMinute,
+  onChange: function () { updatePriceEstimate(); document.querySelectorAll('.duration-btn.active').forEach(btn=>btn.classList.remove('active')); },
+  onClose: function(){ updatePriceEstimate(); },
+  });
+
+  // Set initial minimum for end time based on initial start time
+  if (startTimeStr) {
+    updateEndTimeMinimum(startTimeStr);
+  } else {
+    updateEndTimeMinimum(
+      `${defaultStartHour}:${String(defaultStartMinute).padStart(2, "0")}`
+    );
+  }
+
+  // Initial price estimate
+  updatePriceEstimate();
+}
+
+// Function to update end time minimum based on start time (24hr format input)
+function updateEndTimeMinimum(startTime24hr) {
+  if (!window.endTimePicker || !startTime24hr) return;
+
+  const [startHour, startMinute] = startTime24hr.split(":").map(Number);
+
+  // Calculate minimum end time (30 minutes after start)
+  let minEndHour = startHour;
+  let minEndMinute = startMinute + 30;
+
+  if (minEndMinute >= 60) {
+    minEndHour += 1;
+    minEndMinute -= 60;
+  }
+
+  // Format for flatpickr
+  const minEndTimeStr = `${String(minEndHour % 24).padStart(2, "0")}:${String(
+    minEndMinute
+  ).padStart(2, "0")}`;
+
+  // Set the minimum time for the end time picker
+  window.endTimePicker.set("minTime", minEndTimeStr);
+
+  // Also, check if the current end time is still valid
+  const currentEndTimeStr = window.endTimePicker.input.value;
+  if (currentEndTimeStr) {
+    const [currentEndHour, currentEndMinute] = currentEndTimeStr
+      .split(":")
+      .map(Number);
+    let currentEndTotalMinutes = currentEndHour * 60 + currentEndMinute;
+    let minEndTotalMinutes = minEndHour * 60 + minEndMinute;
+
+    // Handle overnight for comparison
+    if (currentEndHour < startHour) currentEndTotalMinutes += 24 * 60;
+    if (minEndHour < startHour) minEndTotalMinutes += 24 * 60;
+
+    if (currentEndTotalMinutes < minEndTotalMinutes) {
+      // If current end time is now invalid, set it to the minimum
+      window.endTimePicker.setDate(minEndTimeStr, true); // Update and trigger change
+    }
+  }
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+  // Initialize calendar
+  const initial = window.initialSelectedDate || new Date().toISOString().split('T')[0];
+  const calendarInstance = flatpickr("#calendar", {
+    inline: true,
+    defaultDate: initial,
+    dateFormat: "Y-m-d",
+    onChange: function (selectedDates, dateStr) {
+      if (!dateStr) return;
+      setSelectedDate(dateStr);
+    },
+    onMonthChange: function(selectedDates, dateStr, instance){
+      // keep selected date within visible month; do not auto-change selected
+      updateSelectedDateLabel();
+    }
+  });
+  window.calendarEl = calendarInstance; // keep naming for compatibility
+  setSelectedDate(initial);
+
+  // Day navigation buttons (prev / today / next) surrounding Today
+  const prevDayBtn = document.getElementById('prev-day-btn');
+  const nextDayBtn = document.getElementById('next-day-btn');
+  const todayBtn = document.getElementById('today-btn');
+  function navigateDay(offset){
+    const base = new Date(window.currentSelectedDate || new Date());
+    base.setDate(base.getDate() + offset);
+    const ymd = base.toISOString().split('T')[0];
+    calendarInstance.setDate(ymd, true);
+    setSelectedDate(ymd);
+  }
+  if(prevDayBtn) prevDayBtn.addEventListener('click', ()=> navigateDay(-1));
+  if(nextDayBtn) nextDayBtn.addEventListener('click', ()=> navigateDay(1));
+  if(todayBtn) todayBtn.addEventListener('click', ()=> {
+    const today = new Date();
+    const ymd = today.toISOString().split('T')[0];
+    calendarInstance.setDate(ymd, true);
+    setSelectedDate(ymd);
+  });
+
+  // Initialize drag and drop
+  initDragAndDrop();
+
+  // Initialize the current time indicator
+  initCurrentTimeIndicator();
+
+  // Initialize the page
+  initTimeSlots();
+  updateRoomTimelines(new Date().toISOString().split("T")[0]);
+
+  // Delegate clicks on flatpickr day cells to force selected date update
+  document.addEventListener('click', function(e){
+    const day = e.target.closest('.flatpickr-day');
+    if(day && day.dateObj){
+      const y = day.dateObj.getFullYear();
+      const m = (day.dateObj.getMonth()+1).toString().padStart(2,'0');
+      const dnum = day.dateObj.getDate().toString().padStart(2,'0');
+      const ds = `${y}-${m}-${dnum}`;
+      setSelectedDate(ds);
+    }
+  });
+
+  // AJAX form submission to immediately show new reservation
+  const resForm = document.getElementById('reservationForm');
+  if(resForm){
+    resForm.addEventListener('submit', function(evt){
+      evt.preventDefault();
+      const formData = new FormData(resForm);
+      const payload = Object.fromEntries(formData.entries());
+      const isUpdate = !!payload.reservation_id;
+      fetch(isUpdate ? `/update_reservation/${payload.reservation_id}` : '/reservation', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(payload)
+      }).then(r=>r.json().then(j=>({ok:r.ok,status:r.status,body:j})))
+      .then(result=>{
+        if(!result.ok){
+          showToast(result.body.error || 'Failed to save', 'error');
+          return;
+        }
+        showToast(isUpdate ? 'Reservation updated' : 'Reservation created', 'success');
+        const activeDate = window.currentSelectedDate || payload.date;
+        updateRoomTimelines(activeDate);
+        updateIdleArea && updateIdleArea();
+        // close modal
+        const modalEl = document.getElementById('reservationModal');
+        const modal = bootstrap.Modal.getInstance(modalEl);
+        if(modal) modal.hide();
+      }).catch(err=>{
+        console.error('Save error', err);
+        showToast('Error saving reservation','error');
+      });
+    });
+  }
+});
+
+function updateSelectedDateLabel(){
+  const el = document.getElementById('selected-date-label');
+  if(!el) return;
+  const iso = window.currentSelectedDate || new Date().toISOString().split('T')[0];
+  // Convert to MM-DD-YYYY for label
+  const parts = iso.split('-');
+  if(parts.length===3){
+    el.textContent = `${parts[1]}-${parts[2]}-${parts[0]}`;
+  } else {
+    el.textContent = iso;
+  }
+}
+
+function setSelectedDate(dateStr){
+  window.currentSelectedDate = dateStr;
+  updateSelectedDateLabel();
+  updateRoomTimelines(dateStr);
+  // Update URL path to /MM-DD-YYYY without reloading
+  try {
+    const d = new Date(dateStr + 'T00:00:00');
+    if(!isNaN(d.getTime())){
+      const mm = String(d.getMonth()+1).padStart(2,'0');
+      const dd = String(d.getDate()).padStart(2,'0');
+      const yyyy = d.getFullYear();
+      const newPath = `/${mm}-${dd}-${yyyy}`;
+      if(window.location.pathname !== newPath){
+        window.history.replaceState({}, '', newPath);
+      }
+    }
+  } catch(e){ console.warn('Failed to update URL path', e); }
+}
+
 // Export functions for use in HTML
 window.showToast = showToast;
 window.initDragAndDrop = initDragAndDrop;
@@ -1147,7 +1616,27 @@ window.updateIdleArea = updateIdleArea;
 window.createReservationCard = createReservationCard;
 window.createIdleReservationCard = createIdleReservationCard;
 window.markOccupiedTimeSlots = markOccupiedTimeSlots;
-window.calculatePriceEstimate = calculatePriceEstimate;
+window.updatePriceEstimate = updatePriceEstimate;
 window.deleteReservation = deleteReservation;
 window.updateCurrentTimeIndicator = updateCurrentTimeIndicator;
 window.initCurrentTimeIndicator = initCurrentTimeIndicator;
+window.showNewReservationModal = showNewReservationModal;
+
+// Add event listener for the delete button
+document
+  .getElementById("delete-reservation-btn")
+  .addEventListener("click", function () {
+    console.log("Delete button clicked");
+
+    // Get the reservation ID from the form for logging
+    const reservationId = document.getElementById("reservation_id").value;
+    console.log("Form reservation ID before deletion:", reservationId);
+
+    // Call the window.deleteReservation function which handles confirmation
+    try {
+      window.deleteReservation();
+    } catch (error) {
+      console.error("Error in deleteReservation function:", error);
+      alert("Error in delete function: " + error.message);
+    }
+  });

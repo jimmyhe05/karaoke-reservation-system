@@ -41,11 +41,6 @@ def init_db():
             db.cursor().executescript(f.read())
         db.commit()
 
-    # Create idle reservations table
-    with app.open_resource('idle_schema.sql', mode='r') as f:
-        db.cursor().executescript(f.read())
-    db.commit()
-
 
 @app.teardown_appcontext
 def close_db(error):
@@ -60,6 +55,22 @@ app.teardown_appcontext(close_db)
 # Initialize the database only if it doesn't exist
 with app.app_context():
     init_db()
+
+# --- URL Date Path Converter (MM-DD-YYYY) ---
+from werkzeug.routing import BaseConverter
+
+class DatePathConverter(BaseConverter):
+    regex = r'\d{2}-\d{2}-\d{4}'
+
+app.url_map.converters['datepath'] = DatePathConverter
+
+def normalize_date_path(date_str):
+    """Convert MM-DD-YYYY to YYYY-MM-DD or raise ValueError."""
+    try:
+        dt = datetime.strptime(date_str, '%m-%d-%Y').date()
+        return dt.strftime('%Y-%m-%d')
+    except ValueError:
+        raise
 
 
 def parse_time_safe(time_str):
@@ -415,17 +426,33 @@ def get_today_stats():
 
 @app.route('/')
 def index():
-    # Get the selected date from query parameters or use today
-    selected_date = request.args.get(
-        'date', datetime.now().strftime('%Y-%m-%d'))
+    # Redirect root to today's date path
+    today_path = datetime.now().strftime('%m-%d-%Y')
+    return redirect(f'/{today_path}')
 
-    # Get rooms with reservations for the selected date
-    data = get_rooms_with_reservations(selected_date)
 
+@app.route('/improved')
+def improved_reservation():
+    # Backward compatibility: redirect to date path
+    selected_date = request.args.get('date', datetime.now().strftime('%Y-%m-%d'))
+    try:
+        dt = datetime.strptime(selected_date, '%Y-%m-%d')
+    except ValueError:
+        dt = datetime.now()
+    return redirect(f"/{dt.strftime('%m-%d-%Y')}")
+
+@app.route('/<datepath:date_str>')
+def reservation_by_date(date_str):
+    # date_str is MM-DD-YYYY
+    try:
+        iso_date = normalize_date_path(date_str)
+    except ValueError:
+        abort(404)
+    data = get_rooms_with_reservations(iso_date)
     return render_template('reservation.html',
                            rooms=data['rooms'],
                            idle_reservations=data['idle_reservations'],
-                           selected_date=selected_date,
+                           selected_date=iso_date,
                            today_stats=get_today_stats())
 
 
@@ -587,16 +614,8 @@ def reservation():
         except Exception as e:
             return jsonify({'error': str(e)}), 400
 
-    # GET request handling
-    selected_date = request.args.get(
-        'date', datetime.now().strftime('%Y-%m-%d'))
-    data = get_rooms_with_reservations(selected_date)
-
-    return render_template('reservation.html',
-                           rooms=data['rooms'],
-                           idle_reservations=data['idle_reservations'],
-                           selected_date=selected_date,
-                           today_stats=get_today_stats())
+    # GET request handling - redirect to improved reservation page
+    return redirect(url_for('improved_reservation'))
 
 
 @app.route('/get_reservation/<int:reservation_id>')
@@ -1016,6 +1035,70 @@ def check_room_availability():
         conn.close()
 
 
+@app.route('/api/calendar_availability')
+def calendar_availability():
+    """Get availability data for the calendar view."""
+    start_date = request.args.get('start')
+    end_date = request.args.get('end')
+
+    if not start_date or not end_date:
+        return jsonify({'error': 'Start and end date parameters are required'}), 400
+
+    try:
+        start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()
+        end_date_obj = datetime.strptime(end_date, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({'error': 'Invalid date format'}), 400
+
+    conn = get_db()
+
+    # Get total number of rooms
+    total_rooms = conn.execute(
+        'SELECT COUNT(*) as count FROM rooms WHERE id > 0').fetchone()['count']
+
+    # Calculate date range
+    date_range = []
+    current_date = start_date_obj
+    while current_date <= end_date_obj:
+        date_range.append(current_date.strftime('%Y-%m-%d'))
+        current_date += timedelta(days=1)
+
+    result = []
+
+    for date in date_range:
+        # Get reservation count for this date
+        reservation_count = conn.execute('''
+            SELECT COUNT(*) as count
+            FROM reservations
+            WHERE date = ? AND status != 'cancelled'
+        ''', (date,)).fetchone()['count']
+
+        # Get unique booked rooms for this date
+        booked_rooms = conn.execute('''
+            SELECT COUNT(DISTINCT room_id) as count
+            FROM reservations
+            WHERE date = ? AND status != 'cancelled'
+        ''', (date,)).fetchone()['count']
+
+        # Calculate available rooms
+        available_rooms = total_rooms - booked_rooms
+
+        # Calculate occupancy percentage
+        occupancy_percentage = (
+            booked_rooms / total_rooms * 100) if total_rooms > 0 else 0
+
+        # Add to result
+        result.append({
+            'date': date,
+            'reservationCount': reservation_count,
+            'availableRooms': available_rooms,
+            'totalRooms': total_rooms,
+            'occupancyPercentage': round(occupancy_percentage, 1)
+        })
+
+    return jsonify(result)
+
+
 @app.route('/api/price_estimate', methods=['POST'])
 def price_estimate():
     data = request.get_json()
@@ -1184,4 +1267,4 @@ def alternative_times():
 
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5001)
+    app.run(debug=True, port=5007)
