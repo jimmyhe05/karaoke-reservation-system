@@ -58,57 +58,6 @@
                     <div class="room-header">
                         <span class="en">Room {{ room.id }}</span>
                     </div>
-                    <div class="room-timeline-wrapper">
-                        <div class="time-labels">
-                            {% set start_hour = 11 %}
-                            {% set end_hour = 25 %}
-                            {% for h in range(start_hour, end_hour) %}
-                            <div class="time-label">{{ (h-1) % 12 + 1 }}:00 {{ 'AM' if h < 12 or h==24 else 'PM'
-                                    }}</div>
-                                    <div class="time-label">{{ (h-1) % 12 + 1 }}:30 {{ 'AM' if h < 12 or h==24 else 'PM'
-                                            }}</div>
-                                            {% endfor %}
-                                    </div>
-                                    <div class="room-timeline" id="room-{{ room.id }}" data-room-id="{{ room.id }}">
-                                        {# Create 30‑minute granular time slots (two per hour) so labels & slots align
-                                        #}
-                                        {% for h in range(start_hour, end_hour) %}
-                                        <div class="time-slot" data-hour="{{ h }}" data-minute="0"></div>
-                                        <div class="time-slot" data-hour="{{ h }}" data-minute="30"></div>
-                                        {% endfor %}
-
-                                        {# Render reservation cards positioned relative to their start slot #}
-                                        {% for reservation in room.reservations %}
-                                        {% set res_start_parts = reservation.start_time.split(':') %}
-                                        {% set res_start_hour = res_start_parts[0]|int %}
-                                        {% set res_start_min = res_start_parts[1]|int %}
-                                        {% set slot_index = (res_start_hour - 11) * 2 + (res_start_min // 30) %}
-                                        {% set top_pos = slot_index * 20 %}
-                                        {% set card_height = reservation.duration * 40 %}
-                                        <div class="reservation-card" data-reservation-id="{{ reservation.id }}"
-                                            data-room-id="{{ room.id }}" data-hour="{{ res_start_hour }}"
-                                            data-minute="{{ res_start_min }}"
-                                            data-start-time="{{ reservation.start_time }}"
-                                            data-end-time="{{ reservation.end_time }}"
-                                            data-duration="{{ reservation.duration }}" data-top="{{ top_pos }}"
-                                            data-height="{{ card_height }}">
-                                            <div class="time-indicator">
-                                                <span class="time-range">{{ reservation.start_time }} - {{
-                                                    reservation.end_time }}</span>
-                                            </div>
-                                            <div class="content">
-                                                <div class="name-row">
-                                                    <strong>{{ reservation.contact_name }}</strong>
-                                                    <span class="people-count">{{ reservation.num_people }}</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        {% endfor %}
-                                    </div>
-                            </div>
-                        </div>
-                        {% endfor %}
-                    </div>
                 </div>
             </div>
 
