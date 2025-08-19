@@ -23,7 +23,6 @@
         <header class="header">
             <h1>
                 <span class="en">Karaoke Room Reservation System</span>
-                <span class="zh">卡拉OK房间预订系统</span>
             </h1>
             <div class="header-actions">
                 <button id="language-toggle" class="btn btn-sm btn-outline-light">中文</button>
@@ -42,8 +41,6 @@
                 <div class="selected-date-display text-center mb-1"><span id="selected-date-label"></span></div>
                 <div id="calendar"></div>
             </div>
-
-            <!-- Idle Reservations removed from sidebar and will be rendered as an idle-room column to the left of rooms -->
         </div>
 
         <!-- Content Area with Room Timelines -->
@@ -54,34 +51,12 @@
                 <div class="room-container idle-room">
                     <div class="room-header">
                         <span class="en">Idle</span>
-                        <span class="zh">闲置预订</span>
-                    </div>
-                    <div class="room-timeline-wrapper">
-                        <div class="room-timeline idle-drop-area" id="idle-area" data-room-id="idle">
-                            {% for reservation in idle_reservations %}
-                            <div class="reservation-card" data-reservation-id="{{ reservation.id }}" data-room-id="idle"
-                                data-start-time="{{ reservation.start_time }}"
-                                data-end-time="{{ reservation.end_time }}" data-duration="{{ reservation.duration }}">
-                                <div class="time-indicator">
-                                    <span class="time-range">{{ reservation.start_time }} - {{ reservation.end_time
-                                        }}</span>
-                                </div>
-                                <div class="content">
-                                    <div class="name-row">
-                                        <strong>{{ reservation.contact_name }}</strong>
-                                        <span class="people-count">{{ reservation.num_people }}</span>
-                                    </div>
-                                </div>
-                            </div>
-                            {% endfor %}
-                        </div>
                     </div>
                 </div>
                 {% for room in rooms %}
                 <div class="room-container">
                     <div class="room-header">
                         <span class="en">Room {{ room.id }}</span>
-                        <span class="zh">房间 {{ room.id }}</span>
                     </div>
                     <div class="room-timeline-wrapper">
                         <div class="time-labels">
@@ -144,7 +119,6 @@
                         <div class="modal-header">
                             <h5 class="modal-title">
                                 <span class="en">New Reservation</span>
-                                <span class="zh">新预订</span>
                             </h5>
                             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                         </div>
@@ -155,7 +129,7 @@
                                 <div class="row">
                                     <div class="col-md-6">
                                         <div class="form-group mb-2">
-                                            <label for="date">Date <span class="chinese">日期</span></label>
+                                            <label for="date">Date</label>
                                             <input type="text" id="date" name="date" class="form-control" required>
                                         </div>
                                     </div>
@@ -163,7 +137,6 @@
                                         <div class="form-group mb-2">
                                             <label for="room_id" class="bilingual-label horizontal">
                                                 <span class="en">Room</span>
-                                                <span class="zh">房间</span>
                                             </label>
                                             <select id="room_id" name="room_id" class="form-control">
                                                 {% for room in rooms %}
