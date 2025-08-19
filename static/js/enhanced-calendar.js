@@ -123,10 +123,10 @@ function initEnhancedCalendar() {
 
         // Use simple title-based tooltip: set data-tooltip and class for CSS pseudo-element
         try{
-          const tooltipHtml = createTooltipContent(dateStr, props).replace(/<[^>]+>/g, '\\n');
+          const tooltipHtml = createTooltipContent(dateStr, props).replace(/<[^>]+>/g, '\n');
           dayCell.setAttribute('data-tooltip', tooltipHtml);
           dayCell.classList.add('day-title-tooltip');
-          dayCell.title = tooltipHtml.replace(/\\n/g, ' ');
+          dayCell.title = tooltipHtml.replace(/\n/g, ' ');
         }catch(e){
           try{ dayCell.title = '' }catch(_){}
         }
@@ -242,10 +242,10 @@ function ensureDayCellTooltips(){
           totalRooms: 4,
           occupancyPercentage: Math.round((reservationCount/(4||1))*100)
         };
-        const tooltipText = createTooltipContent(date, props).replace(/<[^>]+>/g, '\\n');
+  const tooltipText = createTooltipContent(date, props).replace(/<[^>]+>/g, '\n');
         cell.setAttribute('data-tooltip', tooltipText);
         cell.classList.add('day-title-tooltip');
-        cell.title = tooltipText.replace(/\\n/g,' ');
+  cell.title = tooltipText.replace(/\n/g,' ');
         cell.dataset.tooltipBound = '1';
       }catch(e){
         if(!cell.title){ try{ cell.title = cell.textContent.trim().slice(0,200); }catch(_){ } }

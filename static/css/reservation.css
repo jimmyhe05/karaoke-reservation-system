@@ -342,7 +342,7 @@
 }
 
 .fc-view-harness {
-    height: calc(100% - 50px) !important;
+    height: auto !important;
 }
 
 /* Bilingual labels */
