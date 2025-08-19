@@ -11,6 +11,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/reservation.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/enhanced-calendar.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/improved-layout.css') }}">
+    <!-- tippy removed: using simple title-based tooltips instead -->
 </head>
 
 <body class="lang-en">
@@ -146,7 +147,7 @@
                             </div>
                             <div class="col-md-6">
                                 <div class="form-group mb-2">
-                                    <label class="bilingual-label horizontal">
+                                    <label for="room_id" class="bilingual-label horizontal">
                                         <span class="en">Room</span>
                                         <span class="zh">房间</span>
                                     </label>
@@ -199,7 +200,7 @@
                         <div class="row">
                             <div class="col-md-6">
                                 <div class="form-group mb-3">
-                                    <label class="bilingual-label">
+                                    <label for="num_people" class="bilingual-label">
                                         <span class="en">Number of People</span>
                                         <span class="zh">人数</span>
                                     </label>
@@ -209,7 +210,7 @@
                             </div>
                             <div class="col-md-6">
                                 <div class="form-group mb-3">
-                                    <label class="bilingual-label">
+                                    <label for="language" class="bilingual-label">
                                         <span class="en">Language</span>
                                         <span class="zh">语言</span>
                                     </label>
@@ -229,7 +230,7 @@
                         <div class="row">
                             <div class="col-md-12">
                                 <div class="form-group mb-3">
-                                    <label class="bilingual-label">
+                                    <label for="contact_name" class="bilingual-label">
                                         <span class="en">Contact Name</span>
                                         <span class="zh">联系人姓名</span>
                                     </label>
@@ -245,7 +246,7 @@
                         <div class="row">
                             <div class="col-md-6">
                                 <div class="form-group mb-3">
-                                    <label class="bilingual-label">
+                                    <label for="contact_phone" class="bilingual-label">
                                         <span class="en">Contact Phone</span>
                                         <span class="zh">联系电话</span>
                                     </label>
@@ -258,7 +259,7 @@
                             </div>
                             <div class="col-md-6">
                                 <div class="form-group mb-3">
-                                    <label class="bilingual-label">
+                                    <label for="contact_email" class="bilingual-label">
                                         <span class="en">Contact Email</span>
                                         <span class="zh">电子邮箱</span>
                                     </label>
@@ -329,7 +330,6 @@
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@5.10.1/main.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/tippy.js@6/dist/tippy-bundle.umd.min.js"></script>
     <!-- Removed flatpickr scripts -->
     <script src="{{ url_for('static', filename='js/reservation.js') }}"></script>
     <script src="{{ url_for('static', filename='js/form-validation.js') }}"></script>

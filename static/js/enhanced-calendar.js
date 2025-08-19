@@ -121,15 +121,15 @@ function initEnhancedCalendar() {
           dayCell.querySelector(".fc-daygrid-day-bg").appendChild(countBadge);
         }
 
-        // Add tooltip
-        tippy(dayCell, {
-          content: createTooltipContent(dateStr, props),
-          allowHTML: true,
-          placement: "top",
-          arrow: true,
-          theme: "light",
-          interactive: true,
-        });
+        // Use simple title-based tooltip: set data-tooltip and class for CSS pseudo-element
+        try{
+          const tooltipHtml = createTooltipContent(dateStr, props).replace(/<[^>]+>/g, '\\n');
+          dayCell.setAttribute('data-tooltip', tooltipHtml);
+          dayCell.classList.add('day-title-tooltip');
+          dayCell.title = tooltipHtml.replace(/\\n/g, ' ');
+        }catch(e){
+          try{ dayCell.title = '' }catch(_){}
+        }
       }
     },
     // Handle date selection
@@ -161,6 +161,8 @@ function initEnhancedCalendar() {
   console.info('[Calendar] Rendered with selected date', selectedDate);
   // After render ensure selected date highlighted
   applySelectedDate(selectedDate, true);
+  // Ensure all day cells have tooltips bound (useful if tippy was present but some cells missed)
+  ensureDayCellTooltips();
 
   // Delegate clicks on day cells to ensure selection works even if FullCalendar handlers aren't available
   const calRoot = document.getElementById('calendar');
@@ -205,13 +207,51 @@ function applySelectedDate(dateStr, skipCalendarSet){
       const yyyy = d.getFullYear();
       const newPath = `/${mm}-${dd}-${yyyy}`;
       if(window.location.pathname !== newPath){
-        window.history.replaceState({}, '', newPath);
+        // If this is initial setup, replaceState; otherwise push a new history entry
+        if(skipCalendarSet){
+          window.history.replaceState({}, '', newPath);
+        } else {
+          window.history.pushState({selectedDate: dateStr}, '', newPath);
+        }
       }
     }
   } catch(e){ console.warn('URL path update failed', e); }
   if(!skipCalendarSet && window.calendar){
     window.calendar.gotoDate(dateStr);
   }
+}
+
+// Ensure day cell tooltips are bound; idempotent via data attribute
+function ensureDayCellTooltips(){
+  if(typeof document === 'undefined') return;
+  const cells = document.querySelectorAll('.fc-daygrid-day');
+  cells.forEach(cell=>{
+    try{
+      if(cell.dataset.tooltipBound) return;
+      const bg = cell.querySelector('.fc-daygrid-day-bg');
+      if(!bg) return;
+      try{
+        const date = cell.getAttribute('data-date');
+        const reservationCountEl = cell.querySelector('.reservation-count');
+        const reservationCount = reservationCountEl ? parseInt(reservationCountEl.textContent||'0') : 0;
+        const availabilityIndicator = cell.querySelector('.availability-indicator');
+        const availableRooms = availabilityIndicator ? (availabilityIndicator.classList.contains('availability-none')?0:1) : 0;
+        const props = {
+          reservationCount: reservationCount,
+          availableRooms: availableRooms,
+          totalRooms: 4,
+          occupancyPercentage: Math.round((reservationCount/(4||1))*100)
+        };
+        const tooltipText = createTooltipContent(date, props).replace(/<[^>]+>/g, '\\n');
+        cell.setAttribute('data-tooltip', tooltipText);
+        cell.classList.add('day-title-tooltip');
+        cell.title = tooltipText.replace(/\\n/g,' ');
+        cell.dataset.tooltipBound = '1';
+      }catch(e){
+        if(!cell.title){ try{ cell.title = cell.textContent.trim().slice(0,200); }catch(_){ } }
+      }
+    }catch(e){/* ignore per-cell failures */}
+  });
 }
 
 function updateSelectedDateLabel(dateStr){
@@ -265,16 +305,8 @@ function createTooltipContent(dateStr, props) {
 
 // Initialize the enhanced calendar when the DOM is loaded
 document.addEventListener("DOMContentLoaded", function () {
-  // Load Tippy.js for tooltips if not already loaded
-  if (typeof tippy === "undefined") {
-    const tippyScript = document.createElement("script");
-    tippyScript.src =
-      "https://cdn.jsdelivr.net/npm/tippy.js@6/dist/tippy-bundle.umd.min.js";
-    tippyScript.onload = initEnhancedCalendar;
-    document.head.appendChild(tippyScript);
-  } else {
-    initEnhancedCalendar();
-  }
+  // Initialize calendar; we use simple title-based tooltips (CSS) instead of tippy
+  initEnhancedCalendar();
 
   // Hook day navigation buttons (prev/next day modify selected date)
   function shiftDay(offset){
@@ -316,6 +348,17 @@ document.addEventListener("DOMContentLoaded", function () {
   });
   const calRoot = document.getElementById('calendar');
   if(calRoot){ observer.observe(calRoot,{childList:true}); }
+});
+
+// Handle browser navigation (back/forward)
+window.addEventListener('popstate', function(e){
+  // Try to read date from path
+  const path = window.location.pathname.replace(/^\//,'');
+  if(/\d{2}-\d{2}-\d{4}/.test(path)){
+    const [mm,dd,yyyy] = path.split('-');
+    const iso = `${yyyy}-${mm}-${dd}`;
+    applySelectedDate(iso, true);
+  }
 });
 
 // Export functions for use in other scripts
