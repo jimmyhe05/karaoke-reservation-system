@@ -80,7 +80,8 @@
 
 .calendar-container {
     flex: 0 0 480px;
-    height: calc(100vh - 160px); /* match the vertical space used by rooms */
+    height: calc(100vh - 160px);
+    /* match the vertical space used by rooms */
     background: white;
     border-radius: 8px;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);

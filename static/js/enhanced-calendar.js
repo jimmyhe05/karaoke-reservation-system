@@ -6,11 +6,11 @@ function initEnhancedCalendar() {
   if (!calendarEl) return;
 
   // Clean up any leftover Flatpickr artifacts (from earlier implementation)
-  if (calendarEl.classList.contains('flatpickr-input')) {
-    calendarEl.classList.remove('flatpickr-input');
+  if (calendarEl.classList.contains("flatpickr-input")) {
+    calendarEl.classList.remove("flatpickr-input");
   }
-  if (calendarEl.hasAttribute('readonly')) {
-    calendarEl.removeAttribute('readonly');
+  if (calendarEl.hasAttribute("readonly")) {
+    calendarEl.removeAttribute("readonly");
   }
 
   // Remove any existing flatpickr-calendar elements
@@ -20,13 +20,13 @@ function initEnhancedCalendar() {
   existingFlatpickrCalendars.forEach((calendar) => calendar.remove());
 
   // Store the selected date
-  let urlPath = window.location.pathname.replace(/^\//,'');
-  let selectedDate = (function(){
-    if(/\d{2}-\d{2}-\d{4}/.test(urlPath)){
-      const [mm,dd,yyyy] = urlPath.split('-');
+  let urlPath = window.location.pathname.replace(/^\//, "");
+  let selectedDate = (function () {
+    if (/\d{2}-\d{2}-\d{4}/.test(urlPath)) {
+      const [mm, dd, yyyy] = urlPath.split("-");
       return `${yyyy}-${mm}-${dd}`;
     }
-    return new Date().toISOString().split('T')[0];
+    return new Date().toISOString().split("T")[0];
   })();
   calendarEl.dataset.selectedDate = selectedDate;
   // Initialize label immediately
@@ -36,8 +36,8 @@ function initEnhancedCalendar() {
   const calendar = new FullCalendar.Calendar(calendarEl, {
     initialView: "dayGridMonth",
     initialDate: selectedDate,
-  headerToolbar: false, // use our external controls
-  height: 'auto',
+    headerToolbar: false, // use our external controls
+    height: "auto",
     selectable: true,
     selectConstraint: {
       start: new Date().setHours(0, 0, 0, 0),
@@ -121,7 +121,7 @@ function initEnhancedCalendar() {
           dayCell.querySelector(".fc-daygrid-day-bg").appendChild(countBadge);
         }
 
-  // No hover tooltip needed — intentionally left blank to avoid showing extra info on hover
+        // No hover tooltip needed — intentionally left blank to avoid showing extra info on hover
       }
     },
     // Handle date selection
@@ -131,7 +131,7 @@ function initEnhancedCalendar() {
         return;
       }
 
-  applySelectedDate(info.dateStr);
+      applySelectedDate(info.dateStr);
     },
     // Calendar header
     headerToolbar: {
@@ -150,21 +150,25 @@ function initEnhancedCalendar() {
 
   // Render the calendar
   calendar.render();
-  console.info('[Calendar] Rendered with selected date', selectedDate);
+  console.info("[Calendar] Rendered with selected date", selectedDate);
   // After render ensure selected date highlighted
   applySelectedDate(selectedDate, true);
   // Remove any hover/title tooltip attributes so native browser tooltips don't appear
   ensureDayCellTooltips();
 
   // Delegate clicks on day cells to ensure selection works even if FullCalendar handlers aren't available
-  const calRoot = document.getElementById('calendar');
+  const calRoot = document.getElementById("calendar");
   if (calRoot) {
-    calRoot.addEventListener('click', function (e) {
-      const dayCell = e.target.closest('.fc-daygrid-day');
+    calRoot.addEventListener("click", function (e) {
+      const dayCell = e.target.closest(".fc-daygrid-day");
       if (!dayCell) return;
       // Ignore disabled or past days
-      if (dayCell.classList.contains('fc-day-disabled') || dayCell.classList.contains('fc-day-past')) return;
-      const date = dayCell.getAttribute('data-date');
+      if (
+        dayCell.classList.contains("fc-day-disabled") ||
+        dayCell.classList.contains("fc-day-past")
+      )
+        return;
+      const date = dayCell.getAttribute("data-date");
       if (!date) return;
       // Apply selected date (this updates label, URL, and timelines)
       applySelectedDate(date);
@@ -179,36 +183,42 @@ function initEnhancedCalendar() {
   return calendar;
 }
 
-function applySelectedDate(dateStr, skipCalendarSet){
-  const calendarEl = document.getElementById('calendar');
-  if(!calendarEl) return;
+function applySelectedDate(dateStr, skipCalendarSet) {
+  const calendarEl = document.getElementById("calendar");
+  if (!calendarEl) return;
   calendarEl.dataset.selectedDate = dateStr;
   window.currentSelectedDate = dateStr;
   // Highlight
-  document.querySelectorAll('.fc-daygrid-day').forEach(d=>d.classList.remove('selected-date'));
-  const cell = document.querySelector(`.fc-daygrid-day[data-date="${dateStr}"]`);
-  if(cell) cell.classList.add('selected-date');
+  document
+    .querySelectorAll(".fc-daygrid-day")
+    .forEach((d) => d.classList.remove("selected-date"));
+  const cell = document.querySelector(
+    `.fc-daygrid-day[data-date="${dateStr}"]`
+  );
+  if (cell) cell.classList.add("selected-date");
   updateSelectedDateLabel(dateStr);
   updateRoomTimelines(dateStr);
   // Update URL path
   try {
-    const d = new Date(dateStr+'T00:00:00');
-    if(!isNaN(d.getTime())){
-      const mm = String(d.getMonth()+1).padStart(2,'0');
-      const dd = String(d.getDate()).padStart(2,'0');
+    const d = new Date(dateStr + "T00:00:00");
+    if (!isNaN(d.getTime())) {
+      const mm = String(d.getMonth() + 1).padStart(2, "0");
+      const dd = String(d.getDate()).padStart(2, "0");
       const yyyy = d.getFullYear();
       const newPath = `/${mm}-${dd}-${yyyy}`;
-      if(window.location.pathname !== newPath){
+      if (window.location.pathname !== newPath) {
         // If this is initial setup, replaceState; otherwise push a new history entry
-        if(skipCalendarSet){
-          window.history.replaceState({}, '', newPath);
+        if (skipCalendarSet) {
+          window.history.replaceState({}, "", newPath);
         } else {
-          window.history.pushState({selectedDate: dateStr}, '', newPath);
+          window.history.pushState({ selectedDate: dateStr }, "", newPath);
         }
       }
     }
-  } catch(e){ console.warn('URL path update failed', e); }
-  if(!skipCalendarSet && window.calendar){
+  } catch (e) {
+    console.warn("URL path update failed", e);
+  }
+  if (!skipCalendarSet && window.calendar) {
     window.calendar.gotoDate(dateStr);
   }
 }
@@ -216,26 +226,30 @@ function applySelectedDate(dateStr, skipCalendarSet){
 // Ensure day cell tooltips are bound; idempotent via data attribute
 // Tooltip binding intentionally disabled — user requested no hover information on date blocks
 // Remove any hover-related attributes/classes from day cells so no hover info appears
-function ensureDayCellTooltips(){
-  if(typeof document === 'undefined') return;
-  const cells = document.querySelectorAll('.fc-daygrid-day');
-  cells.forEach(cell=>{
-    try{
+function ensureDayCellTooltips() {
+  if (typeof document === "undefined") return;
+  const cells = document.querySelectorAll(".fc-daygrid-day");
+  cells.forEach((cell) => {
+    try {
       // Remove title attribute (native tooltip) and data-tooltip and visual class
-      if(cell.hasAttribute('title')) cell.removeAttribute('title');
-      if(cell.hasAttribute('data-tooltip')) cell.removeAttribute('data-tooltip');
-      if(cell.classList.contains('day-title-tooltip')) cell.classList.remove('day-title-tooltip');
+      if (cell.hasAttribute("title")) cell.removeAttribute("title");
+      if (cell.hasAttribute("data-tooltip"))
+        cell.removeAttribute("data-tooltip");
+      if (cell.classList.contains("day-title-tooltip"))
+        cell.classList.remove("day-title-tooltip");
       // mark as cleaned
-      cell.dataset.tooltipBound = '0';
-    }catch(e){ /* ignore per-cell failures */ }
+      cell.dataset.tooltipBound = "0";
+    } catch (e) {
+      /* ignore per-cell failures */
+    }
   });
 }
 
-function updateSelectedDateLabel(dateStr){
-  const el = document.getElementById('selected-date-label');
-  if(!el) return;
-  if(!dateStr) dateStr = new Date().toISOString().split('T')[0];
-  const [y,m,d] = dateStr.split('-');
+function updateSelectedDateLabel(dateStr) {
+  const el = document.getElementById("selected-date-label");
+  if (!el) return;
+  if (!dateStr) dateStr = new Date().toISOString().split("T")[0];
+  const [y, m, d] = dateStr.split("-");
   el.textContent = `${m}-${d}-${y}`;
 }
 
@@ -286,53 +300,66 @@ document.addEventListener("DOMContentLoaded", function () {
   initEnhancedCalendar();
 
   // Hook day navigation buttons (prev/next day modify selected date)
-  function shiftDay(offset){
-    const base = new Date(window.currentSelectedDate || new Date().toISOString().split('T')[0]);
-    base.setDate(base.getDate()+offset);
-    const ymd = base.toISOString().split('T')[0];
+  function shiftDay(offset) {
+    const base = new Date(
+      window.currentSelectedDate || new Date().toISOString().split("T")[0]
+    );
+    base.setDate(base.getDate() + offset);
+    const ymd = base.toISOString().split("T")[0];
     applySelectedDate(ymd);
   }
   // Optional month navigation using existing FullCalendar API (if we decide to add buttons later)
-  window.shiftMonth = function(offset){
-    if(window.calendar){
+  window.shiftMonth = function (offset) {
+    if (window.calendar) {
       window.calendar.incrementDate({ months: offset });
       // Keep selected date within new month (set to first day if month changed drastically)
       const current = window.calendar.getDate();
-      const y=current.getFullYear(), m=String(current.getMonth()+1).padStart(2,'0');
+      const y = current.getFullYear(),
+        m = String(current.getMonth() + 1).padStart(2, "0");
       // preserve day if possible else fallback to 01
-      let day = (window.currentSelectedDate||'').split('-')[2] || '01';
+      let day = (window.currentSelectedDate || "").split("-")[2] || "01";
       const tentative = new Date(`${y}-${m}-${day}T00:00:00`);
-      if(tentative.getMonth()+1 !== current.getMonth()+1){
-        day='01';
+      if (tentative.getMonth() + 1 !== current.getMonth() + 1) {
+        day = "01";
       }
       applySelectedDate(`${y}-${m}-${day}`);
     }
-  }
-  const prevBtn = document.getElementById('prev-day-btn');
-  const nextBtn = document.getElementById('next-day-btn');
-  const todayBtn = document.getElementById('today-btn');
-  if(prevBtn) prevBtn.addEventListener('click', ()=>shiftDay(-1));
-  if(nextBtn) nextBtn.addEventListener('click', ()=>shiftDay(1));
-  if(todayBtn) todayBtn.addEventListener('click', ()=>applySelectedDate(new Date().toISOString().split('T')[0]));
+  };
+  const prevBtn = document.getElementById("prev-day-btn");
+  const nextBtn = document.getElementById("next-day-btn");
+  const todayBtn = document.getElementById("today-btn");
+  if (prevBtn) prevBtn.addEventListener("click", () => shiftDay(-1));
+  if (nextBtn) nextBtn.addEventListener("click", () => shiftDay(1));
+  if (todayBtn)
+    todayBtn.addEventListener("click", () =>
+      applySelectedDate(new Date().toISOString().split("T")[0])
+    );
 
   // Fallback: if something wipes calendar innerHTML later, re-init
-  const observer = new MutationObserver(()=>{
-    if(!document.querySelector('#calendar .fc-view-harness') && document.getElementById('calendar')){
-      console.warn('[Calendar] Lost internal markup, re-rendering');
-      if(window.calendar){ window.calendar.destroy(); }
+  const observer = new MutationObserver(() => {
+    if (
+      !document.querySelector("#calendar .fc-view-harness") &&
+      document.getElementById("calendar")
+    ) {
+      console.warn("[Calendar] Lost internal markup, re-rendering");
+      if (window.calendar) {
+        window.calendar.destroy();
+      }
       initEnhancedCalendar();
     }
   });
-  const calRoot = document.getElementById('calendar');
-  if(calRoot){ observer.observe(calRoot,{childList:true}); }
+  const calRoot = document.getElementById("calendar");
+  if (calRoot) {
+    observer.observe(calRoot, { childList: true });
+  }
 });
 
 // Handle browser navigation (back/forward)
-window.addEventListener('popstate', function(e){
+window.addEventListener("popstate", function (e) {
   // Try to read date from path
-  const path = window.location.pathname.replace(/^\//,'');
-  if(/\d{2}-\d{2}-\d{4}/.test(path)){
-    const [mm,dd,yyyy] = path.split('-');
+  const path = window.location.pathname.replace(/^\//, "");
+  if (/\d{2}-\d{2}-\d{4}/.test(path)) {
+    const [mm, dd, yyyy] = path.split("-");
     const iso = `${yyyy}-${mm}-${dd}`;
     applySelectedDate(iso, true);
   }

@@ -1,3 +1,4 @@
+from werkzeug.routing import BaseConverter
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, abort
 from datetime import datetime, timedelta
 import os
@@ -57,12 +58,14 @@ with app.app_context():
     init_db()
 
 # --- URL Date Path Converter (MM-DD-YYYY) ---
-from werkzeug.routing import BaseConverter
+
 
 class DatePathConverter(BaseConverter):
     regex = r'\d{2}-\d{2}-\d{4}'
 
+
 app.url_map.converters['datepath'] = DatePathConverter
+
 
 def normalize_date_path(date_str):
     """Convert MM-DD-YYYY to YYYY-MM-DD or raise ValueError."""
@@ -434,12 +437,14 @@ def index():
 @app.route('/improved')
 def improved_reservation():
     # Backward compatibility: redirect to date path
-    selected_date = request.args.get('date', datetime.now().strftime('%Y-%m-%d'))
+    selected_date = request.args.get(
+        'date', datetime.now().strftime('%Y-%m-%d'))
     try:
         dt = datetime.strptime(selected_date, '%Y-%m-%d')
     except ValueError:
         dt = datetime.now()
     return redirect(f"/{dt.strftime('%m-%d-%Y')}")
+
 
 @app.route('/<datepath:date_str>')
 def reservation_by_date(date_str):
@@ -879,18 +884,21 @@ def move_reservation():
         conn = get_db()
         try:
             # Get existing reservation
-            reservation = conn.execute('SELECT * FROM reservations WHERE id = ?', (reservation_id,)).fetchone()
+            reservation = conn.execute(
+                'SELECT * FROM reservations WHERE id = ?', (reservation_id,)).fetchone()
             if not reservation:
                 return jsonify({'error': 'Reservation not found'}), 404
 
             # Parse old times to preserve duration
             old_start_dt, _ = parse_time_safe(reservation['start_time'])
-            old_end_dt, old_is_extended = parse_time_safe(reservation['end_time'])
+            old_end_dt, old_is_extended = parse_time_safe(
+                reservation['end_time'])
 
             # Compute old duration in minutes
             if old_is_extended or old_end_dt <= old_start_dt:
                 old_end_dt = old_end_dt.replace(day=old_start_dt.day + 1)
-            duration_minutes = int((old_end_dt - old_start_dt).total_seconds() / 60)
+            duration_minutes = int(
+                (old_end_dt - old_start_dt).total_seconds() / 60)
 
             # Parse new start_time provided (HH:MM)
             try:

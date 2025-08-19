@@ -155,9 +155,11 @@ function handleReservationMove(evt) {
     }
 
     if (timeSlot) {
-  const hour = timeSlot.dataset.hour || timeSlot.dataset.time.split(":")[0];
-  const minute = timeSlot.dataset.minute || (timeSlot.dataset.time ? timeSlot.dataset.time.split(":")[1] : 0);
-  console.log(`Moving from idle to room ${roomId} at ${hour}:${minute}`);
+      const hour = timeSlot.dataset.hour || timeSlot.dataset.time.split(":")[0];
+      const minute =
+        timeSlot.dataset.minute ||
+        (timeSlot.dataset.time ? timeSlot.dataset.time.split(":")[1] : 0);
+      console.log(`Moving from idle to room ${roomId} at ${hour}:${minute}`);
 
       // First remove from idle area in the backend
       fetch(`/remove_from_idle/${reservationId}`, {
@@ -214,10 +216,12 @@ function handleReservationMove(evt) {
     }
 
     if (timeSlot) {
-  const hour = timeSlot.dataset.hour || timeSlot.dataset.time.split(":")[0];
-  const minute = timeSlot.dataset.minute || (timeSlot.dataset.time ? timeSlot.dataset.time.split(":")[1] : 0);
-  console.log(`Moving to room ${roomId} at ${hour}:${minute}`);
-  moveReservation(reservationId, roomId, hour, minute);
+      const hour = timeSlot.dataset.hour || timeSlot.dataset.time.split(":")[0];
+      const minute =
+        timeSlot.dataset.minute ||
+        (timeSlot.dataset.time ? timeSlot.dataset.time.split(":")[1] : 0);
+      console.log(`Moving to room ${roomId} at ${hour}:${minute}`);
+      moveReservation(reservationId, roomId, hour, minute);
     } else {
       console.error("No time slot found for the reservation");
       showToast("Error: Could not determine the time slot", "error");
@@ -233,7 +237,9 @@ function moveReservation(reservationId, roomId, hour, minute = 0) {
     return;
   }
 
-  console.log(`Moving reservation ${reservationId} to room ${roomId} at ${hour}:${minute}`);
+  console.log(
+    `Moving reservation ${reservationId} to room ${roomId} at ${hour}:${minute}`
+  );
 
   // Get the current date from the calendar
   const selectedDate =
@@ -261,9 +267,9 @@ function moveReservation(reservationId, roomId, hour, minute = 0) {
   const newEndMinute = newEndTotalMinutes % 60;
 
   // Format times for API
-  const startTime = `${newStartHour.toString().padStart(2, "0")}:${newStartMinute
+  const startTime = `${newStartHour
     .toString()
-    .padStart(2, "0")}`;
+    .padStart(2, "0")}:${newStartMinute.toString().padStart(2, "0")}`;
   const endTime = `${newEndHour.toString().padStart(2, "0")}:${newEndMinute
     .toString()
     .padStart(2, "0")}`;
@@ -781,15 +787,15 @@ function markOccupiedTimeSlots(
 function initQuickDurationButtons() {
   document.querySelectorAll(".duration-btn").forEach((button) => {
     button.onclick = function () {
-  const hours = parseFloat(this.dataset.hours || this.textContent);
+      const hours = parseFloat(this.dataset.hours || this.textContent);
       if (!window.startTimePicker || !window.endTimePicker) return;
 
       const startDate = window.startTimePicker.selectedDates[0];
       if (!startDate) return;
 
       // Calculate new end time
-  const endDate = new Date(startDate);
-  endDate.setMinutes(startDate.getMinutes() + hours * 60);
+      const endDate = new Date(startDate);
+      endDate.setMinutes(startDate.getMinutes() + hours * 60);
 
       // Update end time picker
       window.endTimePicker.setDate(endDate);
@@ -798,7 +804,9 @@ function initQuickDurationButtons() {
       updatePriceEstimate();
 
       // Update button states
-  document.querySelectorAll(".duration-btn").forEach((btn) => btn.classList.remove("active"));
+      document
+        .querySelectorAll(".duration-btn")
+        .forEach((btn) => btn.classList.remove("active"));
       this.classList.add("active");
     };
   });
@@ -885,7 +893,7 @@ function updatePriceEstimate() {
   // Update displays
   try {
     // Update room rate
-  const roomRateElement = document.getElementById("room-rate");
+    const roomRateElement = document.getElementById("room-rate");
     if (roomRateElement) {
       roomRateElement.textContent = `$${totalCharge.toFixed(2)}`;
     }
@@ -897,7 +905,7 @@ function updatePriceEstimate() {
     }
 
     // Update total
-  const totalElement = document.getElementById("total-cost");
+    const totalElement = document.getElementById("total-cost");
     if (totalElement) {
       totalElement.textContent = `$${totalWithTax.toFixed(2)}`;
     }
@@ -930,8 +938,8 @@ function updatePriceEstimate() {
 
     // Log the calculation for debugging
     console.log("Price calculation:", {
-  startTime: `${startHour}:${startMinutes}`,
-  endTime: `${endHour}:${endMinutes}`,
+      startTime: `${startHour}:${startMinutes}`,
+      endTime: `${endHour}:${endMinutes}`,
       durationInHours,
       earlyBirdHours,
       eveningHours,
@@ -1298,8 +1306,13 @@ function initializeTimePickers(
     maxTime: "23:59", // Allow up to 11:59 PM for start
     defaultHour: defaultStartHour,
     defaultMinute: defaultStartMinute,
-  onChange: function (selectedDates, dateStr) { updateEndTimeMinimum(dateStr); updatePriceEstimate(); },
-  onClose: function(){ updatePriceEstimate(); },
+    onChange: function (selectedDates, dateStr) {
+      updateEndTimeMinimum(dateStr);
+      updatePriceEstimate();
+    },
+    onClose: function () {
+      updatePriceEstimate();
+    },
   });
 
   // --- End Time Picker ---
@@ -1323,8 +1336,15 @@ function initializeTimePickers(
     maxTime: "01:00", // Allow up to 1:00 AM next day
     defaultHour: defaultEndHour % 24, // Adjust for display if >= 24
     defaultMinute: defaultEndMinute,
-  onChange: function () { updatePriceEstimate(); document.querySelectorAll('.duration-btn.active').forEach(btn=>btn.classList.remove('active')); },
-  onClose: function(){ updatePriceEstimate(); },
+    onChange: function () {
+      updatePriceEstimate();
+      document
+        .querySelectorAll(".duration-btn.active")
+        .forEach((btn) => btn.classList.remove("active"));
+    },
+    onClose: function () {
+      updatePriceEstimate();
+    },
   });
 
   // Set initial minimum for end time based on initial start time
@@ -1395,35 +1415,47 @@ document.addEventListener("DOMContentLoaded", function () {
   updateRoomTimelines(new Date().toISOString().split("T")[0]);
 
   // AJAX form submission to immediately show new reservation
-  const resForm = document.getElementById('reservationForm');
-  if(resForm){
-    resForm.addEventListener('submit', function(evt){
+  const resForm = document.getElementById("reservationForm");
+  if (resForm) {
+    resForm.addEventListener("submit", function (evt) {
       evt.preventDefault();
       const formData = new FormData(resForm);
       const payload = Object.fromEntries(formData.entries());
       const isUpdate = !!payload.reservation_id;
-      fetch(isUpdate ? `/update_reservation/${payload.reservation_id}` : '/reservation', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify(payload)
-      }).then(r=>r.json().then(j=>({ok:r.ok,status:r.status,body:j})))
-      .then(result=>{
-        if(!result.ok){
-          showToast(result.body.error || 'Failed to save', 'error');
-          return;
+      fetch(
+        isUpdate
+          ? `/update_reservation/${payload.reservation_id}`
+          : "/reservation",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
         }
-        showToast(isUpdate ? 'Reservation updated' : 'Reservation created', 'success');
-        const activeDate = window.currentSelectedDate || payload.date;
-        updateRoomTimelines(activeDate);
-        updateIdleArea && updateIdleArea();
-        // close modal
-        const modalEl = document.getElementById('reservationModal');
-        const modal = bootstrap.Modal.getInstance(modalEl);
-        if(modal) modal.hide();
-      }).catch(err=>{
-        console.error('Save error', err);
-        showToast('Error saving reservation','error');
-      });
+      )
+        .then((r) =>
+          r.json().then((j) => ({ ok: r.ok, status: r.status, body: j }))
+        )
+        .then((result) => {
+          if (!result.ok) {
+            showToast(result.body.error || "Failed to save", "error");
+            return;
+          }
+          showToast(
+            isUpdate ? "Reservation updated" : "Reservation created",
+            "success"
+          );
+          const activeDate = window.currentSelectedDate || payload.date;
+          updateRoomTimelines(activeDate);
+          updateIdleArea && updateIdleArea();
+          // close modal
+          const modalEl = document.getElementById("reservationModal");
+          const modal = bootstrap.Modal.getInstance(modalEl);
+          if (modal) modal.hide();
+        })
+        .catch((err) => {
+          console.error("Save error", err);
+          showToast("Error saving reservation", "error");
+        });
     });
   }
 });
