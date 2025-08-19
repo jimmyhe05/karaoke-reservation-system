@@ -43,36 +43,37 @@
                 <div id="calendar"></div>
             </div>
 
-            <!-- Idle Reservations (renamed to match improved-layout.css expectation) -->
-            <div class="idle-area-container">
-                <div class="idle-area-header">
-                    <span class="en">Idle Reservations</span>
-                    <span class="zh">闲置预订</span>
-                </div>
-                <div id="idle-area" class="idle-area">
-                    {% for reservation in idle_reservations %}
-                    <div class="reservation-card" data-reservation-id="{{ reservation.id }}" data-room-id="idle"
-                        data-start-time="{{ reservation.start_time }}" data-end-time="{{ reservation.end_time }}"
-                        data-duration="{{ reservation.duration }}">
-                        <div class="time-indicator">
-                            <span class="time-range">{{ reservation.start_time }} - {{ reservation.end_time }}</span>
-                        </div>
-                        <div class="content">
-                            <div class="name-row">
-                                <strong>{{ reservation.contact_name }}</strong>
-                                <span class="people-count">{{ reservation.num_people }}</span>
-                            </div>
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
-            </div>
+            <!-- Idle Reservations removed from sidebar and will be rendered as an idle-room column to the left of rooms -->
         </div>
 
         <!-- Content Area with Room Timelines -->
         <div class="content-area">
             <!-- Room Timelines -->
             <div class="rooms-container">
+                <!-- Idle room column (left of room 1) - simplified droppable stack (no time labels) -->
+                <div class="room-container idle-room">
+                    <div class="room-header">
+                        <span class="en">Idle</span>
+                        <span class="zh">闲置预订</span>
+                    </div>
+                    <div class="room-timeline-wrapper">
+                        <div class="room-timeline idle-drop-area" id="idle-area" data-room-id="idle">
+                            {% for reservation in idle_reservations %}
+                            <div class="reservation-card" data-reservation-id="{{ reservation.id }}" data-room-id="idle" data-start-time="{{ reservation.start_time }}" data-end-time="{{ reservation.end_time }}" data-duration="{{ reservation.duration }}">
+                                <div class="time-indicator">
+                                    <span class="time-range">{{ reservation.start_time }} - {{ reservation.end_time }}</span>
+                                </div>
+                                <div class="content">
+                                    <div class="name-row">
+                                        <strong>{{ reservation.contact_name }}</strong>
+                                        <span class="people-count">{{ reservation.num_people }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
                 {% for room in rooms %}
                 <div class="room-container">
                     <div class="room-header">

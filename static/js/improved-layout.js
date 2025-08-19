@@ -24,7 +24,197 @@ function initImprovedLayout() {
 
   // Apply positioning to any reservation cards using data attributes
   positionReservationCards();
+  // Initialize drag and drop for reservation cards (idle area + room timelines)
+  initDragAndDrop();
 }
+
+// Initialize Sortable drag-and-drop between room timelines and the idle drop area
+function initDragAndDrop(){
+  if(typeof Sortable === 'undefined') return;
+
+  // Helper to find number of intervals for a room timeline
+  function getNumIntervals(timeline){
+    const container = timeline.closest('.room-container');
+    const labels = container ? container.querySelector('.time-labels') : null;
+    if(!labels) return 0;
+    return labels.querySelectorAll('.time-label').length;
+  }
+
+  // Create sortable for each room-timeline and idle-drop-area
+  document.querySelectorAll('.room-timeline, .idle-drop-area').forEach(el=>{
+    if(el._sortableInitialized) return;
+
+    Sortable.create(el, {
+      group: 'reservations',
+      animation: 150,
+      ghostClass: 'reservation-ghost',
+      onChoose: function(evt){
+        // store original position for potential revert
+        const item = evt.item;
+        item._originalParent = item.parentNode;
+        item._originalNext = item.nextSibling;
+      },
+      onMove: function(evt, originalEvent){
+        // show hint while dragging over room timelines (only for room timelines)
+        const to = evt.to;
+        clearDropIndicators();
+        if(!to) return true;
+        const timeline = to.closest('.room-timeline');
+        if(!timeline) return true;
+        const rect = timeline.getBoundingClientRect();
+        const numIntervals = getNumIntervals(timeline) || 28;
+        const slotHeight = timeline.clientHeight / numIntervals;
+        const offsetY = (originalEvent.clientY || (rect.top + 10)) - rect.top;
+        let slotIndex = Math.floor(offsetY / slotHeight);
+        if(slotIndex < 0) slotIndex = 0;
+        const top = slotIndex * slotHeight;
+        showDropIndicator(timeline, top, slotHeight);
+        return true;
+      },
+      onEnd: function(evt){
+        const item = evt.item; // dragged DOM element
+        const reservationId = item.dataset.reservationId;
+        clearDropIndicators();
+        if(!reservationId) return;
+
+        const to = evt.to; // destination container
+        const from = evt.from; // source container
+        const toIsIdle = to.classList.contains('idle-drop-area');
+        const fromIsIdle = from.classList.contains('idle-drop-area');
+        const date = window.currentSelectedDate || window.initialSelectedDate || new Date().toISOString().split('T')[0];
+
+        // Helper to revert DOM on failure
+        function revert(){
+          try{
+            if(item._originalNext) item._originalParent.insertBefore(item, item._originalNext);
+            else item._originalParent.appendChild(item);
+          }catch(e){ console.warn('Revert failed', e); }
+        }
+
+        // Moved into idle
+        if(toIsIdle && !fromIsIdle){
+          // optimistic UI already moved the element; call server
+          fetch(`/move_to_idle/${reservationId}`, {method:'POST'})
+            .then(r=>r.json())
+            .then(res=>{
+              if(res.success) {
+                showToast && showToast('Moved to idle','success');
+              } else {
+                showToast && showToast(res.error || 'Failed to move to idle','error');
+                revert();
+              }
+            }).catch(e=>{ showToast && showToast('Network error','error'); revert(); });
+          return;
+        }
+
+        // Moved from idle into a room
+        if(fromIsIdle && !toIsIdle){
+          // compute start_time (HH:MM) based on drop position
+          const timeline = to.closest('.room-timeline') || to;
+          const roomId = timeline.dataset.roomId;
+          const rect = timeline.getBoundingClientRect();
+          const numIntervals = getNumIntervals(timeline) || 28;
+          const slotHeight = timeline.clientHeight / numIntervals;
+          const offsetY = (evt.clientY || (rect.top + 10)) - rect.top;
+          let slotIndex = Math.floor(offsetY / slotHeight);
+          if(slotIndex < 0) slotIndex = 0;
+          const hour = 11 + Math.floor(slotIndex/2);
+          const minute = (slotIndex % 2) ? 30 : 0;
+          const start_time = `${String(hour).padStart(2,'0')}:${String(minute).padStart(2,'0')}`;
+
+          // Optimistically set position and attributes for the card
+          const durationHours = parseFloat(item.dataset.duration) || 1;
+          const cardTop = slotIndex * slotHeight;
+          const cardHeight = durationHours * 40; // match server-side rendering heuristic
+          item.style.position = 'absolute';
+          item.style.top = `${cardTop}px`;
+          item.style.height = `${cardHeight}px`;
+          item.dataset.roomId = roomId;
+
+          // Call server to remove idle then move
+          fetch(`/remove_from_idle/${reservationId}`, {method:'POST'})
+            .then(r=>r.json())
+            .then(()=>{
+              return fetch('/move_reservation', {
+                method:'POST', headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({reservation_id: reservationId, room_id: roomId, start_time: start_time, date: date})
+              });
+            }).then(r=>r.json()).then(res=>{
+              if(res.message) {
+                showToast && showToast('Moved reservation','success');
+              } else {
+                showToast && showToast(res.error || 'Failed to move reservation','error');
+                revert();
+              }
+            }).catch(e=>{ showToast && showToast('Network error','error'); revert(); });
+          return;
+        }
+
+        // Moved between rooms
+        if(!fromIsIdle && !toIsIdle){
+          const timeline = to.closest('.room-timeline') || to;
+          const roomId = timeline.dataset.roomId;
+          const rect = timeline.getBoundingClientRect();
+          const numIntervals = getNumIntervals(timeline) || 28;
+          const slotHeight = timeline.clientHeight / numIntervals;
+          const offsetY = (evt.clientY || (rect.top + 10)) - rect.top;
+          let slotIndex = Math.floor(offsetY / slotHeight);
+          if(slotIndex < 0) slotIndex = 0;
+          const hour = 11 + Math.floor(slotIndex/2);
+          const minute = (slotIndex % 2) ? 30 : 0;
+          const start_time = `${String(hour).padStart(2,'0')}:${String(minute).padStart(2,'0')}`;
+
+          // Optimistically position
+          const durationHours = parseFloat(item.dataset.duration) || 1;
+          const cardTop = slotIndex * slotHeight;
+          const cardHeight = durationHours * 40;
+          item.style.position = 'absolute';
+          item.style.top = `${cardTop}px`;
+          item.style.height = `${cardHeight}px`;
+          item.dataset.roomId = roomId;
+
+          fetch('/move_reservation', {
+            method:'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({reservation_id: reservationId, room_id: roomId, start_time: start_time, date: date})
+          }).then(r=>r.json()).then(res=>{
+            if(res.message) {
+              showToast && showToast('Moved reservation','success');
+            } else {
+              showToast && showToast(res.error || 'Failed to move reservation','error');
+              revert();
+            }
+          }).catch(e=>{ showToast && showToast('Network error','error'); revert(); });
+          return;
+        }
+      }
+    });
+    el._sortableInitialized = true;
+  });
+
+  // Drop indicator helpers
+  function showDropIndicator(timeline, top, height){
+    clearDropIndicators();
+    const ind = document.createElement('div');
+    ind.className = 'drop-indicator';
+    ind.style.position = 'absolute';
+    ind.style.left = '0';
+    ind.style.right = '0';
+    ind.style.top = `${top}px`;
+    ind.style.height = `${height}px`;
+    ind.style.background = 'rgba(0,123,255,0.12)';
+    ind.style.borderTop = '1px dashed rgba(0,123,255,0.4)';
+    ind.style.borderBottom = '1px dashed rgba(0,123,255,0.15)';
+    ind.style.zIndex = 9998;
+    timeline.appendChild(ind);
+  }
+
+  function clearDropIndicators(){
+    document.querySelectorAll('.drop-indicator').forEach(d=>d.remove());
+  }
+}
+
+// Expose the improved initializer so legacy wrapper can delegate to it
+window.improvedInitDragAndDrop = initDragAndDrop;
 
 // Function to adjust room timeline heights
 function adjustRoomTimelineHeights() {

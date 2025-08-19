@@ -37,118 +37,20 @@ window.showToast = function (message, type = "success") {
   }, 4200); // Animation duration (700ms in + 3500ms visible + 700ms out)
 };
 
-// Initialize drag and drop functionality
+// Legacy drag-and-drop initialization was replaced by the improved
+// implementation in `improved-layout.js`. Expose a safe wrapper that
+// delegates to the improved initializer when available.
 function initDragAndDrop() {
-  console.log("Initializing drag and drop functionality");
-
-  // Initialize the idle area as a Sortable container
-  const idleArea = document.getElementById("idle-area");
-  if (idleArea) {
-    console.log("Setting up idle area as sortable");
-    new Sortable(idleArea, {
-      group: "reservations",
-      animation: 150,
-      ghostClass: "ghost",
-      dragClass: "drag-source",
-      handle: ".reservation-card", // Use reservation cards as handles
-      draggable: ".reservation-card", // Only reservation cards should be draggable
-      onEnd: function (evt) {
-        console.log("Drag ended in idle area", evt);
-        handleReservationMove(evt);
-        // Restack cards after drag ends
-        restackIdleCards();
-      },
-    });
-
-    // Add click handler for idle area cards to bring them to the top
-    idleArea.addEventListener("click", function (e) {
-      const card = e.target.closest(".reservation-card");
-      if (card && !e.target.closest("button")) {
-        // Ensure not clicking a button inside
-        console.log("Clicked on idle card", card.dataset.reservationId);
-        // Bring card to top visually
-        card.parentNode.prepend(card);
-        // Restack all cards
-        restackIdleCards();
-
-        // Open modal for editing (moved logic here from createIdleReservationCard)
-        openModalForEditing(card.dataset.reservationId);
-
-        // Prevent the click from triggering other handlers if necessary
-        e.stopPropagation();
-      }
-    });
-
-    // Initial stacking of cards
-    restackIdleCards();
+  console.log(
+    "Legacy initDragAndDrop disabled; delegating to improvedInitDragAndDrop if present"
+  );
+  if (typeof window.improvedInitDragAndDrop === "function") {
+    try {
+      window.improvedInitDragAndDrop();
+    } catch (e) {
+      console.warn("improvedInitDragAndDrop() threw:", e);
+    }
   }
-
-  // Make each room timeline a sortable container
-  document.querySelectorAll(".room-timeline").forEach((timeline) => {
-    console.log(
-      "Setting up room timeline as sortable",
-      timeline.dataset.roomId
-    );
-    new Sortable(timeline, {
-      group: "reservations",
-      animation: 150,
-      ghostClass: "ghost",
-      dragClass: "drag-source",
-      filter: ".time-label", // Prevent dragging time labels
-      handle: ".reservation-card", // Use reservation cards as handles
-      draggable: ".reservation-card", // Only reservation cards should be draggable
-      onEnd: function (evt) {
-        console.log("Drag ended in room timeline", evt);
-        handleReservationMove(evt);
-      },
-      // Add onMove callback for conflict prevention
-      onMove: function (evt) {
-        // evt.related is the element being dragged over
-        const targetSlot = evt.related.closest(".time-slot");
-        const draggedCard = evt.dragged;
-        const draggedReservationId = draggedCard.dataset.reservationId;
-
-        // Allow moving within the same timeline or to the idle area
-        if (evt.to.id === "idle-area") {
-          return true;
-        }
-
-        // Check if dragging over an occupied slot in a room timeline
-        if (targetSlot && targetSlot.classList.contains("occupied")) {
-          // Check if the occupied slot belongs to the card being dragged
-          if (targetSlot.dataset.reservationId === draggedReservationId) {
-            return true; // Allow moving within its own occupied slots
-          }
-          console.log(
-            "Preventing move: Target slot is occupied by another reservation."
-          );
-          return false; // Prevent dropping on an occupied slot
-        }
-
-        // Allow the move otherwise
-        return true;
-      },
-    });
-
-    // Add click listener for cards within timelines to open modal
-    timeline.addEventListener("click", function (e) {
-      const card = e.target.closest(".reservation-card");
-      if (card && !e.target.closest("button")) {
-        // Ensure not clicking a button inside
-        console.log("Clicked on timeline card", card.dataset.reservationId);
-        openModalForEditing(card.dataset.reservationId);
-        e.stopPropagation();
-      }
-    });
-  });
-
-  // Remove individual time slot dragover/leave/drop listeners if not needed
-  // The SortableJS library handles the drop zones effectively.
-  // document.querySelectorAll(".time-slot").forEach((timeSlot) => {
-  //   timeSlot.removeEventListener("dragover", ...);
-  //   timeSlot.removeEventListener("dragleave", ...);
-  //   timeSlot.removeEventListener("drop", ...);
-  // });
 }
 
 // Function to restack cards in the idle area

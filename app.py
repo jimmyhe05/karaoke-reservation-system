@@ -870,92 +870,79 @@ def move_reservation():
 
         reservation_id = data.get('reservation_id')
         room_id = data.get('room_id')
-        hour = data.get('hour')
+        start_time_str = data.get('start_time')  # expected HH:MM
         date = data.get('date')
 
-        if not all([reservation_id, room_id, hour, date]):
+        if not all([reservation_id, room_id, start_time_str, date]):
             return jsonify({'error': 'Missing required fields'}), 400
-
-        # Convert hour to integer
-        hour = int(hour)
 
         conn = get_db()
         try:
-            # Get the existing reservation
-            reservation = conn.execute(
-                'SELECT * FROM reservations WHERE id = ?', (reservation_id,)).fetchone()
-
+            # Get existing reservation
+            reservation = conn.execute('SELECT * FROM reservations WHERE id = ?', (reservation_id,)).fetchone()
             if not reservation:
                 return jsonify({'error': 'Reservation not found'}), 404
 
-            # Calculate new start and end times
-            old_start_time, _ = parse_time_safe(reservation['start_time'])
-            old_end_time, is_extended = parse_time_safe(
-                reservation['end_time'])
+            # Parse old times to preserve duration
+            old_start_dt, _ = parse_time_safe(reservation['start_time'])
+            old_end_dt, old_is_extended = parse_time_safe(reservation['end_time'])
 
-            # Calculate duration in hours
-            duration_hours = 0
-            if is_extended or old_end_time < old_start_time:  # Overnight reservation
-                old_end_time_adjusted = old_end_time.replace(
-                    day=old_start_time.day + 1)
-                duration = old_end_time_adjusted - old_start_time
+            # Compute old duration in minutes
+            if old_is_extended or old_end_dt <= old_start_dt:
+                old_end_dt = old_end_dt.replace(day=old_start_dt.day + 1)
+            duration_minutes = int((old_end_dt - old_start_dt).total_seconds() / 60)
+
+            # Parse new start_time provided (HH:MM)
+            try:
+                new_start_dt = datetime.strptime(start_time_str, '%H:%M')
+            except ValueError:
+                return jsonify({'error': 'Invalid start_time format. Use HH:MM.'}), 400
+
+            # Determine new end time by adding duration
+            new_end_dt = new_start_dt + timedelta(minutes=duration_minutes)
+
+            # If new_end_dt crosses midnight, represent end_time in 24+ hour format (e.g., 25:00)
+            # Compare day values
+            if new_end_dt.day != new_start_dt.day:
+                # compute hour beyond 24
+                end_hour = new_end_dt.hour + 24
+                new_end_time_str = f"{end_hour:02d}:{new_end_dt.minute:02d}"
             else:
-                duration = old_end_time - old_start_time
+                new_end_time_str = new_end_dt.strftime('%H:%M')
 
-            duration_hours = duration.total_seconds() / 3600
+            new_start_time_str = new_start_dt.strftime('%H:%M')
 
-            # Create new start and end times
-            new_start_time = f"{hour:02d}:00"
-
-            # Handle overnight reservations correctly
-            new_end_hour = hour + int(duration_hours)
-            # Always use the same format for consistency
-            new_end_time = f"{new_end_hour:02d}:00"
-
-            # Check if the new time slot is available
+            # Conflict check: ensure no overlapping non-idle reservations
             conflict = conn.execute('''
                 SELECT * FROM reservations
                 WHERE room_id = ? AND date = ? AND id != ? AND
-                ((start_time <= ? AND end_time > ?) OR
-                 (start_time < ? AND end_time >= ?) OR
-                 (start_time >= ? AND end_time <= ?))
-            ''', (room_id, date, reservation_id,
-                  new_start_time, new_start_time,
-                  new_end_time, new_end_time,
-                  new_start_time, new_end_time)).fetchone()
+                NOT (end_time <= ? OR start_time >= ?)
+            ''', (room_id, date, reservation_id, new_start_time_str, new_end_time_str)).fetchone()
 
             if conflict:
-                return jsonify({
-                    'error': 'The selected time slot is already occupied',
-                    'conflict': True
-                }), 409
+                return jsonify({'error': 'The selected time slot is already occupied', 'conflict': True}), 409
 
-            # Update the reservation
+            # Update reservation
             conn.execute('''
                 UPDATE reservations
                 SET room_id = ?, start_time = ?, end_time = ?, date = ?
                 WHERE id = ?
-            ''', (room_id, new_start_time, new_end_time, date, reservation_id))
-
+            ''', (room_id, new_start_time_str, new_end_time_str, date, reservation_id))
             conn.commit()
 
-            return jsonify({
-                'message': 'Reservation moved successfully',
-                'reservation': {
-                    'id': reservation_id,
-                    'room_id': room_id,
-                    'start_time': new_start_time,
-                    'end_time': new_end_time,
-                    'date': date
-                }
-            }), 200
+            return jsonify({'message': 'Reservation moved successfully', 'reservation': {
+                'id': reservation_id,
+                'room_id': room_id,
+                'start_time': new_start_time_str,
+                'end_time': new_end_time_str,
+                'date': date
+            }}), 200
 
         except Exception as e:
             conn.rollback()
             return jsonify({'error': str(e)}), 500
         finally:
             conn.close()
-
     except Exception as e:
         return jsonify({'error': str(e)}), 400
 
