@@ -89,16 +89,8 @@ body {
 }
 
 /* ===== CALENDAR IMPROVEMENTS ===== */
-.calendar-container {
-  width: 100%;
-  height: 340px; /* bigger calendar */
-  background: white;
-  border-radius: var(--border-radius);
-  box-shadow: var(--box-shadow);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
+.calendar-container { width:100%; background:white; border-radius:var(--border-radius); box-shadow:var(--box-shadow); overflow:hidden; display:flex; flex-direction:column; }
+.calendar-container #calendar { width:100%; }
 .calendar-controls.simple { display:flex; gap:6px; padding:6px 8px; border-bottom:1px solid var(--medium-gray); }
 .calendar-controls.simple .btn { flex:0 0 auto; }
 .calendar-container #calendar { flex:1; }
@@ -129,9 +121,10 @@ body {
 }
 
 /* Highlight selected date */
-.fc .fc-daygrid-day.fc-day-today {
-  background-color: rgba(52, 152, 219, 0.15);
-}
+.fc .fc-daygrid-day.fc-day-today { background-color: rgba(52,152,219,0.08); }
+.fc .fc-daygrid-day.selected-date { outline:2px solid var(--primary-color); background-color: rgba(52,152,219,0.18); }
+.fc .fc-daygrid-day.fc-day-disabled { opacity:0.4; cursor:not-allowed; }
+.fc .fc-daygrid-day:not(.fc-day-disabled) { cursor:pointer; }
 
 /* Highlight available days */
 .fc .fc-day-future:not(.fc-day-other) {

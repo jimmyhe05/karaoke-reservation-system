@@ -5,6 +5,14 @@ function initEnhancedCalendar() {
   const calendarEl = document.getElementById("calendar");
   if (!calendarEl) return;
 
+  // Clean up any leftover Flatpickr artifacts (from earlier implementation)
+  if (calendarEl.classList.contains('flatpickr-input')) {
+    calendarEl.classList.remove('flatpickr-input');
+  }
+  if (calendarEl.hasAttribute('readonly')) {
+    calendarEl.removeAttribute('readonly');
+  }
+
   // Remove any existing flatpickr-calendar elements
   const existingFlatpickrCalendars = document.querySelectorAll(
     ".flatpickr-calendar.animate.inline"
@@ -12,12 +20,24 @@ function initEnhancedCalendar() {
   existingFlatpickrCalendars.forEach((calendar) => calendar.remove());
 
   // Store the selected date
-  let selectedDate = new Date().toISOString().split("T")[0];
+  let urlPath = window.location.pathname.replace(/^\//,'');
+  let selectedDate = (function(){
+    if(/\d{2}-\d{2}-\d{4}/.test(urlPath)){
+      const [mm,dd,yyyy] = urlPath.split('-');
+      return `${yyyy}-${mm}-${dd}`;
+    }
+    return new Date().toISOString().split('T')[0];
+  })();
   calendarEl.dataset.selectedDate = selectedDate;
+  // Initialize label immediately
+  updateSelectedDateLabel(selectedDate);
 
   // Initialize FullCalendar with enhanced options
   const calendar = new FullCalendar.Calendar(calendarEl, {
     initialView: "dayGridMonth",
+    initialDate: selectedDate,
+  headerToolbar: false, // use our external controls
+  height: 'auto',
     selectable: true,
     selectConstraint: {
       start: new Date().setHours(0, 0, 0, 0),
@@ -119,33 +139,7 @@ function initEnhancedCalendar() {
         return;
       }
 
-      // Update selected date
-      selectedDate = info.dateStr;
-      calendarEl.dataset.selectedDate = selectedDate;
-
-      // Remove selected class from all days
-      document.querySelectorAll(".fc-daygrid-day").forEach((el) => {
-        el.classList.remove("selected-date");
-      });
-
-      // Add selected class to clicked day
-      info.dayEl.classList.add("selected-date");
-
-      // Update room timelines
-      updateRoomTimelines(selectedDate);
-
-      // Update the date input
-      const dateInput = document.getElementById("date");
-      if (dateInput) {
-        // Format the date for display
-        const displayDate = new Date(selectedDate).toLocaleDateString("en-US", {
-          weekday: "short",
-          month: "long",
-          day: "numeric",
-          year: "numeric",
-        });
-        dateInput.value = displayDate;
-      }
+  applySelectedDate(info.dateStr);
     },
     // Calendar header
     headerToolbar: {
@@ -164,6 +158,24 @@ function initEnhancedCalendar() {
 
   // Render the calendar
   calendar.render();
+  console.info('[Calendar] Rendered with selected date', selectedDate);
+  // After render ensure selected date highlighted
+  applySelectedDate(selectedDate, true);
+
+  // Delegate clicks on day cells to ensure selection works even if FullCalendar handlers aren't available
+  const calRoot = document.getElementById('calendar');
+  if (calRoot) {
+    calRoot.addEventListener('click', function (e) {
+      const dayCell = e.target.closest('.fc-daygrid-day');
+      if (!dayCell) return;
+      // Ignore disabled or past days
+      if (dayCell.classList.contains('fc-day-disabled') || dayCell.classList.contains('fc-day-past')) return;
+      const date = dayCell.getAttribute('data-date');
+      if (!date) return;
+      // Apply selected date (this updates label, URL, and timelines)
+      applySelectedDate(date);
+    });
+  }
 
   // Store calendar reference globally
   window.calendar = calendar;
@@ -172,6 +184,47 @@ function initEnhancedCalendar() {
   // Return the calendar instance
   return calendar;
 }
+
+function applySelectedDate(dateStr, skipCalendarSet){
+  const calendarEl = document.getElementById('calendar');
+  if(!calendarEl) return;
+  calendarEl.dataset.selectedDate = dateStr;
+  window.currentSelectedDate = dateStr;
+  // Highlight
+  document.querySelectorAll('.fc-daygrid-day').forEach(d=>d.classList.remove('selected-date'));
+  const cell = document.querySelector(`.fc-daygrid-day[data-date="${dateStr}"]`);
+  if(cell) cell.classList.add('selected-date');
+  updateSelectedDateLabel(dateStr);
+  updateRoomTimelines(dateStr);
+  // Update URL path
+  try {
+    const d = new Date(dateStr+'T00:00:00');
+    if(!isNaN(d.getTime())){
+      const mm = String(d.getMonth()+1).padStart(2,'0');
+      const dd = String(d.getDate()).padStart(2,'0');
+      const yyyy = d.getFullYear();
+      const newPath = `/${mm}-${dd}-${yyyy}`;
+      if(window.location.pathname !== newPath){
+        window.history.replaceState({}, '', newPath);
+      }
+    }
+  } catch(e){ console.warn('URL path update failed', e); }
+  if(!skipCalendarSet && window.calendar){
+    window.calendar.gotoDate(dateStr);
+  }
+}
+
+function updateSelectedDateLabel(dateStr){
+  const el = document.getElementById('selected-date-label');
+  if(!el) return;
+  if(!dateStr) dateStr = new Date().toISOString().split('T')[0];
+  const [y,m,d] = dateStr.split('-');
+  el.textContent = `${m}-${d}-${y}`;
+}
+
+// Expose
+window.applySelectedDate = applySelectedDate;
+window.updateSelectedDateLabel = updateSelectedDateLabel;
 
 // Helper function to create tooltip content
 function createTooltipContent(dateStr, props) {
@@ -222,6 +275,47 @@ document.addEventListener("DOMContentLoaded", function () {
   } else {
     initEnhancedCalendar();
   }
+
+  // Hook day navigation buttons (prev/next day modify selected date)
+  function shiftDay(offset){
+    const base = new Date(window.currentSelectedDate || new Date().toISOString().split('T')[0]);
+    base.setDate(base.getDate()+offset);
+    const ymd = base.toISOString().split('T')[0];
+    applySelectedDate(ymd);
+  }
+  // Optional month navigation using existing FullCalendar API (if we decide to add buttons later)
+  window.shiftMonth = function(offset){
+    if(window.calendar){
+      window.calendar.incrementDate({ months: offset });
+      // Keep selected date within new month (set to first day if month changed drastically)
+      const current = window.calendar.getDate();
+      const y=current.getFullYear(), m=String(current.getMonth()+1).padStart(2,'0');
+      // preserve day if possible else fallback to 01
+      let day = (window.currentSelectedDate||'').split('-')[2] || '01';
+      const tentative = new Date(`${y}-${m}-${day}T00:00:00`);
+      if(tentative.getMonth()+1 !== current.getMonth()+1){
+        day='01';
+      }
+      applySelectedDate(`${y}-${m}-${day}`);
+    }
+  }
+  const prevBtn = document.getElementById('prev-day-btn');
+  const nextBtn = document.getElementById('next-day-btn');
+  const todayBtn = document.getElementById('today-btn');
+  if(prevBtn) prevBtn.addEventListener('click', ()=>shiftDay(-1));
+  if(nextBtn) nextBtn.addEventListener('click', ()=>shiftDay(1));
+  if(todayBtn) todayBtn.addEventListener('click', ()=>applySelectedDate(new Date().toISOString().split('T')[0]));
+
+  // Fallback: if something wipes calendar innerHTML later, re-init
+  const observer = new MutationObserver(()=>{
+    if(!document.querySelector('#calendar .fc-view-harness') && document.getElementById('calendar')){
+      console.warn('[Calendar] Lost internal markup, re-rendering');
+      if(window.calendar){ window.calendar.destroy(); }
+      initEnhancedCalendar();
+    }
+  });
+  const calRoot = document.getElementById('calendar');
+  if(calRoot){ observer.observe(calRoot,{childList:true}); }
 });
 
 // Export functions for use in other scripts

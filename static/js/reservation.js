@@ -1482,44 +1482,6 @@ function updateEndTimeMinimum(startTime24hr) {
 }
 
 document.addEventListener("DOMContentLoaded", function () {
-  // Initialize calendar
-  const initial = window.initialSelectedDate || new Date().toISOString().split('T')[0];
-  const calendarInstance = flatpickr("#calendar", {
-    inline: true,
-    defaultDate: initial,
-    dateFormat: "Y-m-d",
-    onChange: function (selectedDates, dateStr) {
-      if (!dateStr) return;
-      setSelectedDate(dateStr);
-    },
-    onMonthChange: function(selectedDates, dateStr, instance){
-      // keep selected date within visible month; do not auto-change selected
-      updateSelectedDateLabel();
-    }
-  });
-  window.calendarEl = calendarInstance; // keep naming for compatibility
-  setSelectedDate(initial);
-
-  // Day navigation buttons (prev / today / next) surrounding Today
-  const prevDayBtn = document.getElementById('prev-day-btn');
-  const nextDayBtn = document.getElementById('next-day-btn');
-  const todayBtn = document.getElementById('today-btn');
-  function navigateDay(offset){
-    const base = new Date(window.currentSelectedDate || new Date());
-    base.setDate(base.getDate() + offset);
-    const ymd = base.toISOString().split('T')[0];
-    calendarInstance.setDate(ymd, true);
-    setSelectedDate(ymd);
-  }
-  if(prevDayBtn) prevDayBtn.addEventListener('click', ()=> navigateDay(-1));
-  if(nextDayBtn) nextDayBtn.addEventListener('click', ()=> navigateDay(1));
-  if(todayBtn) todayBtn.addEventListener('click', ()=> {
-    const today = new Date();
-    const ymd = today.toISOString().split('T')[0];
-    calendarInstance.setDate(ymd, true);
-    setSelectedDate(ymd);
-  });
-
   // Initialize drag and drop
   initDragAndDrop();
 
@@ -1529,18 +1491,6 @@ document.addEventListener("DOMContentLoaded", function () {
   // Initialize the page
   initTimeSlots();
   updateRoomTimelines(new Date().toISOString().split("T")[0]);
-
-  // Delegate clicks on flatpickr day cells to force selected date update
-  document.addEventListener('click', function(e){
-    const day = e.target.closest('.flatpickr-day');
-    if(day && day.dateObj){
-      const y = day.dateObj.getFullYear();
-      const m = (day.dateObj.getMonth()+1).toString().padStart(2,'0');
-      const dnum = day.dateObj.getDate().toString().padStart(2,'0');
-      const ds = `${y}-${m}-${dnum}`;
-      setSelectedDate(ds);
-    }
-  });
 
   // AJAX form submission to immediately show new reservation
   const resForm = document.getElementById('reservationForm');
@@ -1576,37 +1526,7 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 });
 
-function updateSelectedDateLabel(){
-  const el = document.getElementById('selected-date-label');
-  if(!el) return;
-  const iso = window.currentSelectedDate || new Date().toISOString().split('T')[0];
-  // Convert to MM-DD-YYYY for label
-  const parts = iso.split('-');
-  if(parts.length===3){
-    el.textContent = `${parts[1]}-${parts[2]}-${parts[0]}`;
-  } else {
-    el.textContent = iso;
-  }
-}
-
-function setSelectedDate(dateStr){
-  window.currentSelectedDate = dateStr;
-  updateSelectedDateLabel();
-  updateRoomTimelines(dateStr);
-  // Update URL path to /MM-DD-YYYY without reloading
-  try {
-    const d = new Date(dateStr + 'T00:00:00');
-    if(!isNaN(d.getTime())){
-      const mm = String(d.getMonth()+1).padStart(2,'0');
-      const dd = String(d.getDate()).padStart(2,'0');
-      const yyyy = d.getFullYear();
-      const newPath = `/${mm}-${dd}-${yyyy}`;
-      if(window.location.pathname !== newPath){
-        window.history.replaceState({}, '', newPath);
-      }
-    }
-  } catch(e){ console.warn('Failed to update URL path', e); }
-}
+// Date selection helpers now handled in enhanced-calendar.js
 
 // Export functions for use in HTML
 window.showToast = showToast;
