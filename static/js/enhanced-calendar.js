@@ -121,15 +121,7 @@ function initEnhancedCalendar() {
           dayCell.querySelector(".fc-daygrid-day-bg").appendChild(countBadge);
         }
 
-        // Use simple title-based tooltip: set data-tooltip and class for CSS pseudo-element
-        try{
-          const tooltipHtml = createTooltipContent(dateStr, props).replace(/<[^>]+>/g, '\n');
-          dayCell.setAttribute('data-tooltip', tooltipHtml);
-          dayCell.classList.add('day-title-tooltip');
-          dayCell.title = tooltipHtml.replace(/\n/g, ' ');
-        }catch(e){
-          try{ dayCell.title = '' }catch(_){}
-        }
+  // No hover tooltip needed — intentionally left blank to avoid showing extra info on hover
       }
     },
     // Handle date selection
@@ -161,7 +153,7 @@ function initEnhancedCalendar() {
   console.info('[Calendar] Rendered with selected date', selectedDate);
   // After render ensure selected date highlighted
   applySelectedDate(selectedDate, true);
-  // Ensure all day cells have tooltips bound (useful if tippy was present but some cells missed)
+  // Remove any hover/title tooltip attributes so native browser tooltips don't appear
   ensureDayCellTooltips();
 
   // Delegate clicks on day cells to ensure selection works even if FullCalendar handlers aren't available
@@ -222,35 +214,20 @@ function applySelectedDate(dateStr, skipCalendarSet){
 }
 
 // Ensure day cell tooltips are bound; idempotent via data attribute
+// Tooltip binding intentionally disabled — user requested no hover information on date blocks
+// Remove any hover-related attributes/classes from day cells so no hover info appears
 function ensureDayCellTooltips(){
   if(typeof document === 'undefined') return;
   const cells = document.querySelectorAll('.fc-daygrid-day');
   cells.forEach(cell=>{
     try{
-      if(cell.dataset.tooltipBound) return;
-      const bg = cell.querySelector('.fc-daygrid-day-bg');
-      if(!bg) return;
-      try{
-        const date = cell.getAttribute('data-date');
-        const reservationCountEl = cell.querySelector('.reservation-count');
-        const reservationCount = reservationCountEl ? parseInt(reservationCountEl.textContent||'0') : 0;
-        const availabilityIndicator = cell.querySelector('.availability-indicator');
-        const availableRooms = availabilityIndicator ? (availabilityIndicator.classList.contains('availability-none')?0:1) : 0;
-        const props = {
-          reservationCount: reservationCount,
-          availableRooms: availableRooms,
-          totalRooms: 4,
-          occupancyPercentage: Math.round((reservationCount/(4||1))*100)
-        };
-  const tooltipText = createTooltipContent(date, props).replace(/<[^>]+>/g, '\n');
-        cell.setAttribute('data-tooltip', tooltipText);
-        cell.classList.add('day-title-tooltip');
-  cell.title = tooltipText.replace(/\n/g,' ');
-        cell.dataset.tooltipBound = '1';
-      }catch(e){
-        if(!cell.title){ try{ cell.title = cell.textContent.trim().slice(0,200); }catch(_){ } }
-      }
-    }catch(e){/* ignore per-cell failures */}
+      // Remove title attribute (native tooltip) and data-tooltip and visual class
+      if(cell.hasAttribute('title')) cell.removeAttribute('title');
+      if(cell.hasAttribute('data-tooltip')) cell.removeAttribute('data-tooltip');
+      if(cell.classList.contains('day-title-tooltip')) cell.classList.remove('day-title-tooltip');
+      // mark as cleaned
+      cell.dataset.tooltipBound = '0';
+    }catch(e){ /* ignore per-cell failures */ }
   });
 }
 

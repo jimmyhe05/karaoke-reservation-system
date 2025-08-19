@@ -154,27 +154,7 @@
     max-width: 200px;
 }
 
-/* Title-based tooltip for day cells when tippy is not used */
-
-.fc .day-title-tooltip[data-tooltip]:hover::after {
-    content: attr(data-tooltip);
-    position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
-    top: -8px;
-    white-space: pre-wrap;
-    background: white;
-    color: #343a40;
-    padding: 8px;
-    border-radius: 6px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.15);
-    z-index: 9999;
-    max-width: 260px;
-    font-size: 0.95rem;
-}
-
-/* Ensure the pseudo-element appears above calendar content */
-.fc .day-title-tooltip { position: relative; }
+/* Hover tooltips removed per user request: no hover info for date blocks */
 
 .calendar-tooltip strong {
     display: block;
