@@ -1,0 +1,91 @@
+ * Serving Flask app 'app.py'
+ * Debug mode: off
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8000
+ * Running on http://10.0.0.44:8000
+Press CTRL+C to quit
+127.0.0.1 - -127.0.0.1 - - [29/Aug/2025 21:51:41] "GET / HTTP/1.1" 302 -
+127.0.0.1 - - [29/Aug/2025 21:51:41] "GET /08-29-2025 HTTP/1.1" 200 -
+127.0.0.1 - - [29/Aug/2025 21:51:41] "GET /static/css/reservation.css HTTP/1.1" 200 -
+127.0.0.1 - - [29/Aug/2025 21:51:41] "GET /static/js/enhanced-calendar.js HTTP/1.1" 304 -
+127.0.0.1 - - [29/Aug/2025 21:51:41] "GET /static/js/form-validation.js HTTP/1.1" 304 -
+127.0.0.1 - - [29/Aug/2025 21:51:41] "GET /static/css/improved-layout.css HTTP/1.1" 304 -
+127.0.0.1 - - [29/Aug/2025 21:51:41] "GET /static/js/reservation.js HTTP/1.1" 200 -
+127.0.0.1 - - [29/Aug/2025 21:51:41] "GET /static/css/enhanced-calendar.css HTTP/1.1" 304 -
+127.0.0.1 - - [29/Aug/2025 21:51:41] "GET /static/js/improved-layout.js HTTP/1.1" 200 -
+127.0.0.1 - - [29/Aug/2025 21:51:41] "GET /api/daily_reservations?date=2025-08-30 HTTP/1.1" 200 -
+127.0.0.1 - - [29/Aug/2025 21:51:41] "GET /api/calendar_availability?start=2025-08-29&end=2025-09-07 HTTP/1.1" 200 -
+127.0.0.1 - - [29/Aug/2025 21:51:41] "GET /api/daily_reservations?date=2025-08-29 HTTP/1.1" 200 -
+/opt/anaconda3/lib/python3.11/multiprocessing/resource_tracker.py:254: UserWarning: resource_tracker: There appear to be 1 leaked semaphore objects to clean up at shutdown
+  warnings.warn('resource_tracker: There appear to be %d '
+ /08-29-2025 HTTP/1.1" 200 -
+127.0.0.1 - - [29/Aug/2025 21:53:11] "GET /static/css/enhanced-calendar.css HTTP/1.1" 304 -
+127.0.0.1 - - [29/Aug/2025 21:53:11] "GET /static/css/reservation.css HTTP/1.1" 200 -
+127.0.0.1 - - [29/Aug/2025 21:53:11] "GET /static/js/form-validation.js HTTP/1.1" 304 -
+127.0.0.1 - - [29/Aug/2025 21:53:11] "GET /static/js/reservation.js HTTP/1.1" 200 -
+127.0.0.1 - - [29/Aug/2025 21:53:11] "GET /static/css/improved-layout.css HTTP/1.1" 304 -
+127.0.0.1 - - [29/Aug/2025 21:53:11] "GET /static/js/enhanced-calendar.js HTTP/1.1" 304 -
+127.0.0.1 - - [29/Aug/2025 21:53:11] "GET /static/js/improved-layout.js HTTP/1.1" 200 -
+127.0.0.1 - - [29/Aug/2025 21:53:11] "GET /api/daily_reservations?date=2025-08-30 HTTP/1.1" 200 -
+127.0.0.1 - - [29/Aug/2025 21:53:11] "GET /api/calendar_availability?start=2025-08-29&end=2025-09-07 HTTP/1.1" 200 -
+127.0.0.1 - - [29/Aug/2025 21:53:11] "GET /api/daily_reservations?date=2025-08-29 HTTP/1.1" 200 -
+127.0.0.1 - - [29/Aug/2025 21:53:15] "GET /static/css/enhanced-calendar.css HTTP/1.1" 304 -
+127.0.0.1 - - [29/Aug/2025 21:53:15] "GET /static/css/reservation.css HTTP/1.1" 304 -
+127.0.0.1 - - [29/Aug/2025 21:53:15] "GET /static/css/improved-layout.css HTTP/1.1" 304 -
+127.0.0.1 - - [29/Aug/2025 21:53:15] "GET /.well-known/appspecific/com.chrome.devtools.json HTTP/1.1" 404 -
+127.0.0.1 - - [29/Aug/2025 21:57:37] "GET /08-29-2025 HTTP/1.1" 200 -
+127.0.0.1 - - [29/Aug/2025 21:57:37] "GET /static/css/improved-layout.css HTTP/1.1" 304 -
+127.0.0.1 - - [29/Aug/2025 21:57:37] "GET /static/css/reservation.css HTTP/1.1" 200 -
+127.0.0.1 - - [29/Aug/2025 21:57:37] "GET /static/css/enhanced-calendar.css HTTP/1.1" 304 -
+127.0.0.1 - - [29/Aug/2025 21:57:37] "GET /static/js/reservation.js HTTP/1.1" 304 -
+127.0.0.1 - - [29/Aug/2025 21:57:37] "GET /static/js/form-validation.js HTTP/1.1" 304 -
+127.0.0.1 - - [29/Aug/2025 21:57:37] "GET /static/js/enhanced-calendar.js HTTP/1.1" 304 -
+127.0.0.1 - - [29/Aug/2025 21:57:37] "GET /static/js/improved-layout.js HTTP/1.1" 200 -
+127.0.0.1 - - [29/Aug/2025 21:57:37] "GET /api/daily_reservations?date=2025-08-30 HTTP/1.1" 200 -
+127.0.0.1 - - [29/Aug/2025 21:57:37] "GET /api/calendar_availability?start=2025-08-29&end=2025-09-07 HTTP/1.1" 200 -
+127.0.0.1 - - [29/Aug/2025 21:57:37] "GET /api/daily_reservations?date=2025-08-29 HTTP/1.1" 200 -
+127.0.0.1 - - [29/Aug/2025 22:00:19] "GET /08-29-2025 HTTP/1.1" 200 -
+127.0.0.1 - - [29/Aug/2025 22:00:19] "GET /static/css/enhanced-calendar.css HTTP/1.1" 304 -
+127.0.0.1 - - [29/Aug/2025 22:00:19] "GET /static/css/reservation.css HTTP/1.1" 304 -
+127.0.0.1 - - [29/Aug/2025 22:00:19] "GET /static/css/improved-layout.css HTTP/1.1" 304 -
+127.0.0.1 - - [29/Aug/2025 22:00:19] "GET /static/js/reservation.js HTTP/1.1" 304 -
+127.0.0.1 - - [29/Aug/2025 22:00:19] "GET /static/js/enhanced-calendar.js HTTP/1.1" 304 -
+127.0.0.1 - - [29/Aug/2025 22:00:19] "GET /static/js/improved-layout.js HTTP/1.1" 200 -
+127.0.0.1 - - [29/Aug/2025 22:00:19] "GET /static/js/form-validation.js HTTP/1.1" 304 -
+127.0.0.1 - - [29/Aug/2025 22:00:19] "GET /api/daily_reservations?date=2025-08-30 HTTP/1.1" 200 -
+127.0.0.1 - - [29/Aug/2025 22:00:19] "GET /api/calendar_availability?start=2025-08-29&end=2025-09-07 HTTP/1.1" 200 -
+127.0.0.1 - - [29/Aug/2025 22:00:19] "GET /api/daily_reservations?date=2025-08-29 HTTP/1.1" 200 -
+127.0.0.1 - - [29/Aug/2025 22:02:19] "GET /08-29-2025 HTTP/1.1" 200 -
+127.0.0.1 - - [29/Aug/2025 22:02:19] "GET /static/css/enhanced-calendar.css HTTP/1.1" 304 -
+127.0.0.1 - - [29/Aug/2025 22:02:19] "GET /static/css/reservation.css HTTP/1.1" 200 -
+127.0.0.1 - - [29/Aug/2025 22:02:19] "GET /static/css/improved-layout.css HTTP/1.1" 304 -
+127.0.0.1 - - [29/Aug/2025 22:02:19] "GET /static/js/form-validation.js HTTP/1.1" 304 -
+127.0.0.1 - - [29/Aug/2025 22:02:19] "GET /static/js/enhanced-calendar.js HTTP/1.1" 304 -
+127.0.0.1 - - [29/Aug/2025 22:02:19] "GET /static/js/reservation.js HTTP/1.1" 304 -
+127.0.0.1 - - [29/Aug/2025 22:02:19] "GET /static/js/improved-layout.js HTTP/1.1" 200 -
+127.0.0.1 - - [29/Aug/2025 22:02:19] "GET /api/daily_reservations?date=2025-08-30 HTTP/1.1" 200 -
+127.0.0.1 - - [29/Aug/2025 22:02:19] "GET /api/calendar_availability?start=2025-08-29&end=2025-09-07 HTTP/1.1" 200 -
+127.0.0.1 - - [29/Aug/2025 22:02:19] "GET /api/daily_reservations?date=2025-08-29 HTTP/1.1" 200 -
+127.0.0.1 - - [29/Aug/2025 22:04:17] "GET /08-29-2025 HTTP/1.1" 200 -
+127.0.0.1 - - [29/Aug/2025 22:04:17] "GET /static/css/enhanced-calendar.css HTTP/1.1" 304 -
+127.0.0.1 - - [29/Aug/2025 22:04:17] "GET /static/css/reservation.css HTTP/1.1" 200 -
+127.0.0.1 - - [29/Aug/2025 22:04:17] "GET /static/css/improved-layout.css HTTP/1.1" 304 -
+127.0.0.1 - - [29/Aug/2025 22:04:17] "GET /static/js/reservation.js HTTP/1.1" 304 -
+127.0.0.1 - - [29/Aug/2025 22:04:17] "GET /static/js/enhanced-calendar.js HTTP/1.1" 304 -
+127.0.0.1 - - [29/Aug/2025 22:04:17] "GET /static/js/form-validation.js HTTP/1.1" 304 -
+127.0.0.1 - - [29/Aug/2025 22:04:17] "GET /static/js/improved-layout.js HTTP/1.1" 200 -
+127.0.0.1 - - [29/Aug/2025 22:04:17] "GET /api/daily_reservations?date=2025-08-30 HTTP/1.1" 200 -
+127.0.0.1 - - [29/Aug/2025 22:04:17] "GET /api/calendar_availability?start=2025-08-29&end=2025-09-07 HTTP/1.1" 200 -
+127.0.0.1 - - [29/Aug/2025 22:04:17] "GET /api/daily_reservations?date=2025-08-29 HTTP/1.1" 200 -
+127.0.0.1 - - [29/Aug/2025 22:04:25] "GET /08-29-2025 HTTP/1.1" 200 -
+127.0.0.1 - - [29/Aug/2025 22:04:25] "GET /static/css/enhanced-calendar.css HTTP/1.1" 304 -
+127.0.0.1 - - [29/Aug/2025 22:04:25] "GET /static/js/reservation.js HTTP/1.1" 304 -
+127.0.0.1 - - [29/Aug/2025 22:04:25] "GET /static/css/reservation.css HTTP/1.1" 304 -
+127.0.0.1 - - [29/Aug/2025 22:04:25] "GET /static/css/improved-layout.css HTTP/1.1" 304 -
+127.0.0.1 - - [29/Aug/2025 22:04:25] "GET /static/js/form-validation.js HTTP/1.1" 304 -
+127.0.0.1 - - [29/Aug/2025 22:04:25] "GET /static/js/enhanced-calendar.js HTTP/1.1" 304 -
+127.0.0.1 - - [29/Aug/2025 22:04:25] "GET /static/js/improved-layout.js HTTP/1.1" 304 -
+127.0.0.1 - - [29/Aug/2025 22:04:25] "GET /api/daily_reservations?date=2025-08-30 HTTP/1.1" 200 -
+127.0.0.1 - - [29/Aug/2025 22:04:25] "GET /api/calendar_availability?start=2025-08-29&end=2025-09-07 HTTP/1.1" 200 -
+127.0.0.1 - - [29/Aug/2025 22:04:25] "GET /api/daily_reservations?date=2025-08-29 HTTP/1.1" 200 -

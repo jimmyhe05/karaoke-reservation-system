@@ -60,16 +60,20 @@ function restackIdleCards() {
 
   const cards = idleArea.querySelectorAll(".reservation-card");
 
-  // Reset z-index and margins
   cards.forEach((card, index) => {
-    card.style.zIndex = 10 - index;
-
-    if (index === 0) {
-      card.style.marginTop = "0";
-    } else {
-      card.style.marginTop = "-40px";
-    }
+    card.style.position = "relative"; // stack naturally
+    card.style.top = "auto";
+    card.style.left = "auto";
+    card.style.marginTop = index === 0 ? "0" : "8px"; // simple vertical gap
+    card.style.zIndex = 1;
   });
+}
+
+// Helper to read interval height from CSS variable
+function getIntervalHeight() {
+  const v = getComputedStyle(document.documentElement).getPropertyValue("--interval-height");
+  const parsed = parseInt(v);
+  return isNaN(parsed) ? 20 : parsed;
 }
 
 // Handle reservation moves between containers
@@ -361,8 +365,10 @@ function moveReservation(reservationId, roomId, hour, minute = 0) {
 
 // Function to update room timelines
 function updateRoomTimelines(date) {
-  // Get all room containers
-  const roomContainers = document.querySelectorAll(".room-container");
+  // Get only real room containers (exclude idle) by requiring data-room-id
+  const roomContainers = document.querySelectorAll(
+    ".room-container[data-room-id]"
+  );
 
   // Fetch all reservations for the selected date
   fetch(`/api/daily_reservations?date=${date}`)
@@ -377,8 +383,9 @@ function updateRoomTimelines(date) {
       roomContainers.forEach((roomContainer) => {
         const roomId = parseInt(roomContainer.dataset.roomId);
         const roomTimeline = roomContainer.querySelector(".room-timeline");
+        if (!roomTimeline) return; // safety
 
-        // Clear the existing time slots
+        // Clear the existing time slots (leave static labels outside untouched)
         roomTimeline.innerHTML = "";
 
         // Create time slots from 11:00 to 01:00 (next day)
@@ -403,8 +410,7 @@ function updateRoomTimelines(date) {
             const timeLabelElement = document.createElement("div");
             timeLabelElement.className = "time-label";
             timeLabelElement.textContent = timeLabel;
-
-            timeSlot.appendChild(timeLabelElement);
+            // time labels are rendered in the separate .time-labels column; do not append labels inside each slot
             roomTimeline.appendChild(timeSlot);
           }
         }
@@ -571,7 +577,7 @@ function createReservationCard(reservation, roomTimeline) {
   const durationMinutes = endMinutes - startMinutes;
 
   // Calculate the height of the reservation card (40px per hour, 20px per 30 minutes)
-  const height = (durationMinutes / 30) * 20;
+  const height = (durationMinutes / 30) * getIntervalHeight();
 
   // Calculate the top position (relative to the start slot)
   const top = startSlot.offsetTop;
@@ -1113,7 +1119,8 @@ function updateCurrentTimeIndicator() {
 
     // Calculate position
     const slotTop = timeSlot.offsetTop;
-    const minuteOffset = (currentMinute / 60) * 40; // Each hour is 40px tall
+    const intervalH = getIntervalHeight();
+    const minuteOffset = (currentMinute / 60) * (intervalH * 2); // hour = 2 intervals
     const topPosition = slotTop + minuteOffset;
 
     // Set the position

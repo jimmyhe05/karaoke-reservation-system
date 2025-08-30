@@ -69,6 +69,10 @@
 }
 
 /* Main layout */
+:root {
+    --interval-height: 20px; /* default height for each 30-minute interval */
+}
+
 .main-container {
     display: flex;
     gap: 20px;
@@ -142,12 +146,22 @@
 
 .room-timeline-wrapper {
     display: flex;
-    flex: 1;
+    flex: 1 1 0;
     position: relative;
     height: 100%;
     border: 1px solid #e9ecef;
     border-radius: 0 0 8px 8px;
     background: white;
+    overflow: hidden; /* inner container will scroll */
+    min-height: 0; /* allow children to shrink and scroll within flex */
+}
+
+/* New inner container that scrolls labels and timeline together */
+.scroll-sync-inner {
+    display: flex;
+    height: 100%;
+    width: 100%;
+    overflow-y: auto; /* the single vertical scrollbar per room */
 }
 
 .time-labels {
@@ -157,13 +171,17 @@
     border-right: 1px solid #e9ecef;
     padding-top: 10px;
     border-radius: 0 0 0 8px;
+    /* labels move with inner scrolling; no independent scroll */
+    overflow: visible;
+    height: 100%;
+    min-height: 0;
 }
 
 .time-label {
     height: 20px;
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
+    line-height: 20px;
+    display: block;
+    text-align: right;
     padding-right: 12px;
     font-size: 0.75rem;
     color: #495057;
@@ -171,15 +189,21 @@
     background: transparent;
     user-select: none;
     white-space: nowrap;
+    box-sizing: border-box;
 }
 
 .room-timeline {
-    flex: 1;
-    overflow-y: auto;
+    flex: 1 1 auto;
+    /* timeline moves with inner scrolling; no independent scroll */
+    overflow: visible;
     background: white;
     padding-left: 8px;
+    padding-top: 10px; /* match time-labels padding so the first slot lines up */
     position: relative;
     border-radius: 0 0 8px 0;
+    display: flex;
+    flex-direction: column; /* ensure time-slot children stack and contribute to height */
+    min-height: 0;
 }
 
 /* Idle drop area: stacked list of reservation cards, no time grid */
@@ -190,6 +214,16 @@
     padding: 12px;
     overflow-y: auto;
     align-items: stretch;
+}
+
+.idle-drop-area .reservation-card {
+    position: relative !important;
+    top: auto !important;
+    height: auto !important;
+}
+
+.drop-indicator {
+    pointer-events: none;
 }
 
 .idle-drop-area .reservation-card {
@@ -207,11 +241,13 @@
 .time-slot {
     position: relative;
     height: 20px;
+    line-height: 20px;
     border-bottom: 1px solid #e9ecef;
     min-height: 20px;
     background: white;
     cursor: pointer;
     transition: background-color 0.2s ease;
+    box-sizing: border-box;
 }
 
 .time-slot:hover {
@@ -219,22 +255,7 @@
 }
 
 /* Ensure time labels are visible when scrolling */
-.room-timeline::-webkit-scrollbar {
-    width: 8px;
-}
-
-.room-timeline::-webkit-scrollbar-track {
-    background: #f1f1f1;
-}
-
-.room-timeline::-webkit-scrollbar-thumb {
-    background: #888;
-    border-radius: 4px;
-}
-
-.room-timeline::-webkit-scrollbar-thumb:hover {
-    background: #555;
-}
+/* Use native scrollbar appearance for the timeline wrapper; avoid custom themed scrollbars */
 
 /* Reservation cards */
 .reservation-card {
@@ -1042,4 +1063,15 @@ select.form-control {
         font-size: 0.7rem;
         padding-right: 8px;
     }
+}
+
+/* Snap preview (translucent ghost shown while dragging) */
+.snap-preview {
+    position: absolute;
+    left: 0;
+    right: 0;
+    background: rgba(0, 123, 255, 0.12);
+    border: 1px dashed rgba(0, 123, 255, 0.5);
+    z-index: 9999;
+    pointer-events: none;
 }

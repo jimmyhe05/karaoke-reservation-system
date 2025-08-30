@@ -26,11 +26,47 @@ function initImprovedLayout() {
   positionReservationCards();
   // Initialize drag and drop for reservation cards (idle area + room timelines)
   initDragAndDrop();
+  // Ensure vertical scroll is synchronized across inner scroll containers (single scrollbar per room)
+  syncInnerScrolls();
+}
+
+// Make `.time-labels` and `.room-timeline` independently scrollable and keep
+// their vertical scroll positions synchronized across all rooms so the labels
+// remain visible and aligned when the user scrolls any column.
+// Keep all room wrappers' vertical scroll positions in sync, so any room scrolled
+// will keep other rooms (and their labels) aligned. Only wrappers scroll.
+function syncInnerScrolls() {
+  const inners = Array.from(document.querySelectorAll('.scroll-sync-inner'));
+  if (!inners.length) return;
+  let isSyncing = false;
+  inners.forEach((el) => {
+    el.addEventListener('scroll', function () {
+      if (isSyncing) return;
+      isSyncing = true;
+      const st = this.scrollTop;
+      inners.forEach((other) => {
+        if (other !== this) other.scrollTop = st;
+      });
+      window.requestAnimationFrame(() => {
+        isSyncing = false;
+      });
+    });
+  });
 }
 
 // Initialize Sortable drag-and-drop between room timelines and the idle drop area
 function initDragAndDrop() {
   if (typeof Sortable === "undefined") return;
+
+  // current interval height (reads CSS variable)
+  let intervalHeight = parseInt(
+    getComputedStyle(document.documentElement).getPropertyValue("--interval-height") || 20
+  );
+
+  // Create a snap preview element used while dragging
+  let snapPreview = null;
+
+  // No scale control UI — interval height is read from CSS var only.
 
   // Helper to find number of intervals for a room timeline
   function getNumIntervals(timeline) {
@@ -53,6 +89,14 @@ function initDragAndDrop() {
         const item = evt.item;
         item._originalParent = item.parentNode;
         item._originalNext = item.nextSibling;
+        // create snap preview element and attach to timeline parent (hidden initially)
+        const timeline = item.closest(".room-timeline") || document.querySelector(".room-timeline");
+        if (timeline) {
+          snapPreview = document.createElement("div");
+          snapPreview.className = "snap-preview";
+          snapPreview.style.display = "none";
+          timeline.appendChild(snapPreview);
+        }
       },
       onMove: function (evt, originalEvent) {
         // show hint while dragging over room timelines (only for room timelines)
@@ -63,15 +107,29 @@ function initDragAndDrop() {
         if (!timeline) return true;
         const rect = timeline.getBoundingClientRect();
         const numIntervals = getNumIntervals(timeline) || 28;
-        const slotHeight = timeline.clientHeight / numIntervals;
+        const slotHeight = intervalHeight; // use configured interval height
         const offsetY = (originalEvent.clientY || rect.top + 10) - rect.top;
         let slotIndex = Math.floor(offsetY / slotHeight);
         if (slotIndex < 0) slotIndex = 0;
         const top = slotIndex * slotHeight;
         showDropIndicator(timeline, top, slotHeight);
+
+        // update snap preview height using the dragged item's duration
+        if (snapPreview && evt.dragged && evt.dragged.dataset) {
+          const durationHours = parseFloat(evt.dragged.dataset.duration) || 1;
+          const height = Math.round(durationHours * 2) * intervalHeight; // hours->30-min intervals
+          snapPreview.style.top = top + "px";
+          snapPreview.style.height = height + "px";
+          snapPreview.style.display = "block";
+        }
         return true;
       },
       onEnd: function (evt) {
+        // remove snap preview if present
+        if (snapPreview && snapPreview.parentNode) {
+          snapPreview.remove();
+          snapPreview = null;
+        }
         const item = evt.item; // dragged DOM element
         const reservationId = item.dataset.reservationId;
         clearDropIndicators();
@@ -138,7 +196,7 @@ function initDragAndDrop() {
           // Optimistically set position and attributes for the card
           const durationHours = parseFloat(item.dataset.duration) || 1;
           const cardTop = slotIndex * slotHeight;
-          const cardHeight = durationHours * 40; // match server-side rendering heuristic
+          const cardHeight = Math.round(durationHours * 2) * intervalHeight; // durationHours -> number of 30-min intervals * intervalHeight
           item.style.position = "absolute";
           item.style.top = `${cardTop}px`;
           item.style.height = `${cardHeight}px`;
@@ -195,7 +253,7 @@ function initDragAndDrop() {
           // Optimistically position
           const durationHours = parseFloat(item.dataset.duration) || 1;
           const cardTop = slotIndex * slotHeight;
-          const cardHeight = durationHours * 40;
+          const cardHeight = Math.round(durationHours * 2) * intervalHeight;
           item.style.position = "absolute";
           item.style.top = `${cardTop}px`;
           item.style.height = `${cardHeight}px`;
@@ -264,19 +322,7 @@ function adjustRoomTimelineHeights() {
 
   if (!roomTimelines.length || !timeLabels) return;
 
-  // Get the number of time slots (30-minute intervals)
-  const numIntervals = timeLabels.querySelectorAll(".time-label").length;
-
-  // Calculate the height based on the number of time labels (e.g., 20px per interval)
-  const timelineHeight = numIntervals * 20; // Assuming 20px height per 30-min slot
-
-  // Set the height for all room timelines
-  roomTimelines.forEach((timeline) => {
-    timeline.style.height = `${timelineHeight}px`;
-  });
-
-  // Set the height for the time labels container if needed (might not be necessary depending on CSS)
-  // timeLabels.style.height = `${timelineHeight}px`;
+  // No fixed heights — allow the wrapper and its two scrollable columns to manage height.
 }
 
 // Position reservation cards based on data-top / data-height attributes (set server-side)
@@ -424,8 +470,9 @@ function updateCurrentTimeIndicator() {
   const minutesPast11AM = (calculationHour - 11) * 60 + currentMinute;
   const intervalsPast11AM = minutesPast11AM / 30;
 
-  // Calculate the top position (20px per interval)
-  const position = intervalsPast11AM * 20; // 20px height per 30-min slot
+  // Calculate the top position using configured interval height
+  const intervalHeight = parseInt(getComputedStyle(document.documentElement).getPropertyValue("--interval-height")) || 20;
+  const position = intervalsPast11AM * intervalHeight;
 
   // Add the indicator to each room timeline
   document.querySelectorAll(".room-timeline").forEach((timeline) => {
@@ -448,24 +495,25 @@ function initResponsiveBehavior() {
 
 // Function to show toast notification (keep one version, maybe move to a shared utility file later)
 function showToast(message, type = "info") {
-  // Use the globally defined showToast from reservation.js if available
-  if (
-    typeof window.showToast === "function" &&
-    window.showToast !== showToast
-  ) {
-    window.showToast(message, type);
+  // Delegate to primary implementation if defined elsewhere
+  if (window._primaryShowToast && window._primaryShowToast !== showToast) {
+    window._primaryShowToast(message, type);
+    return;
+  }
+  if (!window._primaryShowToast && window.showToast && window.showToast !== showToast) {
+    window._primaryShowToast = window.showToast; // cache existing
+    window._primaryShowToast(message, type);
     return;
   }
 
-  // Fallback or primary implementation if reservation.js's isn't loaded first
-  const toastContainer = document.querySelector(".toast-container");
+  // Local fallback implementation
+  let toastContainer = document.querySelector(".toast-container");
   if (!toastContainer) {
     console.warn("Toast container not found. Creating one.");
-    const container = document.createElement("div");
-    container.className = "toast-container position-fixed top-0 end-0 p-3";
-    container.style.zIndex = "1055"; // Ensure it's above modals
-    document.body.appendChild(container);
-    toastContainer = container;
+    toastContainer = document.createElement("div");
+    toastContainer.className = "toast-container position-fixed top-0 end-0 p-3";
+    toastContainer.style.zIndex = "1055";
+    document.body.appendChild(toastContainer);
   }
 
   const toast = document.createElement("div");
