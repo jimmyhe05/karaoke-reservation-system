@@ -58,9 +58,17 @@ function restackIdleCards() {
   const idleArea = document.getElementById("idle-area");
   if (!idleArea) return;
 
-  const cards = idleArea.querySelectorAll(".reservation-card");
+  const cards = Array.from(idleArea.querySelectorAll(".reservation-card"));
+
+  // Sort by start time (HH:MM, supports 24+ for overnight)
+  cards.sort((a, b) => {
+    const aMins = timeStringToMinutes(a.dataset.startTime || "0:00");
+    const bMins = timeStringToMinutes(b.dataset.startTime || "0:00");
+    return aMins - bMins;
+  });
 
   cards.forEach((card, index) => {
+    idleArea.appendChild(card); // re-append in sorted order
     card.style.position = "relative"; // stack naturally
     card.style.top = "auto";
     card.style.left = "auto";
@@ -74,6 +82,15 @@ function getIntervalHeight() {
   const v = getComputedStyle(document.documentElement).getPropertyValue("--interval-height");
   const parsed = parseInt(v);
   return isNaN(parsed) ? 20 : parsed;
+}
+
+// Convert "HH:MM" (supports 24+ hours) to minutes since midnight
+function timeStringToMinutes(t) {
+  if (!t || !t.includes(":")) return 0;
+  const [h, m] = t.split(":");
+  const hours = parseInt(h, 10);
+  const mins = parseInt(m, 10) || 0;
+  return hours * 60 + mins;
 }
 
 // Handle reservation moves between containers
@@ -101,10 +118,6 @@ function handleReservationMove(evt) {
   if (toContainer.id === "idle-area") {
     console.log(`Reservation ${reservationId} moved to idle area`);
 
-    // Move the card to the top of the idle area
-    toContainer.removeChild(reservationCard);
-    toContainer.prepend(reservationCard);
-
     // Update the backend to mark this reservation as idle
     fetch(`/move_to_idle/${reservationId}`, {
       method: "POST",
@@ -114,7 +127,7 @@ function handleReservationMove(evt) {
         console.log("Moved to idle area:", data);
         showToast("Reservation moved to idle area");
 
-        // Restack the cards
+        // Restack/sort the cards
         restackIdleCards();
       })
       .catch((error) => {
@@ -489,6 +502,13 @@ function updateIdleArea() {
   // Clear the existing idle reservations
   idleArea.innerHTML = "";
 
+  const renderEmptyState = () => {
+    const empty = document.createElement("div");
+    empty.className = "idle-empty-state";
+    empty.textContent = "No idle reservations";
+    idleArea.appendChild(empty);
+  };
+
   // Get the current date
   const currentDate =
     document.getElementById("date").value ||
@@ -538,6 +558,7 @@ function updateIdleArea() {
         initDragAndDrop();
       } else {
         console.log("No idle reservations found");
+        renderEmptyState();
       }
     })
     .catch((error) => {

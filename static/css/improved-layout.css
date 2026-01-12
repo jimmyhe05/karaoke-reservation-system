@@ -225,6 +225,25 @@ body {
   background: var(--secondary-color);
 }
 
+/* New idle drop area (shared with main styles) */
+.idle-area-container .idle-drop-area {
+  padding: 12px;
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: white;
+}
+
+.idle-area-container .idle-empty-state {
+  color: var(--dark-gray);
+  font-size: 0.9rem;
+  text-align: center;
+  opacity: 0.7;
+  padding: 8px 4px;
+}
+
 /* ===== ROOMS CONTAINER IMPROVEMENTS ===== */
 .rooms-container {
   display: flex;

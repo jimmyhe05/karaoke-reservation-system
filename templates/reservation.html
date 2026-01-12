@@ -47,14 +47,15 @@
         <div class="content-area">
             <!-- Room Timelines -->
             <div class="rooms-container">
-                <!-- Idle room column (left of room 1) - simplified droppable stack (no time labels) -->
+                <!-- Idle column to the left of Room 1 -->
                 <div class="room-container idle-room">
                     <div class="room-header">
                         <span class="en">Idle</span>
                     </div>
                     <div class="room-timeline-wrapper">
-                        <!-- Idle area: simple vertical list, draggable cards -->
-                        <div id="idle-area" class="idle-drop-area" aria-label="Idle reservations"></div>
+                        <div id="idle-area" class="idle-drop-area" aria-label="Idle reservations">
+                            <div class="idle-empty-state" aria-hidden="true">No idle reservations</div>
+                        </div>
                     </div>
                 </div>
                 {% for room in rooms %}

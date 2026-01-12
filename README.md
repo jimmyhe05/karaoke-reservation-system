@@ -8,13 +8,17 @@ Built with **Python (Flask)** for the backend, **HTML/CSS/JavaScript** for the f
 
 ## 📋 Table of Contents
 
-1. [✨ Features](#-features)
-2. [🎥 Demo](#-demo)
-3. [⚙ Installation](#-installation)
-4. [🖥 Technologies Used](#-technologies-used)
-5. [💡 Inspiration](#-inspiration)
-6. [🌟 Future Enhancements](#-future-enhancements)
-7. [🔗 Connect with Me](#-connect-with-me)
+- [🎤 Karaoke Reservation System](#-karaoke-reservation-system)
+  - [📋 Table of Contents](#-table-of-contents)
+  - [✨ Features](#-features)
+  - [🎥 Demo](#-demo)
+  - [⚙ Installation](#-installation)
+    - [Requirements](#requirements)
+    - [Setup Steps](#setup-steps)
+  - [🖥 Technologies Used](#-technologies-used)
+  - [💡 Inspiration](#-inspiration)
+  - [🌟 Future Enhancements](#-future-enhancements)
+  - [🔗 Connect with Me](#-connect-with-me)
 
 ---
 
@@ -52,25 +56,60 @@ Here’s a preview of how the system works:
 1. **Clone the repository**:
    ```bash
    git clone https://github.com/jimmyhe05/karaoke-reservation-system.git
+   ```
 
 2. **Navigate to the project folder**:
    ```bash
    cd karaoke-reservation-system
+   ```
 
 3. **Create a virtual environment (optional but recommended)**:
    ```bash
    python -m venv venv
    source venv/bin/activate  # On Windows use: venv\Scripts\activate
+   ```
 
 4. **Install dependencies**:
    ```bash
-   pip install flask
+   pip install -r requirements.txt
+   ```
 
-5. **Run the Flask application**:
+5. **Create a `.env` file in the project root** (auto-loaded by Flask via `python-dotenv`):
    ```bash
-   python app.py
+   cp .env.example .env
 
-6. **Access the app in your browser**:
+   # (Optional) generate a stronger secret key and replace the value
+   python3 - <<'PY'
+   import secrets
+   print(secrets.token_hex(32))
+   PY
+   ```
+
+   Then edit `.env` to set at least:
+
+   ```bash
+   SECRET_KEY=<your-generated-value>
+   DATABASE=karaoke.db
+   TAX_RATE=0.055
+   FLASK_APP=app.py
+   ```
+
+6. **Initialize the database (idempotent)**:
+   ```bash
+   python -m flask init-db
+   ```
+
+7. **(Optional) seed sample reservations for today**:
+   ```bash
+   python -m flask seed-sample
+   ```
+
+8. **Run the Flask application** (loads `.env` automatically):
+   ```bash
+   python -m flask run
+   ```
+
+9. **Access the app in your browser**:
    Open http://127.0.0.1:5000.
 
 ---

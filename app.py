@@ -1,16 +1,30 @@
 from werkzeug.routing import BaseConverter
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, abort
 from datetime import datetime, timedelta
-import os
 import sqlite3
 from flask import g
 import json
+import click
+from werkzeug.exceptions import HTTPException
+
+from config import Config
+from services.validation import (
+    parse_time_safe,
+    time_to_minutes,
+    normalize_time_range,
+    find_conflict,
+    slots_overlap,
+)
+
 
 app = Flask(__name__)
-app.secret_key = os.urandom(24)
+app.config.from_object(Config)
 
-TAX_RATE = 0.055
-DATABASE = 'karaoke.db'
+if not app.config['SECRET_KEY']:
+    raise RuntimeError("SECRET_KEY must be set (see .env)")
+
+TAX_RATE = app.config['TAX_RATE']
+DATABASE = app.config['DATABASE']
 
 # Business hours: 11 AM to 1 AM
 OPEN_HOUR = 11
@@ -27,20 +41,91 @@ ROOMS = [
 def get_db():
     """Get a database connection."""
     if 'db' not in g:
-        g.db = sqlite3.connect(DATABASE)
+        db_path = app.config.get('DATABASE', DATABASE)
+        g.db = sqlite3.connect(db_path)
         g.db.row_factory = sqlite3.Row
+        # Enforce foreign keys and use WAL for better concurrency on SQLite
+        g.db.execute('PRAGMA foreign_keys = ON;')
+        g.db.execute('PRAGMA journal_mode = WAL;')
     return g.db
 
 
 def init_db():
-    """Initialize the database if it doesn't exist."""
+    """Initialize the database schema and indexes (idempotent)."""
     db = get_db()
+    with app.open_resource('schema.sql', mode='r') as f:
+        db.cursor().executescript(f.read())
+    db.commit()
 
-    # Create main tables if they don't exist
-    if not os.path.exists(DATABASE):
-        with app.open_resource('schema.sql', mode='r') as f:
-            db.cursor().executescript(f.read())
-        db.commit()
+
+def seed_sample_data(target_date=None):
+    """Seed a few sample reservations if none exist for the target date."""
+    conn = get_db()
+    if target_date is None:
+        target_date = datetime.now().strftime('%Y-%m-%d')
+
+    existing = conn.execute(
+        'SELECT COUNT(*) as c FROM reservations WHERE date = ?', (target_date,)
+    ).fetchone()['c']
+    if existing:
+        return False, f"Reservations already exist for {target_date}; skipping seed"
+
+    samples = [
+        {
+            'room_id': 1,
+            'start_time': '13:00',
+            'end_time': '15:00',
+            'contact_name': 'Sample Guest 1',
+            'contact_phone': '555-0100',
+            'num_people': 4,
+            'language': 'en',
+            'notes': 'Seed demo',
+        },
+        {
+            'room_id': 2,
+            'start_time': '18:30',
+            'end_time': '20:00',
+            'contact_name': 'Sample Guest 2',
+            'contact_phone': '555-0111',
+            'num_people': 6,
+            'language': 'en',
+            'notes': 'Seed demo',
+        },
+        {
+            'room_id': 3,
+            'start_time': '21:00',
+            'end_time': '23:00',
+            'contact_name': 'Sample Guest 3',
+            'contact_phone': '555-0122',
+            'num_people': 3,
+            'language': 'en',
+            'notes': 'Seed demo',
+        },
+    ]
+
+    for s in samples:
+        total_cost = calculate_cost(s['start_time'], s['end_time'], s['room_id'])
+        conn.execute(
+            '''INSERT INTO reservations
+               (room_id, date, start_time, end_time, contact_name, contact_phone,
+                contact_email, num_people, language, status, total_cost, notes)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmed', ?, ?)''',
+            (
+                s['room_id'],
+                target_date,
+                s['start_time'],
+                s['end_time'],
+                s['contact_name'],
+                s['contact_phone'],
+                '',
+                s['num_people'],
+                s['language'],
+                total_cost,
+                s['notes'],
+            )
+        )
+    conn.commit()
+    return True, f"Seeded {len(samples)} reservations for {target_date}"
 
 
 @app.teardown_appcontext
@@ -56,6 +141,46 @@ app.teardown_appcontext(close_db)
 # Initialize the database only if it doesn't exist
 with app.app_context():
     init_db()
+
+
+# ---- Error Handling ----
+
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    """Return JSON for API routes; fall back to default HTML otherwise."""
+    is_api = request.path.startswith('/api/')
+
+    if isinstance(e, HTTPException):
+        code = e.code
+        description = e.description
+    else:
+        code = 500
+        description = 'Internal server error'
+
+    if is_api:
+        return jsonify({'error': description}), code
+    return e
+
+# ---- CLI Commands ----
+
+
+@app.cli.command("init-db")
+def init_db_command():
+    """Initialize the database schema (idempotent)."""
+    init_db()
+    click.echo("Initialized the database.")
+
+
+@app.cli.command("seed-sample")
+@click.option('--date', default=None, help='YYYY-MM-DD date to seed (defaults to today)')
+def seed_sample_command(date):
+    """Seed sample reservations if none exist for the given date."""
+    ok, message = seed_sample_data(date)
+    click.echo(message)
+    if not ok:
+        # non-fatal; communicate via exit code 0
+        return
 
 # --- URL Date Path Converter (MM-DD-YYYY) ---
 
@@ -76,26 +201,74 @@ def normalize_date_path(date_str):
         raise
 
 
-def parse_time_safe(time_str):
+
+
+def compute_pricing(conn, room_id, start_time_str, end_time_str):
     """
-    Safely parse time strings, including those in 24+ hour format (e.g., "25:00").
-    Returns a tuple of (datetime object, is_extended_format)
+    Compute subtotal, tax, and total for a reservation using room rates.
+
+    - Uses room.hourly_rate for 11:00-18:00
+    - Uses room.peak_hour_rate for 18:00-25:00 (6 PM - 1 AM)
+    - Supports minute-level durations and overnight via 24+ hour end times.
+    Returns dict with subtotal, tax, total, and period_charges breakdown.
     """
-    try:
-        # Try standard format first
-        return datetime.strptime(time_str, '%H:%M'), False
-    except ValueError:
-        # Handle extended format (24+ hours)
-        if ':' in time_str:
-            hours, minutes = time_str.split(':')
-            if int(hours) >= 24:
-                # Create a time for the equivalent hour on the same day
-                # (e.g., "25:00" becomes "01:00")
-                normalized_hour = int(hours) % 24
-                normalized_time_str = f"{normalized_hour:02d}:{minutes}"
-                return datetime.strptime(normalized_time_str, '%H:%M'), True
-        # If we can't parse it, re-raise the exception
-        raise
+    room = conn.execute(
+        'SELECT hourly_rate, peak_hour_rate FROM rooms WHERE id = ?', (room_id,)
+    ).fetchone()
+    if not room:
+        raise ValueError('Invalid room id for pricing')
+
+    start_minutes = time_to_minutes(start_time_str)
+    end_minutes = time_to_minutes(end_time_str)
+
+    if end_minutes <= start_minutes:
+        raise ValueError('End time must be after start time for pricing')
+
+    # Boundaries in minutes from midnight
+    EARLY_START = 11 * 60      # 11:00
+    EARLY_END = 18 * 60        # 18:00
+    PRIME_END = 21 * 60        # 21:00
+    LATE_END = 25 * 60         # 01:00 next day (25:00)
+
+    current = start_minutes
+    subtotal = 0.0
+    period_charges = []
+
+    while current < end_minutes:
+        if current < EARLY_END:
+            rate = room['hourly_rate']
+            period_label = 'Early (11 AM - 6 PM)'
+            period_end = min(end_minutes, EARLY_END)
+        elif current < PRIME_END:
+            rate = room['peak_hour_rate']
+            period_label = 'Prime (6 PM - 9 PM)'
+            period_end = min(end_minutes, PRIME_END)
+        else:
+            rate = room['peak_hour_rate']
+            period_label = 'Late (9 PM - 1 AM)'
+            period_end = min(end_minutes, LATE_END)
+
+        duration_hours = (period_end - current) / 60.0
+        cost = rate * duration_hours
+        subtotal += cost
+        period_charges.append({
+            'time': period_label,
+            'rate': rate,
+            'duration': round(duration_hours, 2),
+            'cost': round(cost, 2)
+        })
+
+        current = period_end
+
+    tax = round(subtotal * TAX_RATE, 2)
+    total = round(subtotal + tax, 2)
+
+    return {
+        'subtotal': round(subtotal, 2),
+        'tax': tax,
+        'total': total,
+        'period_charges': period_charges
+    }
 
 
 def is_within_business_hours(start_time, end_time):
@@ -137,40 +310,9 @@ def is_room_available(room_id, start_time, end_time, exclude_id=None):
 
 
 def calculate_cost(start_time, end_time, room_id):
-    db = get_db()
-    room = db.execute('SELECT hourly_rate, peak_hour_rate FROM rooms WHERE id = ?', [
-                      room_id]).fetchone()
-
-    # Convert times to hours for calculation
-    start_hour = int(start_time.split(':')[0])
-    end_hour = int(end_time.split(':')[0])
-
-    # Handle overnight reservations (end time already in 24+ hour format or after midnight)
-    if end_hour < start_hour:
-        end_hour += 24
-
-    total_cost = 0
-    current_hour = start_hour
-
-    while current_hour < end_hour:
-        # Normalize hour for rate calculation (handle hours > 24)
-        normalized_hour = current_hour % 24
-
-        # Different rate periods:
-        # Early Bird (11 AM - 6 PM): hourly_rate
-        # Prime Time (6 PM - 9 PM): peak_hour_rate
-        # Late Night (9 PM - 1 AM): peak_hour_rate
-        if 11 <= normalized_hour < 18:  # 11 AM - 6 PM
-            rate = room['hourly_rate']
-        elif 18 <= normalized_hour < 21:  # 6 PM - 9 PM
-            rate = room['peak_hour_rate']
-        else:  # 9 PM - 1 AM or 21-25
-            rate = room['peak_hour_rate']
-
-        total_cost += rate
-        current_hour += 1
-
-    return total_cost
+    # Reuse unified pricing; return subtotal (pre-tax) to keep existing DB semantics.
+    pricing = compute_pricing(get_db(), room_id, start_time, end_time)
+    return pricing['subtotal']
 
 
 def get_rooms_with_reservations(selected_date=None):
@@ -181,8 +323,8 @@ def get_rooms_with_reservations(selected_date=None):
     if selected_date is None:
         selected_date = datetime.now().strftime('%Y-%m-%d')
 
-    # Get all rooms
-    rooms = conn.execute('SELECT * FROM rooms').fetchall()
+    # Get all bookable rooms (exclude idle placeholder if present)
+    rooms = conn.execute('SELECT * FROM rooms WHERE id > 0 ORDER BY id').fetchall()
 
     # Get reservations for the selected date
     reservations = conn.execute('''
@@ -405,7 +547,7 @@ def get_today_stats():
     ''', (today,)).fetchone()['count']
 
     total_rooms = conn.execute(
-        'SELECT COUNT(*) as count FROM rooms').fetchone()['count']
+        'SELECT COUNT(*) as count FROM rooms WHERE id > 0').fetchone()['count']
     total_hours = 14  # 11 AM to 1 AM = 14 hours
     total_room_hours = total_rooms * total_hours
 
@@ -490,6 +632,17 @@ def reservation():
             if not form_data['contact_phone']:
                 error_fields.append('contact_phone')
 
+            # Validate numeric inputs early
+            try:
+                form_data['room_id'] = int(form_data['room_id'])
+            except Exception:
+                error_fields.append('room_id')
+
+            try:
+                form_data['num_people'] = int(form_data['num_people'])
+            except Exception:
+                error_fields.append('num_people')
+
             if error_fields:
                 return jsonify({
                     'error': 'Missing required fields',
@@ -498,98 +651,50 @@ def reservation():
 
             # Validate date and time
             try:
-                # Parse date and times
-                date = datetime.strptime(form_data['date'], '%Y-%m-%d').date()
-
-                # Use our safe time parsing function
-                start_time_obj, _ = parse_time_safe(form_data['start_time'])
-                end_time_obj, is_extended = parse_time_safe(
-                    form_data['end_time'])
-
-                # Extract time components
-                start_time = start_time_obj.time()
-                end_time = end_time_obj.time()
-
-                # Create datetime objects for comparison
-                start_datetime = datetime.combine(date, start_time)
-                end_datetime = datetime.combine(date, end_time)
-
-                # Handle overnight reservations
-                if is_extended or end_time <= start_time:
-                    end_datetime = end_datetime + timedelta(days=1)
-
-                # Check if the date is in the past
-                if date < datetime.now().date():
-                    error_fields.append('date')
-
-                # Check business hours (11 AM to 1 AM next day)
-                business_start = datetime.combine(
-                    date, datetime.strptime('11:00', '%H:%M').time())
-                business_end = datetime.combine(
-                    date + timedelta(days=1), datetime.strptime('01:00', '%H:%M').time())
-
-                # Ensure start time is at least 11 AM and end time is at most 1 AM next day
-                if start_datetime < business_start or end_datetime > business_end:
-                    error_fields.extend(['start_time', 'end_time'])
-
-                if error_fields:
-                    return jsonify({
-                        'error': 'Invalid reservation time. Please ensure your reservation is within business hours (11 AM - 1 AM).',
-                        'fields': error_fields
-                    }), 400
-
-                # Update form_data with datetime objects
-                form_data['start_time'] = start_datetime.strftime('%H:%M')
-
-                # For overnight reservations, store end time as 24-hour format (e.g., "25:00" for 1 AM next day)
-                if end_time <= start_time:
-                    # Convert end time to 24+ hour format for overnight reservations
-                    end_hour = end_time.hour + 24
-                    form_data['end_time'] = f"{end_hour:02d}:{end_time.minute:02d}"
-                else:
-                    form_data['end_time'] = end_datetime.strftime('%H:%M')
+                normalized_start, normalized_end, start_minutes, end_minutes = normalize_time_range(
+                    form_data['date'], form_data['start_time'], form_data['end_time'])
+                form_data['start_time'] = normalized_start
+                form_data['end_time'] = normalized_end
 
             except ValueError as e:
                 return jsonify({
-                    'error': 'Invalid date or time format. Please use HH:MM format for times.',
+                    'error': str(e),
                     'fields': ['date', 'start_time', 'end_time']
                 }), 400
 
             conn = get_db()
             try:
-                # Check if the room is available
-                # First, get all reservations that might conflict
-                potential_conflicts = conn.execute('''
-                    SELECT r.* FROM reservations r
-                    WHERE r.room_id = ? AND r.date = ? AND
-                    ((r.start_time <= ? AND r.end_time > ?) OR
-                     (r.start_time < ? AND r.end_time >= ?) OR
-                     (r.start_time >= ? AND r.end_time <= ?))
-                ''', (form_data['room_id'], form_data['date'],
-                      form_data['start_time'], form_data['start_time'],
-                      form_data['end_time'], form_data['end_time'],
-                      form_data['start_time'], form_data['end_time'])).fetchall()
+                # Capacity check
+                room = conn.execute(
+                    'SELECT capacity FROM rooms WHERE id = ?', (form_data['room_id'],)
+                ).fetchone()
+                if not room:
+                    return jsonify({'error': 'Invalid room selected', 'fields': ['room_id']}), 400
 
-                # Check if any of these reservations are NOT in the idle area
-                conflict_exists = False
-                for res in potential_conflicts:
-                    # Check if this reservation is in the idle area
-                    idle_check = conn.execute('''
-                        SELECT * FROM idle_reservations
-                        WHERE reservation_id = ? AND date = ?
-                    ''', (res['id'], form_data['date'])).fetchone()
-
-                    # If it's not in the idle area, we have a conflict
-                    if not idle_check:
-                        conflict_exists = True
-                        break
-
-                if conflict_exists:
+                if form_data['num_people'] <= 0 or form_data['num_people'] > room['capacity']:
                     return jsonify({
-                        'error': 'Room is not available for the selected time',
-                        'fields': ['room_id']
+                        'error': f"Number of people must be between 1 and {room['capacity']}",
+                        'fields': ['num_people']
                     }), 400
 
+                # Conflict check
+                conflict = find_conflict(
+                    conn,
+                    form_data['room_id'],
+                    form_data['date'],
+                    form_data['start_time'],
+                    form_data['end_time']
+                )
+
+                if conflict:
+                    return jsonify({
+                        'error': 'Room is not available for the selected time',
+                        'fields': ['room_id', 'start_time', 'end_time'],
+                        'conflict_with': conflict['id']
+                    }), 409
+
+                # Check if the room is available
+                # First, get all reservations that might conflict
                 # Calculate cost
                 total_cost = calculate_cost(
                     form_data['start_time'], form_data['end_time'], form_data['room_id'])
@@ -694,48 +799,40 @@ def update_reservation(reservation_id):
             return jsonify({'error': 'Reservation not found'}), 404
 
         # Extract time and room data for conflict checking
-        start_time = data.get('start_time', existing_reservation['start_time'])
-        end_time = data.get('end_time', existing_reservation['end_time'])
+        start_time_raw = data.get('start_time', existing_reservation['start_time'])
+        end_time_raw = data.get('end_time', existing_reservation['end_time'])
         room_id = data.get('room_id', existing_reservation['room_id'])
         date = data.get('date', existing_reservation['date'])
 
+        try:
+            room_id = int(room_id)
+        except Exception:
+            return jsonify({'error': 'Invalid room id', 'fields': ['room_id']}), 400
+
+        # Normalize/validate times
+        try:
+            normalized_start, normalized_end, _, _ = normalize_time_range(
+                date, start_time_raw, end_time_raw)
+        except ValueError as e:
+            return jsonify({'error': str(e), 'fields': ['start_time', 'end_time', 'date']}), 400
+
         # Check for conflicts with other reservations (excluding the current one)
         # Only check for conflicts if time or room has changed
-        if (start_time != existing_reservation['start_time'] or
-            end_time != existing_reservation['end_time'] or
+        if (normalized_start != existing_reservation['start_time'] or
+            normalized_end != existing_reservation['end_time'] or
             room_id != existing_reservation['room_id'] or
                 date != existing_reservation['date']):
 
             # Log the conflict check parameters
-            print(f"Checking conflicts for reservation {reservation_id}:")
-            print(f"  Room: {room_id}, Date: {date}")
-            print(f"  Time: {start_time} - {end_time}")
-
-            # Improved conflict detection query
-            # For debugging, let's print all reservations in this room on this date
-            all_reservations = conn.execute('''
-                SELECT id, start_time, end_time FROM reservations
-                WHERE room_id = ? AND date = ?
-            ''', (room_id, date)).fetchall()
-
-            print(f"All reservations in room {room_id} on {date}:")
-            for res in all_reservations:
-                print(
-                    f"  ID: {res['id']}, Time: {res['start_time']} - {res['end_time']}")
-
             # Now check for conflicts
-            conflict = conn.execute('''
-                SELECT * FROM reservations
-                WHERE room_id = ? AND date = ? AND id != ? AND
-                NOT (end_time <= ? OR start_time >= ?)
-            ''', (room_id, date, reservation_id,
-                  start_time, end_time)).fetchone()
-
-            # Log the conflict check for debugging
-            if conflict:
-                print(
-                    f"Conflict detected for reservation {reservation_id}: {conflict['id']} ({conflict['start_time']} - {conflict['end_time']})")
-                print(f"Attempted time: {start_time} - {end_time}")
+            conflict = find_conflict(
+                conn,
+                room_id,
+                date,
+                normalized_start,
+                normalized_end,
+                exclude_id=reservation_id
+            )
 
             if conflict:
                 return jsonify({
@@ -744,10 +841,10 @@ def update_reservation(reservation_id):
                 }), 409
 
         # Calculate new cost if time or room has changed
-        if (start_time != existing_reservation['start_time'] or
-            end_time != existing_reservation['end_time'] or
+        if (normalized_start != existing_reservation['start_time'] or
+            normalized_end != existing_reservation['end_time'] or
                 room_id != existing_reservation['room_id']):
-            total_cost = calculate_cost(start_time, end_time, room_id)
+            total_cost = calculate_cost(normalized_start, normalized_end, room_id)
         else:
             total_cost = existing_reservation['total_cost']
 
@@ -759,6 +856,19 @@ def update_reservation(reservation_id):
         contact_email = data.get(
             'contact_email', existing_reservation['contact_email'])
         num_people = data.get('num_people', existing_reservation['num_people'])
+        try:
+            num_people_int = int(num_people)
+        except Exception:
+            return jsonify({'error': 'Invalid number of people', 'fields': ['num_people']}), 400
+
+        room = conn.execute('SELECT capacity FROM rooms WHERE id = ?', (room_id,)).fetchone()
+        if not room:
+            return jsonify({'error': 'Invalid room id', 'fields': ['room_id']}), 400
+        if num_people_int <= 0 or num_people_int > room['capacity']:
+            return jsonify({
+                'error': f"Number of people must be between 1 and {room['capacity']}",
+                'fields': ['num_people']
+            }), 400
         language = data.get('language', existing_reservation['language'])
         notes = data.get('notes', existing_reservation['notes'])
         status = data.get('status', existing_reservation['status'])
@@ -768,11 +878,11 @@ def update_reservation(reservation_id):
             UPDATE reservations
             SET room_id = ?, date = ?, start_time = ?, end_time = ?,
                 contact_name = ?, contact_phone = ?, contact_email = ?,
-                num_people = ?, language = ?, notes = ?, status = ?, total_cost = ?
+                                num_people = ?, language = ?, notes = ?, status = ?, total_cost = ?
             WHERE id = ?
-        ''', (room_id, date, start_time, end_time,
-              contact_name, contact_phone, contact_email,
-              num_people, language, notes, status, total_cost,
+                ''', (room_id, date, normalized_start, normalized_end,
+                            contact_name, contact_phone, contact_email,
+                            num_people_int, language, notes, status, total_cost,
               reservation_id))
 
         conn.commit()
@@ -783,12 +893,12 @@ def update_reservation(reservation_id):
                 'id': reservation_id,
                 'room_id': room_id,
                 'date': date,
-                'start_time': start_time,
-                'end_time': end_time,
+                'start_time': normalized_start,
+                'end_time': normalized_end,
                 'contact_name': contact_name,
                 'contact_phone': contact_phone,
                 'contact_email': contact_email,
-                'num_people': num_people,
+                'num_people': num_people_int,
                 'language': language,
                 'notes': notes,
                 'status': status,
@@ -881,6 +991,11 @@ def move_reservation():
         if not all([reservation_id, room_id, start_time_str, date]):
             return jsonify({'error': 'Missing required fields'}), 400
 
+        try:
+            room_id = int(room_id)
+        except Exception:
+            return jsonify({'error': 'Invalid room id', 'fields': ['room_id']}), 400
+
         conn = get_db()
         try:
             # Get existing reservation
@@ -900,32 +1015,36 @@ def move_reservation():
             duration_minutes = int(
                 (old_end_dt - old_start_dt).total_seconds() / 60)
 
-            # Parse new start_time provided (HH:MM)
+            # Normalize new start/end using duration
             try:
                 new_start_dt = datetime.strptime(start_time_str, '%H:%M')
             except ValueError:
                 return jsonify({'error': 'Invalid start_time format. Use HH:MM.'}), 400
 
-            # Determine new end time by adding duration
             new_end_dt = new_start_dt + timedelta(minutes=duration_minutes)
 
-            # If new_end_dt crosses midnight, represent end_time in 24+ hour format (e.g., 25:00)
-            # Compare day values
             if new_end_dt.day != new_start_dt.day:
-                # compute hour beyond 24
-                end_hour = new_end_dt.hour + 24
-                new_end_time_str = f"{end_hour:02d}:{new_end_dt.minute:02d}"
+                new_end_time_str = f"{new_end_dt.hour + 24:02d}:{new_end_dt.minute:02d}"
             else:
                 new_end_time_str = new_end_dt.strftime('%H:%M')
 
             new_start_time_str = new_start_dt.strftime('%H:%M')
 
+            # Validate business hours and ordering
+            try:
+                normalize_time_range(date, new_start_time_str, new_end_time_str)
+            except ValueError as e:
+                return jsonify({'error': str(e), 'fields': ['start_time', 'end_time']}), 400
+
             # Conflict check: ensure no overlapping non-idle reservations
-            conflict = conn.execute('''
-                SELECT * FROM reservations
-                WHERE room_id = ? AND date = ? AND id != ? AND
-                NOT (end_time <= ? OR start_time >= ?)
-            ''', (room_id, date, reservation_id, new_start_time_str, new_end_time_str)).fetchone()
+            conflict = find_conflict(
+                conn,
+                room_id,
+                date,
+                new_start_time_str,
+                new_end_time_str,
+                exclude_id=reservation_id
+            )
 
             if conflict:
                 return jsonify({'error': 'The selected time slot is already occupied', 'conflict': True}), 409
@@ -969,7 +1088,7 @@ def today_stats():
 
     # Calculate occupancy rate
     total_rooms = conn.execute(
-        'SELECT COUNT(*) as count FROM rooms').fetchone()['count']
+        'SELECT COUNT(*) as count FROM rooms WHERE id > 0').fetchone()['count']
     total_hours = 14  # 11 AM to 1 AM = 14 hours
     total_room_hours = total_rooms * total_hours
 
@@ -1007,7 +1126,7 @@ def check_room_availability():
     conn = get_db()
     try:
         # Get all rooms
-        rooms = conn.execute('SELECT id FROM rooms').fetchall()
+        rooms = conn.execute('SELECT id FROM rooms WHERE id > 0').fetchall()
         room_ids = [room['id'] for room in rooms]
 
         # Get booked rooms for the date
@@ -1097,80 +1216,23 @@ def calendar_availability():
 @app.route('/api/price_estimate', methods=['POST'])
 def price_estimate():
     data = request.get_json()
-    print("Received price estimate request:", data)  # Debug log
+    try:
+        normalized_start, normalized_end, _, _ = normalize_time_range(
+            data['date'], data['start_time'], data['end_time'])
+    except Exception as e:
+        return jsonify({'error': str(e), 'fields': ['date', 'start_time', 'end_time']}), 400
 
     try:
-        # Parse the times using our safe parser
-        start_time, _ = parse_time_safe(data['start_time'])
-        end_time, is_extended = parse_time_safe(data['end_time'])
-
-        # Initialize cost components
-        room_rate = 0
-        period_charges = []
-
-        # Calculate time period charges
-        current_time = start_time
-        end_datetime = end_time
-
-        # Handle overnight reservations
-        if is_extended or end_datetime <= current_time or end_time.hour == 0:
-            end_datetime += timedelta(days=1)
-
-        while current_time < end_datetime:
-            hour = current_time.hour
-            if 11 <= hour < 18:  # 11 AM - 6 PM
-                rate = 35
-                period = "Early Bird (11 AM - 6 PM)"
-            elif 18 <= hour < 21:  # 6 PM - 9 PM
-                rate = 45
-                period = "Prime Time (6 PM - 9 PM)"
-            else:  # 9 PM - 1 AM
-                rate = 50
-                period = "Late Night (9 PM - 1 AM)"
-
-            # Calculate duration for this rate period
-            next_hour = (current_time + timedelta(hours=1)).replace(minute=0)
-            if hour >= 21:  # Late night period
-                # For late night, ensure we go up to 1 AM (next day)
-                next_hour = min(next_hour, (current_time +
-                                timedelta(days=1)).replace(hour=1, minute=0))
-            # Special handling for midnight (0:00)
-            elif hour == 0:  # Midnight
-                # Treat midnight as part of the late night period
-                next_hour = min(
-                    next_hour, (current_time).replace(hour=1, minute=0))
-
-            period_end = min(next_hour, end_datetime)
-            duration = (period_end - current_time).total_seconds() / 3600
-
-            period_cost = rate * duration
-            room_rate += period_cost
-
-            period_charges.append({
-                'time': period,
-                'rate': rate,
-                'duration': round(duration, 2),
-                'cost': round(period_cost, 2)
-            })
-
-            current_time = period_end
-
-        # Calculate tax and total
-        subtotal = room_rate
-        tax = subtotal * TAX_RATE
-        total = subtotal + tax
-
-        response_data = {
-            'room_rate': round(room_rate, 2),
-            'period_charges': period_charges,
-            'tax': round(tax, 2),
-            'total': round(total, 2)
-        }
-        print("Price estimate response:", response_data)  # Debug log
-        return jsonify(response_data)
+        pricing = compute_pricing(get_db(), data['room_id'], normalized_start, normalized_end)
     except Exception as e:
-        print("Price estimate error:", str(e))  # Debug log
         return jsonify({'error': str(e)}), 400
+
+    return jsonify({
+        'room_rate': pricing['subtotal'],
+        'period_charges': pricing['period_charges'],
+        'tax': pricing['tax'],
+        'total': pricing['total']
+    })
 
 
 @app.route('/api/room_suggestion', methods=['POST'])
@@ -1180,7 +1242,7 @@ def room_suggestion():
         num_people = int(data['num_people'])
 
         conn = get_db()
-        rooms = conn.execute('SELECT * FROM rooms').fetchall()
+        rooms = conn.execute('SELECT * FROM rooms WHERE id > 0 ORDER BY id').fetchall()
 
         # Define room capacity ranges
         small_rooms = [room for room in rooms if room['capacity'] <= 4]

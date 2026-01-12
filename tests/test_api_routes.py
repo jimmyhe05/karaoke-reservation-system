@@ -1,0 +1,104 @@
+import json
+import pytest
+from datetime import datetime
+from app import app, init_db
+
+
+@pytest.fixture(autouse=True)
+def app_context(tmp_path):
+    # Use a temp DB per test run
+    app.config['DATABASE'] = str(tmp_path / 'test.db')
+    app.config['TESTING'] = True
+    with app.app_context():
+        init_db()
+    yield
+
+
+@pytest.fixture
+def client():
+    return app.test_client()
+
+
+def test_create_reservation_success(client):
+    payload = {
+        "date": datetime.now().strftime('%Y-%m-%d'),
+        "start_time": "12:00",
+        "end_time": "13:00",
+        "num_people": 2,
+        "contact_name": "Tester",
+        "contact_phone": "555-0101",
+        "contact_email": "",
+        "room_id": 1,
+        "language": "en",
+    }
+    resp = client.post("/reservation", data=json.dumps(payload), content_type="application/json")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data.get("message") == "Reservation created successfully"
+
+
+def test_conflict_detection(client):
+    today = datetime.now().strftime('%Y-%m-%d')
+    base_payload = {
+        "date": today,
+        "start_time": "12:00",
+        "end_time": "13:00",
+        "num_people": 2,
+        "contact_name": "Tester",
+        "contact_phone": "555-0101",
+        "contact_email": "",
+        "room_id": 1,
+        "language": "en",
+    }
+    # create first
+    resp1 = client.post("/reservation", data=json.dumps(base_payload), content_type="application/json")
+    assert resp1.status_code == 200
+
+    # overlapping reservation should 409
+    payload2 = base_payload.copy()
+    payload2.update({"start_time": "12:30", "end_time": "13:30"})
+    resp2 = client.post("/reservation", data=json.dumps(payload2), content_type="application/json")
+    assert resp2.status_code == 409
+    data2 = resp2.get_json()
+    assert data2.get("error")
+
+
+def test_move_to_idle_and_back(client):
+    today = datetime.now().strftime('%Y-%m-%d')
+    payload = {
+        "date": today,
+        "start_time": "14:00",
+        "end_time": "15:00",
+        "num_people": 2,
+        "contact_name": "Tester",
+        "contact_phone": "555-0101",
+        "contact_email": "",
+        "room_id": 1,
+        "language": "en",
+    }
+    create_resp = client.post("/reservation", data=json.dumps(payload), content_type="application/json")
+    assert create_resp.status_code == 200
+
+    # fetch the reservation id via daily reservations API
+    daily = client.get(f"/api/daily_reservations?date={today}")
+    assert daily.status_code == 200
+    res_list = daily.get_json()["rooms"][0]["reservations"]
+    assert res_list
+    res_id = res_list[0]["id"]
+
+    # move to idle
+    idle_resp = client.post(f"/move_to_idle/{res_id}")
+    assert idle_resp.status_code == 200
+
+    # move from idle to room 2 at 15:00
+    move_payload = {
+        "reservation_id": res_id,
+        "room_id": 2,
+        "start_time": "15:00",
+        "date": today,
+    }
+    move_resp = client.post("/move_reservation", data=json.dumps(move_payload), content_type="application/json")
+    assert move_resp.status_code == 200
+    moved = move_resp.get_json()["reservation"]
+    assert moved["room_id"] == 2
+    assert moved["start_time"] == "15:00"

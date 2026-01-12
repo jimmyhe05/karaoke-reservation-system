@@ -1,3 +1,39 @@
-.venv/
-launch.json
+# OS junk
 .DS_Store
+
+# Envs
+.venv/
+.env
+.flaskenv
+.python-version
+
+# Editors/IDE
+.vscode/
+.idea/
+launch.json
+
+# Python cache/build
+__pycache__/
+.pytest_cache/
+*.pyc
+*.pyo
+*.egg-info/
+build/
+dist/
+
+# DB/runtime artifacts
+*.db
+*.db-shm
+*.db-wal
+karaoke.db
+karaoke.db-shm
+karaoke.db-wal
+server.pid
+server.log
+
+# Coverage/Reports
+.coverage
+htmlcov/
+
+# Notebooks
+.ipynb_checkpoints/

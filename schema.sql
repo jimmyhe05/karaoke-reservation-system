@@ -48,10 +48,6 @@ SELECT 'Room 3', 8, 35.00, 50.00
 WHERE NOT EXISTS (SELECT 1 FROM rooms WHERE id = 3);
 
 -- Create a special "idle" room with ID 0
-INSERT INTO rooms (id, name, capacity, hourly_rate, peak_hour_rate)
-SELECT 0, 'Idle', 999, 0.00, 0.00
-WHERE NOT EXISTS (SELECT 1 FROM rooms WHERE id = 0);
-
 -- Create table for idle reservations
 CREATE TABLE IF NOT EXISTS idle_reservations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -60,3 +56,8 @@ CREATE TABLE IF NOT EXISTS idle_reservations (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (reservation_id) REFERENCES reservations(id)
 );
+
+-- Helpful indexes for common queries
+CREATE INDEX IF NOT EXISTS idx_reservations_room_date ON reservations(room_id, date);
+CREATE INDEX IF NOT EXISTS idx_reservations_date_status ON reservations(date, status);
+CREATE INDEX IF NOT EXISTS idx_idle_reservations_date_res ON idle_reservations(date, reservation_id);
