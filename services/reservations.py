@@ -1,0 +1,347 @@
+from datetime import datetime
+from flask import current_app, request, session
+
+from services.db import get_db
+from services.blackout import is_blackout as is_blackout_service
+from services.validation import normalize_time_range, find_conflict
+from services.pricing import calculate_cost
+
+
+# ---- Serialization helpers ----
+
+
+def fetch_idle_set(conn, date=None):
+    if date:
+        rows = conn.execute(
+            'SELECT reservation_id FROM idle_reservations WHERE date = ?', (date,)
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            'SELECT reservation_id FROM idle_reservations'
+        ).fetchall()
+    return {row['reservation_id'] for row in rows}
+
+
+def serialize_reservation_row(row, in_idle=False):
+    if not row:
+        return None
+    return {
+        'id': row['id'],
+        'room_id': row['room_id'],
+        'date': row['date'],
+        'start_time': row['start_time'],
+        'end_time': row['end_time'],
+        'num_people': row['num_people'],
+        'contact_name': row['contact_name'],
+        'contact_phone': row['contact_phone'],
+        'contact_email': row['contact_email'],
+        'language': row['language'],
+        'notes': row['notes'],
+        'status': row['status'],
+        'total_cost': row['total_cost'],
+        'in_idle': bool(in_idle),
+    }
+
+
+# ---- Helpers ----
+
+
+def _blackout_windows():
+    windows = current_app.config.get('BLACKOUT_WINDOWS', [])
+    return windows if isinstance(windows, list) else []
+
+
+def is_blackout(date_str, start_time_str, end_time_str, room_id):
+    windows = _blackout_windows()
+    return is_blackout_service(windows, date_str, start_time_str, end_time_str, room_id)
+
+
+def validate_room_capacity(conn, room_id, num_people):
+    room = conn.execute('SELECT capacity FROM rooms WHERE id = ?', (room_id,)).fetchone()
+    if not room:
+        return False, f"Invalid room id {room_id}", room
+    if num_people <= 0 or num_people > room['capacity']:
+        return False, f"Number of people must be between 1 and {room['capacity']}", room
+    return True, None, room
+
+
+def log_action(action: str, **details):
+    metadata = {
+        "action": action,
+        "path": request.path,
+        "method": request.method,
+        "request_id": getattr(request, 'request_id', None) or request.headers.get('X-Request-ID'),
+        "role": session.get('role', 'guest'),
+    }
+    metadata.update(details)
+    current_app.logger.info(metadata)
+
+
+# ---- API payload helpers ----
+
+
+def create_reservation_api_payload(
+    data,
+    api_error,
+    api_ok,
+    *,
+    success_message: str = 'Reservation created',
+    status_code: int = 201,
+    include_success: bool = False,
+):
+    if not data:
+        return api_error('No data provided', 400, code='no_payload')
+
+    required_fields = ['date', 'start_time', 'end_time', 'num_people', 'contact_name', 'contact_phone', 'room_id']
+    missing = [f for f in required_fields if data.get(f) in (None, '', [])]
+    if missing:
+        return api_error('Missing required fields', 400, code='validation_error', fields=missing)
+
+    try:
+        room_id = int(data.get('room_id'))
+    except Exception:
+        return api_error('Invalid room id', 400, code='validation_error', fields=['room_id'])
+
+    try:
+        num_people = int(data.get('num_people'))
+    except Exception:
+        return api_error('Invalid number of people', 400, code='validation_error', fields=['num_people'])
+
+    try:
+        normalized_start, normalized_end, _, _ = normalize_time_range(
+            data.get('date'), data.get('start_time'), data.get('end_time')
+        )
+    except ValueError as e:
+        return api_error(str(e), 400, code='validation_error', fields=['date', 'start_time', 'end_time'])
+
+    conn = get_db()
+
+    ok, msg, room = validate_room_capacity(conn, room_id, num_people)
+    if not ok:
+        return api_error(msg, 400, code='validation_error', fields=['room_id', 'num_people'])
+
+    blocked, win = is_blackout(data.get('date'), normalized_start, normalized_end, room_id)
+    if blocked:
+        return api_error(
+            'Requested time is unavailable (maintenance/blackout)',
+            409,
+            code='blackout',
+            fields=['start_time', 'end_time', 'room_id'],
+            details={'blackout': win}
+        )
+
+    conflict = find_conflict(conn, room_id, data.get('date'), normalized_start, normalized_end)
+    if conflict:
+        return api_error(
+            'Room is not available for the selected time',
+            409,
+            code='conflict',
+            fields=['room_id', 'start_time', 'end_time'],
+            details={'conflict_with': conflict['id']}
+        )
+
+    total_cost = calculate_cost(conn, room_id, normalized_start, normalized_end, current_app.config['TAX_RATE'])
+
+    cursor = conn.execute(
+        '''INSERT INTO reservations
+           (date, start_time, end_time, num_people,
+            contact_name, contact_phone, contact_email, room_id,
+            total_cost, language)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+        (
+            data.get('date'),
+            normalized_start,
+            normalized_end,
+            num_people,
+            data.get('contact_name'),
+            data.get('contact_phone'),
+            data.get('contact_email', ''),
+            room_id,
+            total_cost,
+            data.get('language', 'en'),
+        )
+    )
+    conn.commit()
+
+    new_row = conn.execute('SELECT * FROM reservations WHERE id = ?', (cursor.lastrowid,)).fetchone()
+    log_action(
+        "reservation.create.api",
+        reservation_id=cursor.lastrowid,
+        room_id=room_id,
+        date=data.get('date'),
+        start_time=normalized_start,
+        end_time=normalized_end,
+        num_people=num_people,
+    )
+    payload = {'reservation': serialize_reservation_row(new_row)}
+    if include_success:
+        payload['success'] = True
+    return api_ok(payload, message=success_message, status=status_code)
+
+
+def update_reservation_api_payload(reservation_id, data, api_error, api_ok):
+    if not data:
+        return api_error('No data provided', 400, code='no_payload')
+
+    conn = get_db()
+    existing = conn.execute('SELECT * FROM reservations WHERE id = ?', (reservation_id,)).fetchone()
+    if not existing:
+        return api_error('Reservation not found', 404, code='not_found')
+
+    try:
+        room_id = int(data.get('room_id', existing['room_id']))
+    except Exception:
+        return api_error('Invalid room id', 400, code='validation_error', fields=['room_id'])
+
+    date = data.get('date', existing['date'])
+    start_time_raw = data.get('start_time', existing['start_time'])
+    end_time_raw = data.get('end_time', existing['end_time'])
+
+    try:
+        normalized_start, normalized_end, _, _ = normalize_time_range(date, start_time_raw, end_time_raw)
+    except ValueError as e:
+        return api_error(str(e), 400, code='validation_error', fields=['start_time', 'end_time', 'date'])
+
+    blocked, win = is_blackout(date, normalized_start, normalized_end, room_id)
+    if blocked:
+        return api_error(
+            'Requested time is unavailable (maintenance/blackout)',
+            409,
+            code='blackout',
+            fields=['start_time', 'end_time', 'room_id'],
+            details={'blackout': win}
+        )
+
+    conflict = find_conflict(
+        conn,
+        room_id,
+        date,
+        normalized_start,
+        normalized_end,
+        exclude_id=reservation_id
+    )
+    if conflict:
+        return api_error(
+            'The selected time slot is already occupied by another reservation',
+            409,
+            code='conflict',
+            fields=['start_time', 'end_time']
+        )
+
+    try:
+        num_people = int(data.get('num_people', existing['num_people']))
+    except Exception:
+        return api_error('Invalid number of people', 400, code='validation_error', fields=['num_people'])
+
+    ok, msg, room = validate_room_capacity(conn, room_id, num_people)
+    if not ok:
+        return api_error(msg, 400, code='validation_error', fields=['room_id', 'num_people'])
+
+    time_or_room_changed = (
+        normalized_start != existing['start_time'] or
+        normalized_end != existing['end_time'] or
+        room_id != existing['room_id']
+    )
+
+    if time_or_room_changed:
+        total_cost = calculate_cost(conn, room_id, normalized_start, normalized_end, current_app.config['TAX_RATE'])
+    else:
+        total_cost = existing['total_cost']
+
+    contact_name = data.get('contact_name', existing['contact_name'])
+    contact_phone = data.get('contact_phone', existing['contact_phone'])
+    contact_email = data.get('contact_email', existing['contact_email'])
+    language = data.get('language', existing['language'])
+    notes = data.get('notes', existing['notes'])
+    status = data.get('status', existing['status'])
+
+    conn.execute(
+        '''UPDATE reservations
+           SET room_id = ?, date = ?, start_time = ?, end_time = ?,
+               contact_name = ?, contact_phone = ?, contact_email = ?,
+               num_people = ?, language = ?, notes = ?, status = ?, total_cost = ?
+           WHERE id = ?''',
+        (
+            room_id,
+            date,
+            normalized_start,
+            normalized_end,
+            contact_name,
+            contact_phone,
+            contact_email,
+            num_people,
+            language,
+            notes,
+            status,
+            total_cost,
+            reservation_id
+        )
+    )
+    conn.commit()
+
+    updated = conn.execute('SELECT * FROM reservations WHERE id = ?', (reservation_id,)).fetchone()
+    log_action(
+        "reservation.update.api",
+        reservation_id=reservation_id,
+        room_id=room_id,
+        date=date,
+        start_time=normalized_start,
+        end_time=normalized_end,
+        num_people=num_people,
+        status=status,
+    )
+    return api_ok({'reservation': serialize_reservation_row(updated)}, message='Reservation updated')
+
+
+def delete_reservation_api_payload(reservation_id, api_error, api_ok):
+    conn = get_db()
+    reservation = conn.execute('SELECT * FROM reservations WHERE id = ?', (reservation_id,)).fetchone()
+    if not reservation:
+        return api_error('Reservation not found', 404, code='not_found')
+
+    conn.execute('DELETE FROM idle_reservations WHERE reservation_id = ?', (reservation_id,))
+    conn.execute('DELETE FROM reservations WHERE id = ?', (reservation_id,))
+    conn.commit()
+
+    log_action(
+        "reservation.delete.api",
+        reservation_id=reservation_id,
+        room_id=reservation['room_id'],
+        date=reservation['date'],
+    )
+    return api_ok({'id': reservation_id}, message='Reservation deleted', status=200)
+
+
+# ---- Misc helpers ----
+
+
+def get_today_stats(conn):
+    today = datetime.now().strftime('%Y-%m-%d')
+
+    total_reservations = conn.execute('''
+        SELECT COUNT(*) as count
+        FROM reservations
+        WHERE date = ?
+    ''', (today,)).fetchone()['count']
+
+    total_rooms = conn.execute(
+        'SELECT COUNT(*) as count FROM rooms WHERE id > 0').fetchone()['count']
+    total_hours = 14  # 11 AM to 1 AM = 14 hours
+    total_room_hours = total_rooms * total_hours
+
+    occupied_hours = conn.execute('''
+        SELECT SUM(
+            CAST(
+                (julianday(end_time) - julianday(start_time)) * 24
+                AS INTEGER)
+        ) as hours
+        FROM reservations
+        WHERE date = ?
+    ''', (today,)).fetchone()['hours'] or 0
+
+    occupancy_rate = round((occupied_hours / total_room_hours) * 100, 1)
+
+    return {
+        'total_reservations': total_reservations,
+        'occupancy_rate': occupancy_rate
+    }

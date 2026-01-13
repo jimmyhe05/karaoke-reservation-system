@@ -25,6 +25,10 @@
                 <span class="en">Karaoke Room Reservation System</span>
             </h1>
             <div class="header-actions">
+                <div class="admin-status badge bg-secondary me-2" id="admin-status">Not signed in</div>
+                <button id="login-btn" class="btn btn-sm btn-outline-light me-2">Login</button>
+                <button id="guest-btn" class="btn btn-sm btn-outline-light me-2">Guest view</button>
+                <button id="logout-btn" class="btn btn-sm btn-outline-light d-none">Logout</button>
                 <button id="language-toggle" class="btn btn-sm btn-outline-light">中文</button>
             </div>
         </header>
@@ -40,6 +44,33 @@
                 </div>
                 <div class="selected-date-display text-center mb-1"><span id="selected-date-label"></span></div>
                 <div id="calendar"></div>
+            </div>
+        </div>
+
+        <!-- Admin Login Modal -->
+        <div class="modal fade" id="loginModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Admin Login</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="loginForm">
+                            <div class="mb-3">
+                                <label for="login-username" class="form-label">Username</label>
+                                <input type="text" id="login-username" class="form-control" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="login-password" class="form-label">Password</label>
+                                <input type="password" id="login-password" class="form-control" required>
+                            </div>
+                            <div class="d-flex justify-content-end">
+                                <button type="submit" class="btn btn-primary">Login</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
             </div>
         </div>
 

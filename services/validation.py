@@ -2,32 +2,44 @@ from datetime import datetime
 
 
 def parse_time_safe(time_str):
-    """Safely parse time strings, including 24+ hour format (e.g., "25:00").
-    Returns (datetime, is_extended)
+    """Safely parse HH:MM strings, allowing 24-25 hour notation (e.g., "25:00").
+
+    Returns a tuple of (datetime, is_extended) where is_extended indicates the
+    time crossed midnight. Raises ValueError for malformed inputs or minutes
+    outside 0-59, and hours above 25.
     """
-    try:
-        return datetime.strptime(time_str, '%H:%M'), False
-    except ValueError:
-        if ':' in time_str:
-            hours, minutes = time_str.split(':')
-            if int(hours) >= 24:
-                normalized_hour = int(hours) % 24
-                normalized_time_str = f"{normalized_hour:02d}:{minutes}"
-                return datetime.strptime(normalized_time_str, '%H:%M'), True
-        raise
+    if ':' not in time_str:
+        raise ValueError("Invalid time format; expected HH:MM")
 
-
-def time_to_minutes(time_str):
-    """Convert HH:MM (optionally 24+ hour) to minutes since 00:00 of the start day."""
+    hours_part, minutes_part = time_str.split(':', 1)
     try:
-        base_parts = time_str.split(":")
-        hours = int(base_parts[0])
-        minutes = int(base_parts[1])
+        hours = int(hours_part)
+        minutes = int(minutes_part)
     except Exception:
         raise ValueError("Invalid time format; expected HH:MM")
 
-    # ensure format is valid via parse
-    _, _ = parse_time_safe(time_str)
+    if minutes < 0 or minutes > 59:
+        raise ValueError("Minutes must be between 00 and 59")
+    if hours < 0:
+        raise ValueError("Hours must be non-negative")
+    if hours > 25:
+        raise ValueError("Hours must not exceed 25:00 (1 AM next day)")
+
+    # Direct parse for same-day values
+    if hours < 24:
+        return datetime.strptime(f"{hours:02d}:{minutes:02d}", '%H:%M'), False
+
+    # Extended notation (24-25)
+    normalized_hour = hours % 24
+    normalized_time_str = f"{normalized_hour:02d}:{minutes:02d}"
+    return datetime.strptime(normalized_time_str, '%H:%M'), True
+
+
+def time_to_minutes(time_str):
+    """Convert HH:MM (optionally 24-25 hour) to minutes since 00:00 of the start day."""
+    dt, is_extended = parse_time_safe(time_str)
+    hours = int(time_str.split(":", 1)[0])
+    minutes = dt.minute
     return hours * 60 + minutes
 
 
@@ -74,7 +86,14 @@ def slots_overlap(start_a, end_a, start_b, end_b):
 
 
 def find_conflict(conn, room_id, date, start_time_str, end_time_str, exclude_id=None):
-    """Return the first conflicting reservation (excluding cancelled/idle/exclude_id) or None."""
+    """Return the first conflicting reservation (excluding cancelled/idle/exclude_id) or None.
+
+    - Considers half-open intervals [start, end) so back-to-back bookings are allowed.
+    - Supports overnight times using 24-25h notation.
+    - Ignores reservations placed into the idle area.
+    - Deterministic ordering by start_time, id.
+    """
+
     idle_ids = conn.execute(
         'SELECT reservation_id FROM idle_reservations WHERE date = ?', (date,)
     ).fetchall()
@@ -84,6 +103,7 @@ def find_conflict(conn, room_id, date, start_time_str, end_time_str, exclude_id=
         SELECT id, start_time, end_time, status
         FROM reservations
         WHERE room_id = ? AND date = ? AND status != 'cancelled'
+        ORDER BY start_time, id
     ''', (room_id, date)).fetchall()
 
     new_start = time_to_minutes(start_time_str)

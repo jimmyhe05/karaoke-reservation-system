@@ -77,6 +77,30 @@ function restackIdleCards() {
   });
 }
 
+// Simple global loading overlay helper
+let loadingCounter = 0;
+// Global auth flag
+window.isAdmin = false;
+function setLoading(isLoading, message = "Loading...") {
+  let overlay = document.getElementById("loading-overlay");
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.id = "loading-overlay";
+    overlay.innerHTML = `<div class="loading-spinner" role="status" aria-live="polite">${message}</div>`;
+    document.body.appendChild(overlay);
+  }
+
+  if (isLoading) {
+    loadingCounter += 1;
+    overlay.classList.add("visible");
+  } else {
+    loadingCounter = Math.max(0, loadingCounter - 1);
+    if (loadingCounter === 0) {
+      overlay.classList.remove("visible");
+    }
+  }
+}
+
 // Helper to read interval height from CSS variable
 function getIntervalHeight() {
   const v = getComputedStyle(document.documentElement).getPropertyValue("--interval-height");
@@ -383,6 +407,8 @@ function updateRoomTimelines(date) {
     ".room-container[data-room-id]"
   );
 
+  setLoading(true, "Updating rooms...");
+
   // Fetch all reservations for the selected date
   fetch(`/api/daily_reservations?date=${date}`)
     .then((response) => {
@@ -461,6 +487,9 @@ function updateRoomTimelines(date) {
     .catch((error) => {
       console.error("Error fetching reservations:", error);
       showToast("Error fetching reservations. Please try again.", "error");
+    })
+    .finally(() => {
+      setLoading(false);
     });
 }
 
@@ -518,6 +547,7 @@ function updateIdleArea() {
   console.log("Fetching idle reservations for date:", currentDate);
 
   // Fetch all reservations for the selected date
+  setLoading(true, "Updating idle area...");
   fetch(`/api/daily_reservations?date=${currentDate}`)
     .then((response) => {
       if (!response.ok) {
@@ -564,6 +594,9 @@ function updateIdleArea() {
     .catch((error) => {
       console.error("Error fetching idle reservations:", error);
       showToast("Error fetching idle reservations. Please try again.", "error");
+    })
+    .finally(() => {
+      setLoading(false);
     });
 }
 
@@ -984,6 +1017,7 @@ function updatePriceEstimate() {
 
 // Function to delete a reservation
 window.deleteReservation = function () {
+  if (!requireAdmin()) return;
   console.log(
     "Delete function called, currentReservationId:",
     currentReservationId,
@@ -1432,6 +1466,60 @@ function updateEndTimeMinimum(startTime24hr) {
 }
 
 document.addEventListener("DOMContentLoaded", function () {
+  // Admin auth UI wiring
+  const loginBtn = document.getElementById("login-btn");
+  const logoutBtn = document.getElementById("logout-btn");
+  const loginForm = document.getElementById("loginForm");
+  const loginModalEl = document.getElementById("loginModal");
+  const loginModal = loginModalEl ? new bootstrap.Modal(loginModalEl) : null;
+  const guestBtn = document.getElementById("guest-btn");
+
+  if (loginBtn && loginModal) {
+    loginBtn.addEventListener("click", () => loginModal.show());
+  }
+
+  if (loginForm) {
+    loginForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const username = document.getElementById("login-username").value;
+      const password = document.getElementById("login-password").value;
+      try {
+        await submitLogin(username, password);
+        setAuthUI(true);
+        showToast("Logged in as admin", "success");
+        loginModal && loginModal.hide();
+      } catch (err) {
+        showToast(err.message, "error");
+      }
+    });
+  }
+
+  if (logoutBtn) {
+    logoutBtn.addEventListener("click", async () => {
+      try {
+        await submitLogout();
+        setAuthUI(false);
+        showToast("Logged out", "info");
+      } catch (err) {
+        showToast(err.message, "error");
+      }
+    });
+  }
+
+  if (guestBtn) {
+    guestBtn.addEventListener("click", async () => {
+      try {
+        await submitLogout();
+      } catch (err) {
+        console.warn("logout (guest) failed", err);
+      }
+      setAuthUI(false);
+      showToast("Guest view: read-only schedule", "info");
+    });
+  }
+
+  fetchAuthStatus().then((me) => setAuthUI(!!me.is_admin));
+
   // Initialize drag and drop
   initDragAndDrop();
 
@@ -1447,6 +1535,7 @@ document.addEventListener("DOMContentLoaded", function () {
   if (resForm) {
     resForm.addEventListener("submit", function (evt) {
       evt.preventDefault();
+      if (!requireAdmin()) return;
       const formData = new FormData(resForm);
       const payload = Object.fromEntries(formData.entries());
       const isUpdate = !!payload.reservation_id;
@@ -1503,6 +1592,59 @@ window.deleteReservation = deleteReservation;
 window.updateCurrentTimeIndicator = updateCurrentTimeIndicator;
 window.initCurrentTimeIndicator = initCurrentTimeIndicator;
 window.showNewReservationModal = showNewReservationModal;
+
+// ---- Admin auth helpers ----
+async function fetchAuthStatus() {
+  try {
+    const res = await fetch("/api/me");
+    if (!res.ok) return { is_admin: false };
+    return res.json();
+  } catch (e) {
+    console.error("/api/me failed", e);
+    return { is_admin: false };
+  }
+}
+
+function setAuthUI(isAdmin) {
+  const statusEl = document.getElementById("admin-status");
+  const loginBtn = document.getElementById("login-btn");
+  const logoutBtn = document.getElementById("logout-btn");
+  window.isAdmin = !!isAdmin;
+  if (statusEl) {
+    statusEl.textContent = isAdmin ? "Admin signed in" : "Not signed in";
+    statusEl.classList.toggle("bg-success", isAdmin);
+    statusEl.classList.toggle("bg-secondary", !isAdmin);
+  }
+  if (loginBtn) loginBtn.classList.toggle("d-none", isAdmin);
+  if (logoutBtn) logoutBtn.classList.toggle("d-none", !isAdmin);
+  if (typeof window.refreshDragAuth === "function") {
+    window.refreshDragAuth(window.isAdmin);
+  }
+}
+
+function requireAdmin() {
+  if (!window.isAdmin) {
+    showToast && showToast("Admin login required", "error");
+    return false;
+  }
+  return true;
+}
+
+async function submitLogin(username, password) {
+  const res = await fetch("/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+  const body = await res.json();
+  if (!res.ok) throw new Error(body.error || "Login failed");
+  return body;
+}
+
+async function submitLogout() {
+  const res = await fetch("/logout", { method: "POST" });
+  if (!res.ok) throw new Error("Logout failed");
+}
 
 // Add event listener for the delete button
 document

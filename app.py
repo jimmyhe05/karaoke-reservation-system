@@ -1,24 +1,83 @@
 from werkzeug.routing import BaseConverter
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, abort
+from flask import Flask, render_template, request, redirect, url_for, jsonify, abort, session
 from datetime import datetime, timedelta
-import sqlite3
 from flask import g
 import json
 import click
+import logging
+import uuid
 from werkzeug.exceptions import HTTPException
 
 from config import Config
+from services.db import get_db, init_db, close_db
 from services.validation import (
     parse_time_safe,
-    time_to_minutes,
     normalize_time_range,
     find_conflict,
-    slots_overlap,
 )
+from services.validation import slots_overlap  # noqa: F401 (re-export for tests)
+from services.pricing import compute_pricing as compute_pricing_service, calculate_cost as calculate_cost_service
+from services.blackout import is_blackout as is_blackout_service
+from services.reservations import (
+    fetch_idle_set,
+    serialize_reservation_row,
+    validate_room_capacity,
+    is_blackout,
+    create_reservation_api_payload,
+    update_reservation_api_payload,
+    delete_reservation_api_payload,
+    log_action,
+    get_today_stats,
+)
+from routes.api import api_bp
+from services.http import api_error, api_ok, require_admin
 
 
 app = Flask(__name__)
 app.config.from_object(Config)
+app.register_blueprint(api_bp)
+
+
+def _json_formatter(record):
+    base = {
+        "time": datetime.utcnow().isoformat() + "Z",
+        "level": record.levelname,
+        "message": record.getMessage(),
+    }
+    # Attach request context if available
+    try:
+        base["path"] = request.path
+        base["method"] = request.method
+        base["request_id"] = getattr(g, 'request_id', None)
+    except RuntimeError:
+        pass
+    return json.dumps(base)
+
+
+class JsonLogFormatter(logging.Formatter):
+    def format(self, record):
+        return _json_formatter(record)
+
+
+def configure_logging(flask_app: Flask):
+    """Configure logging; default to JSON for API friendliness."""
+    level_name = flask_app.config.get("LOG_LEVEL", "INFO").upper()
+    level = getattr(logging, level_name, logging.INFO)
+    log_format = flask_app.config.get("LOG_FORMAT", "json")
+
+    if not flask_app.logger.handlers:
+        handler = logging.StreamHandler()
+        if log_format == "json":
+            formatter = JsonLogFormatter()
+        else:
+            formatter = logging.Formatter('[%(asctime)s] %(levelname)s %(message)s')
+        handler.setFormatter(formatter)
+        flask_app.logger.addHandler(handler)
+
+    flask_app.logger.setLevel(level)
+
+
+configure_logging(app)
 
 if not app.config['SECRET_KEY']:
     raise RuntimeError("SECRET_KEY must be set (see .env)")
@@ -38,24 +97,19 @@ ROOMS = [
 ]
 
 
-def get_db():
-    """Get a database connection."""
-    if 'db' not in g:
-        db_path = app.config.get('DATABASE', DATABASE)
-        g.db = sqlite3.connect(db_path)
-        g.db.row_factory = sqlite3.Row
-        # Enforce foreign keys and use WAL for better concurrency on SQLite
-        g.db.execute('PRAGMA foreign_keys = ON;')
-        g.db.execute('PRAGMA journal_mode = WAL;')
-    return g.db
+
+@app.before_request
+def attach_request_metadata():
+    """Attach a request id for traceable logs."""
+    request.request_id = request.headers.get('X-Request-ID', str(uuid.uuid4()))
+    g.request_id = request.request_id
 
 
-def init_db():
-    """Initialize the database schema and indexes (idempotent)."""
-    db = get_db()
-    with app.open_resource('schema.sql', mode='r') as f:
-        db.cursor().executescript(f.read())
-    db.commit()
+# ---- Auth helpers ----
+
+
+def is_admin_authenticated():
+    return session.get('role') == 'admin'
 
 
 def seed_sample_data(target_date=None):
@@ -104,7 +158,7 @@ def seed_sample_data(target_date=None):
     ]
 
     for s in samples:
-        total_cost = calculate_cost(s['start_time'], s['end_time'], s['room_id'])
+        total_cost = calculate_cost_service(get_db(), s['room_id'], s['start_time'], s['end_time'], TAX_RATE)
         conn.execute(
             '''INSERT INTO reservations
                (room_id, date, start_time, end_time, contact_name, contact_phone,
@@ -129,14 +183,9 @@ def seed_sample_data(target_date=None):
 
 
 @app.teardown_appcontext
-def close_db(error):
-    """Close the database connection."""
-    db = g.pop('db', None)
-    if db is not None:
-        db.close()
+def _close_db(error):
+    close_db(error)
 
-
-app.teardown_appcontext(close_db)
 
 # Initialize the database only if it doesn't exist
 with app.app_context():
@@ -159,7 +208,7 @@ def handle_exception(e):
         description = 'Internal server error'
 
     if is_api:
-        return jsonify({'error': description}), code
+        return api_error(description, status=code, code='exception')
     return e
 
 # ---- CLI Commands ----
@@ -201,74 +250,8 @@ def normalize_date_path(date_str):
         raise
 
 
-
-
 def compute_pricing(conn, room_id, start_time_str, end_time_str):
-    """
-    Compute subtotal, tax, and total for a reservation using room rates.
-
-    - Uses room.hourly_rate for 11:00-18:00
-    - Uses room.peak_hour_rate for 18:00-25:00 (6 PM - 1 AM)
-    - Supports minute-level durations and overnight via 24+ hour end times.
-    Returns dict with subtotal, tax, total, and period_charges breakdown.
-    """
-    room = conn.execute(
-        'SELECT hourly_rate, peak_hour_rate FROM rooms WHERE id = ?', (room_id,)
-    ).fetchone()
-    if not room:
-        raise ValueError('Invalid room id for pricing')
-
-    start_minutes = time_to_minutes(start_time_str)
-    end_minutes = time_to_minutes(end_time_str)
-
-    if end_minutes <= start_minutes:
-        raise ValueError('End time must be after start time for pricing')
-
-    # Boundaries in minutes from midnight
-    EARLY_START = 11 * 60      # 11:00
-    EARLY_END = 18 * 60        # 18:00
-    PRIME_END = 21 * 60        # 21:00
-    LATE_END = 25 * 60         # 01:00 next day (25:00)
-
-    current = start_minutes
-    subtotal = 0.0
-    period_charges = []
-
-    while current < end_minutes:
-        if current < EARLY_END:
-            rate = room['hourly_rate']
-            period_label = 'Early (11 AM - 6 PM)'
-            period_end = min(end_minutes, EARLY_END)
-        elif current < PRIME_END:
-            rate = room['peak_hour_rate']
-            period_label = 'Prime (6 PM - 9 PM)'
-            period_end = min(end_minutes, PRIME_END)
-        else:
-            rate = room['peak_hour_rate']
-            period_label = 'Late (9 PM - 1 AM)'
-            period_end = min(end_minutes, LATE_END)
-
-        duration_hours = (period_end - current) / 60.0
-        cost = rate * duration_hours
-        subtotal += cost
-        period_charges.append({
-            'time': period_label,
-            'rate': rate,
-            'duration': round(duration_hours, 2),
-            'cost': round(cost, 2)
-        })
-
-        current = period_end
-
-    tax = round(subtotal * TAX_RATE, 2)
-    total = round(subtotal + tax, 2)
-
-    return {
-        'subtotal': round(subtotal, 2),
-        'tax': tax,
-        'total': total,
-        'period_charges': period_charges
-    }
+    return compute_pricing_service(conn, room_id, start_time_str, end_time_str, TAX_RATE)
 
 
 def is_within_business_hours(start_time, end_time):
@@ -310,8 +293,7 @@ def is_room_available(room_id, start_time, end_time, exclude_id=None):
 
 
 def calculate_cost(start_time, end_time, room_id):
-    # Reuse unified pricing; return subtotal (pre-tax) to keep existing DB semantics.
-    pricing = compute_pricing(get_db(), room_id, start_time, end_time)
+    pricing = compute_pricing_service(get_db(), room_id, start_time, end_time, TAX_RATE)
     return pricing['subtotal']
 
 
@@ -535,38 +517,7 @@ def get_daily_reservations():
     return jsonify(result)
 
 
-def get_today_stats():
-    """Get today's reservation statistics."""
-    conn = get_db()
-    today = datetime.now().strftime('%Y-%m-%d')
-
-    total_reservations = conn.execute('''
-        SELECT COUNT(*) as count
-        FROM reservations
-        WHERE date = ?
-    ''', (today,)).fetchone()['count']
-
-    total_rooms = conn.execute(
-        'SELECT COUNT(*) as count FROM rooms WHERE id > 0').fetchone()['count']
-    total_hours = 14  # 11 AM to 1 AM = 14 hours
-    total_room_hours = total_rooms * total_hours
-
-    occupied_hours = conn.execute('''
-        SELECT SUM(
-            CAST(
-                (julianday(end_time) - julianday(start_time)) * 24
-                AS INTEGER)
-        ) as hours
-        FROM reservations
-        WHERE date = ?
-    ''', (today,)).fetchone()['hours'] or 0
-
-    occupancy_rate = round((occupied_hours / total_room_hours) * 100, 1)
-
-    return {
-        'total_reservations': total_reservations,
-        'occupancy_rate': occupancy_rate
-    }
+#! API routes moved to routes/api.py blueprint
 
 
 @app.route('/')
@@ -600,129 +551,24 @@ def reservation_by_date(date_str):
                            rooms=data['rooms'],
                            idle_reservations=data['idle_reservations'],
                            selected_date=iso_date,
-                           today_stats=get_today_stats())
+                           today_stats=get_today_stats(get_db()))
 
 
 @app.route('/reservation', methods=['GET', 'POST'])
 def reservation():
     if request.method == 'POST':
-        try:
-            # Get data from JSON request
-            data = request.get_json()
-            if not data:
-                return jsonify({'error': 'No data provided'}), 400
-
-            form_data = {
-                'date': data.get('date'),
-                'start_time': data.get('start_time'),
-                'end_time': data.get('end_time'),
-                'num_people': data.get('num_people'),
-                'contact_name': data.get('contact_name'),
-                'contact_phone': data.get('contact_phone'),
-                'contact_email': data.get('contact_email'),
-                'room_id': data.get('room_id'),
-                'language': data.get('language')
-            }
-
-            error_fields = []
-
-            # Validate required fields
-            if not form_data['contact_name']:
-                error_fields.append('contact_name')
-            if not form_data['contact_phone']:
-                error_fields.append('contact_phone')
-
-            # Validate numeric inputs early
-            try:
-                form_data['room_id'] = int(form_data['room_id'])
-            except Exception:
-                error_fields.append('room_id')
-
-            try:
-                form_data['num_people'] = int(form_data['num_people'])
-            except Exception:
-                error_fields.append('num_people')
-
-            if error_fields:
-                return jsonify({
-                    'error': 'Missing required fields',
-                    'fields': error_fields
-                }), 400
-
-            # Validate date and time
-            try:
-                normalized_start, normalized_end, start_minutes, end_minutes = normalize_time_range(
-                    form_data['date'], form_data['start_time'], form_data['end_time'])
-                form_data['start_time'] = normalized_start
-                form_data['end_time'] = normalized_end
-
-            except ValueError as e:
-                return jsonify({
-                    'error': str(e),
-                    'fields': ['date', 'start_time', 'end_time']
-                }), 400
-
-            conn = get_db()
-            try:
-                # Capacity check
-                room = conn.execute(
-                    'SELECT capacity FROM rooms WHERE id = ?', (form_data['room_id'],)
-                ).fetchone()
-                if not room:
-                    return jsonify({'error': 'Invalid room selected', 'fields': ['room_id']}), 400
-
-                if form_data['num_people'] <= 0 or form_data['num_people'] > room['capacity']:
-                    return jsonify({
-                        'error': f"Number of people must be between 1 and {room['capacity']}",
-                        'fields': ['num_people']
-                    }), 400
-
-                # Conflict check
-                conflict = find_conflict(
-                    conn,
-                    form_data['room_id'],
-                    form_data['date'],
-                    form_data['start_time'],
-                    form_data['end_time']
-                )
-
-                if conflict:
-                    return jsonify({
-                        'error': 'Room is not available for the selected time',
-                        'fields': ['room_id', 'start_time', 'end_time'],
-                        'conflict_with': conflict['id']
-                    }), 409
-
-                # Check if the room is available
-                # First, get all reservations that might conflict
-                # Calculate cost
-                total_cost = calculate_cost(
-                    form_data['start_time'], form_data['end_time'], form_data['room_id'])
-
-                # Create new reservation
-                conn.execute('''
-                    INSERT INTO reservations
-                    (date, start_time, end_time, num_people,
-                     contact_name, contact_phone, contact_email, room_id,
-                     total_cost, language)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (form_data['date'], form_data['start_time'],
-                      form_data['end_time'], form_data['num_people'],
-                      form_data['contact_name'], form_data['contact_phone'],
-                      form_data['contact_email'], form_data['room_id'],
-                      total_cost, form_data['language']))
-
-                conn.commit()
-                return jsonify({'message': 'Reservation created successfully'}), 200
-
-            except Exception as e:
-                conn.rollback()
-                return jsonify({'error': str(e)}), 500
-            finally:
-                conn.close()
-
-        except Exception as e:
-            return jsonify({'error': str(e)}), 400
+        if not is_admin_authenticated():
+            return api_error('Admin authentication required', 401, code='auth_required')
+        data = request.get_json() or {}
+        # Reuse shared validator/creator but keep legacy success message/status for compatibility
+        return create_reservation_api_payload(
+            data,
+            api_error,
+            api_ok,
+            success_message='Reservation created successfully',
+            status_code=200,
+            include_success=False,
+        )
 
     # GET request handling - redirect to improved reservation page
     return redirect(url_for('improved_reservation'))
@@ -757,6 +603,8 @@ def get_reservation(reservation_id):
 
 @app.route('/delete_reservation/<int:reservation_id>', methods=['POST'])
 def delete_reservation(reservation_id):
+    if not is_admin_authenticated():
+        return jsonify({'error': 'Admin authentication required'}), 401
     conn = get_db()
     try:
         # Check if reservation exists
@@ -775,6 +623,13 @@ def delete_reservation(reservation_id):
                      (reservation_id,))
         conn.commit()
 
+        log_action(
+            "reservation.delete",
+            reservation_id=reservation_id,
+            date=reservation['date'],
+            room_id=reservation['room_id'],
+        )
+
         return jsonify({'message': 'Reservation deleted successfully', 'id': reservation_id}), 200
     except Exception as e:
         conn.rollback()
@@ -785,9 +640,10 @@ def delete_reservation(reservation_id):
 
 @app.route('/update_reservation/<int:reservation_id>', methods=['POST'])
 def update_reservation(reservation_id):
+    if not is_admin_authenticated():
+        return jsonify({'error': 'Admin authentication required'}), 401
     data = request.get_json()
     conn = get_db()
-    print(f"Updating reservation {reservation_id} with data: {data}")
 
     try:
         # Get the existing reservation to fill in any missing fields
@@ -878,14 +734,36 @@ def update_reservation(reservation_id):
             UPDATE reservations
             SET room_id = ?, date = ?, start_time = ?, end_time = ?,
                 contact_name = ?, contact_phone = ?, contact_email = ?,
-                                num_people = ?, language = ?, notes = ?, status = ?, total_cost = ?
+                num_people = ?, language = ?, notes = ?, status = ?, total_cost = ?
             WHERE id = ?
-                ''', (room_id, date, normalized_start, normalized_end,
-                            contact_name, contact_phone, contact_email,
-                            num_people_int, language, notes, status, total_cost,
-              reservation_id))
+                ''', (
+                    room_id,
+                    date,
+                    normalized_start,
+                    normalized_end,
+                    contact_name,
+                    contact_phone,
+                    contact_email,
+                    num_people_int,
+                    language,
+                    notes,
+                    status,
+                    total_cost,
+                    reservation_id,
+                ))
 
         conn.commit()
+
+        log_action(
+            "reservation.update",
+            reservation_id=reservation_id,
+            room_id=room_id,
+            date=date,
+            start_time=normalized_start,
+            end_time=normalized_end,
+            num_people=num_people_int,
+            status=status,
+        )
         return jsonify({
             'success': True,
             'message': 'Reservation updated successfully',
@@ -915,6 +793,8 @@ def update_reservation(reservation_id):
 @app.route('/move_to_idle/<int:reservation_id>', methods=['POST'])
 def move_to_idle(reservation_id):
     """Move a reservation to the idle area."""
+    if not is_admin_authenticated():
+        return jsonify({'error': 'Admin authentication required'}), 401
     conn = get_db()
     try:
         # Check if the reservation exists
@@ -940,6 +820,12 @@ def move_to_idle(reservation_id):
         ''', (reservation_id, reservation['date']))
 
         conn.commit()
+        log_action(
+            "reservation.idle.move_in",
+            reservation_id=reservation_id,
+            date=reservation['date'],
+            room_id=reservation['room_id'],
+        )
         return jsonify({'success': True}), 200
     except Exception as e:
         conn.rollback()
@@ -951,6 +837,8 @@ def move_to_idle(reservation_id):
 @app.route('/remove_from_idle/<int:reservation_id>', methods=['POST'])
 def remove_from_idle(reservation_id):
     """Remove a reservation from the idle area."""
+    if not is_admin_authenticated():
+        return jsonify({'error': 'Admin authentication required'}), 401
     conn = get_db()
     try:
         # Check if the reservation exists in idle area
@@ -967,6 +855,11 @@ def remove_from_idle(reservation_id):
             (reservation_id,))
 
         conn.commit()
+        log_action(
+            "reservation.idle.remove",
+            reservation_id=reservation_id,
+            date=existing['date'],
+        )
         return jsonify({'success': True}), 200
     except Exception as e:
         conn.rollback()
@@ -978,6 +871,8 @@ def remove_from_idle(reservation_id):
 @app.route('/move_reservation', methods=['POST'])
 def move_reservation():
     """Move a reservation to a different room or time slot."""
+    if not is_admin_authenticated():
+        return jsonify({'error': 'Admin authentication required'}), 401
     try:
         data = request.get_json()
         if not data:
@@ -1036,6 +931,15 @@ def move_reservation():
             except ValueError as e:
                 return jsonify({'error': str(e), 'fields': ['start_time', 'end_time']}), 400
 
+            blocked, win = is_blackout(date, new_start_time_str, new_end_time_str, room_id)
+            if blocked:
+                return api_error(
+                    'Requested time is unavailable (maintenance/blackout)',
+                    409,
+                    code='blackout',
+                    details={'blackout': win}
+                )
+
             # Conflict check: ensure no overlapping non-idle reservations
             conflict = find_conflict(
                 conn,
@@ -1056,6 +960,15 @@ def move_reservation():
                 WHERE id = ?
             ''', (room_id, new_start_time_str, new_end_time_str, date, reservation_id))
             conn.commit()
+
+            log_action(
+                "reservation.move",
+                reservation_id=reservation_id,
+                room_id=room_id,
+                date=date,
+                start_time=new_start_time_str,
+                end_time=new_end_time_str,
+            )
 
             return jsonify({'message': 'Reservation moved successfully', 'reservation': {
                 'id': reservation_id,
@@ -1112,6 +1025,44 @@ def today_stats():
     })
 
 
+@app.route('/api/public_schedule')
+def public_schedule():
+    """Public, anonymized schedule: rooms with time slots only."""
+    date = request.args.get('date') or datetime.now().strftime('%Y-%m-%d')
+    conn = get_db()
+
+    rooms = conn.execute('SELECT id, name FROM rooms WHERE id > 0 ORDER BY id').fetchall()
+    reservations = conn.execute('''
+        SELECT id, room_id, start_time, end_time, status
+        FROM reservations
+        WHERE date = ? AND status != 'cancelled'
+        ORDER BY start_time
+    ''', (date,)).fetchall()
+    idle_ids = conn.execute(
+        'SELECT reservation_id FROM idle_reservations WHERE date = ?', (date,)
+    ).fetchall()
+    idle_set = {row['reservation_id'] for row in idle_ids}
+
+    schedule = []
+    for room in rooms:
+        room_slots = []
+        for res in reservations:
+            if res['room_id'] != room['id'] or res['id'] in idle_set:
+                continue
+            room_slots.append({
+                'start_time': res['start_time'],
+                'end_time': res['end_time'],
+                'status': res['status'],
+            })
+        schedule.append({
+            'room_id': room['id'],
+            'room_name': room['name'],
+            'reservations': room_slots
+        })
+
+    return jsonify({'date': date, 'rooms': schedule})
+
+
 @app.route('/api/room_availability')
 def check_room_availability():
     date = request.args.get('date')
@@ -1119,7 +1070,7 @@ def check_room_availability():
         return jsonify({'error': 'Date parameter is required'}), 400
 
     try:
-        date_obj = datetime.strptime(date, '%Y-%m-%d').date()
+        datetime.strptime(date, '%Y-%m-%d').date()
     except ValueError:
         return jsonify({'error': 'Invalid date format'}), 400
 
@@ -1321,6 +1272,40 @@ def alternative_times():
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 400
+
+
+# ---- Admin auth routes ----
+
+
+@app.route('/login', methods=['POST'])
+def admin_login():
+    data = request.get_json() or {}
+    username = data.get('username')
+    password = data.get('password')
+    role = None
+
+    if username == app.config['ADMIN_USERNAME'] and password == app.config['ADMIN_PASSWORD']:
+        role = 'admin'
+    elif username == app.config.get('STAFF_USERNAME') and password == app.config.get('STAFF_PASSWORD'):
+        role = 'staff'
+
+    if role:
+        session['role'] = role
+        return jsonify({'message': f'Logged in as {role}', 'role': role})
+
+    return api_error('Invalid credentials', 401, code='invalid_credentials')
+
+
+@app.route('/logout', methods=['POST'])
+def admin_logout():
+    session.clear()
+    return jsonify({'message': 'Logged out'})
+
+
+@app.route('/api/me')
+def current_user():
+    role = session.get('role', 'guest')
+    return jsonify({'is_admin': role == 'admin', 'role': role})
 
 
 if __name__ == '__main__':

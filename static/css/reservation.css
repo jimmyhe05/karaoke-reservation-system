@@ -71,6 +71,59 @@
 /* Main layout */
 :root {
     --interval-height: 20px; /* default height for each 30-minute interval */
+    --brand-bg: #f8fafc;
+    --brand-accent: #0d6efd;
+    --brand-accent-2: #198754;
+    --surface: #ffffff;
+    --card: #ffffff;
+    --muted: #6c757d;
+    --border: #e5e7eb;
+    --shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+}
+
+body {
+    background: #f5f7fb;
+    color: #212529;
+}
+
+.header {
+    background: #ffffff;
+    box-shadow: 0 6px 16px rgba(15, 23, 42, 0.06);
+    border-radius: 14px;
+    padding: 16px 20px;
+}
+
+.header h1 {
+    margin: 0;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    color: #1f2937;
+}
+
+.header .header-actions .btn {
+    border: 1px solid transparent;
+    color: #f8fafc;
+    background: var(--brand-accent);
+    box-shadow: 0 6px 14px rgba(37, 99, 235, 0.3);
+    transition: all 0.2s ease;
+}
+
+.header .header-actions .btn:hover {
+    background: linear-gradient(135deg, #1d4ed8, #3b82f6);
+    border-color: transparent;
+    color: #fff;
+    box-shadow: 0 10px 22px rgba(37, 99, 235, 0.4);
+}
+
+.header .header-actions .btn:active {
+    transform: translateY(1px);
+}
+
+.main-container {
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 16px;
+    box-shadow: 0 10px 25px rgba(15, 23, 42, 0.08);
 }
 
 .main-container {
@@ -85,12 +138,12 @@
 .calendar-container {
     flex: 0 0 480px;
     height: calc(100vh - 160px);
-    /* match the vertical space used by rooms */
-    background: white;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    padding: 15px;
+    background: var(--card);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+    padding: 16px;
     margin-bottom: 20px;
+    border: 1px solid #e5e7eb;
 }
 
 .rooms-container {
@@ -100,10 +153,11 @@
     overflow-x: auto;
     height: 100%;
     min-height: 600px;
-    background: white;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    background: var(--card);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
     padding: 15px;
+    border: 1px solid #e5e7eb;
 }
 
 /* Idle room should visually match other rooms */
@@ -114,9 +168,10 @@
     display: flex;
     flex-direction: column;
     height: 100%;
-    background: #fafafa;
-    border-radius: 8px;
-    border: 1px solid #e9ecef;
+    background: #ffffff;
+    border-radius: 12px;
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 6px 16px rgba(15, 23, 42, 0.06);
 }
 
 /* Make the inner FullCalendar fill the calendar container vertically to align with rooms */
@@ -132,16 +187,21 @@
     display: flex;
     flex-direction: column;
     height: 100%;
-    background: white;
+    background: #ffffff;
+    border-radius: 12px;
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 6px 16px rgba(15, 23, 42, 0.06);
 }
 
 .room-header {
-    background: #f8f9fa;
+    background: linear-gradient(135deg, #0d6efd, #5ea8ff);
     padding: 12px;
-    border: 1px solid #e9ecef;
+    border: 1px solid #0d6efd;
     border-bottom: none;
     text-align: center;
-    border-radius: 8px 8px 0 0;
+    border-radius: 12px 12px 0 0;
+    color: #ffffff;
+    letter-spacing: 0.2px;
 }
 
 .room-timeline-wrapper {
@@ -149,11 +209,11 @@
     flex: 1 1 0;
     position: relative;
     height: 100%;
-    border: 1px solid #e9ecef;
-    border-radius: 0 0 8px 8px;
-    background: white;
-    overflow: hidden; /* inner container will scroll */
-    min-height: 0; /* allow children to shrink and scroll within flex */
+    border: 1px solid #e5e7eb;
+    border-radius: 0 0 12px 12px;
+    background: #ffffff;
+    overflow: hidden;
+    min-height: 0;
 }
 
 /* New inner container that scrolls labels and timeline together */
@@ -196,7 +256,7 @@
     flex: 1 1 auto;
     /* timeline moves with inner scrolling; no independent scroll */
     overflow: visible;
-    background: white;
+    background: #ffffff;
     padding-left: 8px;
     padding-top: 10px; /* match time-labels padding so the first slot lines up */
     position: relative;
@@ -248,6 +308,34 @@
     color: #6c757d;
     font-size: 0.9rem;
     padding: 6px 0;
+}
+
+/* Loading overlay */
+#loading-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(255, 255, 255, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+}
+
+#loading-overlay.visible {
+    opacity: 1;
+    pointer-events: all;
+}
+
+.loading-spinner {
+    padding: 12px 16px;
+    background: #0d6efd;
+    color: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    font-weight: 600;
 }
 
 /* Time slots */

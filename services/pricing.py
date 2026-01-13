@@ -1,0 +1,73 @@
+from services.validation import time_to_minutes
+
+
+def calculate_cost(conn, room_id, start_time_str, end_time_str, tax_rate):
+    pricing = compute_pricing(conn, room_id, start_time_str, end_time_str, tax_rate)
+    return pricing['subtotal']
+
+
+def compute_pricing(conn, room_id, start_time_str, end_time_str, tax_rate):
+    """
+    Compute subtotal, tax, and total for a reservation using room rates.
+
+    - Uses room.hourly_rate for 11:00-18:00
+    - Uses room.peak_hour_rate for 18:00-25:00 (6 PM - 1 AM)
+    - Supports minute-level durations and overnight via 24+ hour end times.
+    Returns dict with subtotal, tax, total, and period_charges breakdown.
+    """
+    room = conn.execute(
+        'SELECT hourly_rate, peak_hour_rate FROM rooms WHERE id = ?', (room_id,)
+    ).fetchone()
+    if not room:
+        raise ValueError('Invalid room id for pricing')
+
+    start_minutes = time_to_minutes(start_time_str)
+    end_minutes = time_to_minutes(end_time_str)
+
+    if end_minutes <= start_minutes:
+        raise ValueError('End time must be after start time for pricing')
+
+    # Boundaries in minutes from midnight
+    EARLY_END = 18 * 60        # 18:00
+    PRIME_END = 21 * 60        # 21:00
+    LATE_END = 25 * 60         # 01:00 next day (25:00)
+
+    current = start_minutes
+    subtotal = 0.0
+    period_charges = []
+
+    while current < end_minutes:
+        if current < EARLY_END:
+            rate = room['hourly_rate']
+            period_label = 'Early (11 AM - 6 PM)'
+            period_end = min(end_minutes, EARLY_END)
+        elif current < PRIME_END:
+            rate = room['peak_hour_rate']
+            period_label = 'Prime (6 PM - 9 PM)'
+            period_end = min(end_minutes, PRIME_END)
+        else:
+            rate = room['peak_hour_rate']
+            period_label = 'Late (9 PM - 1 AM)'
+            period_end = min(end_minutes, LATE_END)
+
+        duration_hours = (period_end - current) / 60.0
+        cost = rate * duration_hours
+        subtotal += cost
+        period_charges.append({
+            'time': period_label,
+            'rate': rate,
+            'duration': round(duration_hours, 2),
+            'cost': round(cost, 2)
+        })
+
+        current = period_end
+
+    tax = round(subtotal * tax_rate, 2)
+    total = round(subtotal + tax, 2)
+
+    return {
+        'subtotal': round(subtotal, 2),
+        'tax': tax,
+        'total': total,
+        'period_charges': period_charges
+    }

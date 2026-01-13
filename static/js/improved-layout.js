@@ -58,6 +58,8 @@ function syncInnerScrolls() {
 function initDragAndDrop() {
   if (typeof Sortable === "undefined") return;
 
+  const dragDisabled = () => !window.isAdmin;
+
   // current interval height (reads CSS variable)
   let intervalHeight = parseInt(
     getComputedStyle(document.documentElement).getPropertyValue("--interval-height") || 20
@@ -80,10 +82,11 @@ function initDragAndDrop() {
   document.querySelectorAll(".room-timeline, .idle-drop-area").forEach((el) => {
     if (el._sortableInitialized) return;
 
-    Sortable.create(el, {
+    const sortable = Sortable.create(el, {
       group: "reservations",
       animation: 150,
       ghostClass: "reservation-ghost",
+      disabled: dragDisabled(),
       onChoose: function (evt) {
         // store original position for potential revert
         const item = evt.item;
@@ -287,8 +290,18 @@ function initDragAndDrop() {
         }
       },
     });
+    el._sortableInstance = sortable;
     el._sortableInitialized = true;
   });
+
+  // expose a helper to toggle drag based on auth
+  window.refreshDragAuth = function (isAdmin) {
+    document.querySelectorAll(".room-timeline, .idle-drop-area").forEach((el) => {
+      if (el._sortableInstance && typeof el._sortableInstance.option === "function") {
+        el._sortableInstance.option("disabled", !isAdmin);
+      }
+    });
+  };
 
   // Drop indicator helpers
   function showDropIndicator(timeline, top, height) {
@@ -367,6 +380,10 @@ function initTimeSlotClickHandlers() {
 }
 
 function handleTimeSlotClick(event) {
+  if (!window.isAdmin) {
+    if (window.showToast) window.showToast("Admin login required", "error");
+    return;
+  }
   const slot = event.target.closest(".time-slot");
   if (
     !slot ||

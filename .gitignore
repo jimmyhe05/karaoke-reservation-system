@@ -3,6 +3,8 @@
 
 # Envs
 .venv/
+venv/
+.envrc
 .env
 .flaskenv
 .python-version
@@ -30,6 +32,9 @@ karaoke.db-shm
 karaoke.db-wal
 server.pid
 server.log
+*.sqlite3
+*.pid
+*.log
 
 # Coverage/Reports
 .coverage

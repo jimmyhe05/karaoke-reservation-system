@@ -109,6 +109,20 @@ Here’s a preview of how the system works:
    python -m flask run
    ```
 
+## Docker
+
+Build and run with SQLite (data persisted in a volume):
+
+```bash
+docker build -t karaoke-reservation .
+docker run -p 5000:5000 -v karaoke_data:/data --env DATABASE=/data/karaoke.db karaoke-reservation
+```
+
+Environment variables you can override:
+- `DATABASE` (default `/data/karaoke.db` in the container)
+- `SECRET_KEY`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`
+- `LOG_LEVEL`, `LOG_FORMAT` (`json` or `text`)
+
 9. **Access the app in your browser**:
    Open http://127.0.0.1:5000.
 

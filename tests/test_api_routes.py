@@ -9,6 +9,8 @@ def app_context(tmp_path):
     # Use a temp DB per test run
     app.config['DATABASE'] = str(tmp_path / 'test.db')
     app.config['TESTING'] = True
+    app.config['ADMIN_USERNAME'] = 'admin'
+    app.config['ADMIN_PASSWORD'] = 'admin'
     with app.app_context():
         init_db()
     yield
@@ -19,7 +21,31 @@ def client():
     return app.test_client()
 
 
+def login_admin(client):
+    return client.post("/login", data=json.dumps({
+        "username": "admin",
+        "password": "admin"
+    }), content_type="application/json")
+
+
+def test_requires_auth_for_mutations(client):
+    payload = {
+        "date": datetime.now().strftime('%Y-%m-%d'),
+        "start_time": "12:00",
+        "end_time": "13:00",
+        "num_people": 2,
+        "contact_name": "Tester",
+        "contact_phone": "555-0101",
+        "contact_email": "",
+        "room_id": 1,
+        "language": "en",
+    }
+    resp = client.post("/reservation", data=json.dumps(payload), content_type="application/json")
+    assert resp.status_code == 401
+
+
 def test_create_reservation_success(client):
+    login_admin(client)
     payload = {
         "date": datetime.now().strftime('%Y-%m-%d'),
         "start_time": "12:00",
@@ -38,6 +64,7 @@ def test_create_reservation_success(client):
 
 
 def test_conflict_detection(client):
+    login_admin(client)
     today = datetime.now().strftime('%Y-%m-%d')
     base_payload = {
         "date": today,
@@ -64,6 +91,7 @@ def test_conflict_detection(client):
 
 
 def test_move_to_idle_and_back(client):
+    login_admin(client)
     today = datetime.now().strftime('%Y-%m-%d')
     payload = {
         "date": today,
@@ -102,3 +130,50 @@ def test_move_to_idle_and_back(client):
     moved = move_resp.get_json()["reservation"]
     assert moved["room_id"] == 2
     assert moved["start_time"] == "15:00"
+
+
+def test_public_schedule_is_anonymized(client):
+    login_admin(client)
+    today = datetime.now().strftime('%Y-%m-%d')
+    payload = {
+        "date": today,
+        "start_time": "12:00",
+        "end_time": "13:00",
+        "num_people": 2,
+        "contact_name": "Tester",
+        "contact_phone": "555-0101",
+        "contact_email": "",
+        "room_id": 1,
+        "language": "en",
+    }
+    client.post("/reservation", data=json.dumps(payload), content_type="application/json")
+
+    public_resp = client.get(f"/api/public_schedule?date={today}")
+    assert public_resp.status_code == 200
+    data = public_resp.get_json()
+    assert 'rooms' in data
+    first_room = data['rooms'][0]
+    assert 'reservations' in first_room
+    slot = first_room['reservations'][0]
+    assert 'start_time' in slot and 'end_time' in slot
+    assert 'status' in slot
+    # No contact details should be present
+    assert 'contact_name' not in slot
+
+
+def test_login_me_logout_flow(client):
+    # initially not admin
+    me = client.get('/api/me').get_json()
+    assert me['is_admin'] is False
+
+    resp = login_admin(client)
+    assert resp.status_code == 200
+
+    me2 = client.get('/api/me').get_json()
+    assert me2['is_admin'] is True
+
+    logout_resp = client.post('/logout')
+    assert logout_resp.status_code == 200
+
+    me3 = client.get('/api/me').get_json()
+    assert me3['is_admin'] is False

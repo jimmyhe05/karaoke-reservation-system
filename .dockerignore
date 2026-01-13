@@ -1,0 +1,12 @@
+.git
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.sqlite
+*.db
+.env
+pytest_cache
+tests
+migrations
+node_modules
