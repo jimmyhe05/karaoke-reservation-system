@@ -446,10 +446,7 @@ function updateRoomTimelines(date) {
             timeSlot.dataset.hour = hour.toString();
             timeSlot.dataset.minute = minute.toString();
 
-            const timeLabelElement = document.createElement("div");
-            timeLabelElement.className = "time-label";
-            timeLabelElement.textContent = timeLabel;
-            // time labels are rendered in the separate .time-labels column; do not append labels inside each slot
+            // We only display a single time column elsewhere; keep slots label-free
             roomTimeline.appendChild(timeSlot);
           }
         }

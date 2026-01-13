@@ -282,44 +282,62 @@ body {
   overflow: hidden;
 }
 
+/* Single shared vertical scrollbar for labels + timeline */
+.scroll-sync-inner {
+  display: flex;
+  height: 100%;
+  width: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
 .time-labels {
   width: 60px;
   background: var(--light-gray);
   border-right: 1px solid var(--medium-gray);
-  overflow: hidden;
+  overflow: visible;
   height: 100%;
-  position: sticky;
-  left: 0;
-  top: 0;
-  z-index: 5;
+  position: static;
+  left: auto;
+  top: auto;
+  z-index: 1;
+  padding-top: 10px;
 }
 
 .time-label {
-  height: 30px;
-  padding: 0 8px;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
+  height: 20px;
+  line-height: 20px;
+  padding: 0 12px 0 4px;
+  display: block;
+  text-align: right;
   font-size: 0.75rem;
   color: var(--dark-gray);
   border-bottom: 1px solid var(--medium-gray);
   white-space: nowrap;
+  box-sizing: border-box;
 }
 
 .room-timeline {
   flex: 1;
-  overflow-y: auto;
+  overflow: visible;
   position: relative;
   height: 100%;
   scroll-behavior: smooth;
+  padding-left: 8px;
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 /* ===== TIME SLOTS ===== */
 .time-slot {
-  height: 30px;
+  height: 20px;
+  line-height: 20px;
   border-bottom: 1px solid var(--medium-gray);
   position: relative;
   cursor: pointer;
+  box-sizing: border-box;
 }
 
 .time-slot:hover {

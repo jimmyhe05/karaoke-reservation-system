@@ -19,7 +19,6 @@ api_bp = Blueprint('api', __name__)
 
 
 @api_bp.route('/api/daily_reservations')
-@require_admin
 def api_daily_reservations():
     date = request.args.get('date', None)
     if not date:
@@ -41,8 +40,8 @@ def api_daily_reservations():
                     continue
                 room_res.append(serialize_reservation_row(res, res['id'] in idle_set))
             result['rooms'].append({
-                'room_id': room['id'],
-                'room_name': room['name'],
+                'id': room['id'],
+                'name': room['name'],
                 'reservations': room_res,
             })
         return api_ok(result)
@@ -180,32 +179,62 @@ def check_room_availability():
 
 @api_bp.route('/api/calendar_availability')
 def api_calendar_availability():
-    date = request.args.get('date')
-    if not date:
-        return api_error('Date parameter is required', 400, code='validation_error', fields=['date'])
+    # Support both legacy (?start,?end) and simple (?date) forms.
+    start_date = request.args.get('start')
+    end_date = request.args.get('end')
+    single_date = request.args.get('date')
+
+    if single_date and not (start_date or end_date):
+        start_date = end_date = single_date
+
+    if not start_date or not end_date:
+        return api_error('Start and end date parameters are required', 400, code='validation_error', fields=['start', 'end'])
+
+    try:
+        start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()
+        end_date_obj = datetime.strptime(end_date, '%Y-%m-%d').date()
+    except ValueError:
+        return api_error('Invalid date format', 400, code='validation_error', fields=['start', 'end'])
 
     conn = get_db()
-    rooms = conn.execute(
-        'SELECT id, name FROM rooms WHERE id > 0 ORDER BY id'
-    ).fetchall()
-    reservations = conn.execute(
-        'SELECT * FROM reservations WHERE date = ? ORDER BY room_id, start_time',
-        (date,)
-    ).fetchall()
 
-    by_room = {r['id']: {'name': r['name'], 'reservations': []} for r in rooms}
-    idle_set = fetch_idle_set(conn, date)
+    total_rooms = conn.execute(
+        'SELECT COUNT(*) as count FROM rooms WHERE id > 0'
+    ).fetchone()['count']
 
-    for res in reservations:
-        if res['id'] in idle_set:
-            continue
-        by_room[res['room_id']]['reservations'].append({
-            'start_time': res['start_time'],
-            'end_time': res['end_time'],
-            'status': res['status'],
+    date_range = []
+    current_date = start_date_obj
+    while current_date <= end_date_obj:
+        date_range.append(current_date.strftime('%Y-%m-%d'))
+        current_date += timedelta(days=1)
+
+    result = []
+    for date in date_range:
+        reservation_count = conn.execute('''
+            SELECT COUNT(*) as count
+            FROM reservations
+            WHERE date = ? AND status != 'cancelled'
+        ''', (date,)).fetchone()['count']
+
+        booked_rooms = conn.execute('''
+            SELECT COUNT(DISTINCT room_id) as count
+            FROM reservations
+            WHERE date = ? AND status != 'cancelled'
+        ''', (date,)).fetchone()['count']
+
+        available_rooms = total_rooms - booked_rooms
+        occupancy_percentage = (booked_rooms / total_rooms * 100) if total_rooms > 0 else 0
+
+        result.append({
+            'date': date,
+            'reservationCount': reservation_count,
+            'availableRooms': available_rooms,
+            'totalRooms': total_rooms,
+            'occupancyPercentage': round(occupancy_percentage, 1),
         })
 
-    return api_ok({'date': date, 'rooms': by_room})
+    # Return list directly (legacy behavior expected by calendar JS)
+    return jsonify(result), 200
 
 
 @api_bp.route('/api/price_estimate', methods=['POST'])
