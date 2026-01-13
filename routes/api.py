@@ -32,13 +32,26 @@ def api_daily_reservations():
         ).fetchall()
         idle_set = fetch_idle_set(conn, date)
 
-        result = {'date': date, 'rooms': []}
+        # Build idle reservations payload
+        idle_rows = []
+        if idle_set:
+            placeholders = ','.join(['?'] * len(idle_set))
+            idle_rows = conn.execute(
+                f'SELECT * FROM reservations WHERE id IN ({placeholders}) ORDER BY start_time',
+                list(idle_set),
+            ).fetchall()
+        idle_reservations = [serialize_reservation_row(r, True) for r in idle_rows]
+
+        result = {'date': date, 'rooms': [], 'idle_reservations': idle_reservations}
         for room in rooms:
             room_res = []
             for res in reservations:
+                # Skip any reservation that has been moved to idle
+                if res['id'] in idle_set:
+                    continue
                 if res['room_id'] != room['id']:
                     continue
-                room_res.append(serialize_reservation_row(res, res['id'] in idle_set))
+                room_res.append(serialize_reservation_row(res, False))
             result['rooms'].append({
                 'id': room['id'],
                 'name': room['name'],
