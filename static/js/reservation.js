@@ -480,6 +480,9 @@ function updateRoomTimelines(date) {
 
       // Update the current time indicator after creating new time slots
       setTimeout(updateCurrentTimeIndicator, 100);
+
+      // Also refresh the idle area using the same payload to keep idle cards visible
+      updateIdleArea(data);
     })
     .catch((error) => {
       console.error("Error fetching reservations:", error);
@@ -516,7 +519,7 @@ function timeSlotClickHandler(e) {
 }
 
 // Function to update the idle area
-function updateIdleArea() {
+function updateIdleArea(preloadedData = null) {
   const idleArea = document.getElementById("idle-area");
   if (!idleArea) {
     console.error("Idle area not found");
@@ -543,6 +546,48 @@ function updateIdleArea() {
 
   console.log("Fetching idle reservations for date:", currentDate);
 
+  const populate = (data) => {
+    console.log("Received data for idle area:", data);
+
+    // Check if there are idle reservations in the response
+    if (data.idle_reservations && data.idle_reservations.length > 0) {
+      console.log(`Found ${data.idle_reservations.length} idle reservations`);
+
+      // For each idle reservation, create a reservation card
+      data.idle_reservations.forEach((reservation) => {
+        console.log("Creating idle card for reservation:", reservation);
+
+        // Convert the reservation data to the format expected by createIdleReservationCard
+        const formattedReservation = {
+          id: reservation.id,
+          name: reservation.contact_name,
+          people: reservation.num_people,
+          phone: "", // These fields might not be available in the API response
+          notes: reservation.notes || "",
+          language: reservation.language || "en",
+          room_id: reservation.room_id,
+          start_time: reservation.start_time,
+          end_time: reservation.end_time,
+        };
+        createIdleReservationCard(formattedReservation, idleArea);
+      });
+
+      // Stack the cards
+      restackIdleCards();
+
+      // Re-initialize drag and drop
+      initDragAndDrop();
+    } else {
+      console.log("No idle reservations found");
+      renderEmptyState();
+    }
+  };
+
+  if (preloadedData) {
+    populate(preloadedData);
+    return;
+  }
+
   // Fetch all reservations for the selected date
   setLoading(true, "Updating idle area...");
   fetch(`/api/daily_reservations?date=${currentDate}`)
@@ -552,42 +597,7 @@ function updateIdleArea() {
       }
       return response.json();
     })
-    .then((data) => {
-      console.log("Received data for idle area:", data);
-
-      // Check if there are idle reservations in the response
-      if (data.idle_reservations && data.idle_reservations.length > 0) {
-        console.log(`Found ${data.idle_reservations.length} idle reservations`);
-
-        // For each idle reservation, create a reservation card
-        data.idle_reservations.forEach((reservation) => {
-          console.log("Creating idle card for reservation:", reservation);
-
-          // Convert the reservation data to the format expected by createIdleReservationCard
-          const formattedReservation = {
-            id: reservation.id,
-            name: reservation.contact_name,
-            people: reservation.num_people,
-            phone: "", // These fields might not be available in the API response
-            notes: reservation.notes || "",
-            language: reservation.language || "en",
-            room_id: reservation.room_id,
-            start_time: reservation.start_time,
-            end_time: reservation.end_time,
-          };
-          createIdleReservationCard(formattedReservation, idleArea);
-        });
-
-        // Stack the cards
-        restackIdleCards();
-
-        // Re-initialize drag and drop
-        initDragAndDrop();
-      } else {
-        console.log("No idle reservations found");
-        renderEmptyState();
-      }
-    })
+    .then(populate)
     .catch((error) => {
       console.error("Error fetching idle reservations:", error);
       showToast("Error fetching idle reservations. Please try again.", "error");
@@ -1525,7 +1535,9 @@ document.addEventListener("DOMContentLoaded", function () {
 
   // Initialize the page
   initTimeSlots();
-  updateRoomTimelines(new Date().toISOString().split("T")[0]);
+  const today = new Date().toISOString().split("T")[0];
+  updateRoomTimelines(today);
+  updateIdleArea();
 
   // AJAX form submission to immediately show new reservation
   const resForm = document.getElementById("reservationForm");

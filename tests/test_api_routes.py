@@ -132,6 +132,84 @@ def test_move_to_idle_and_back(client):
     assert moved["start_time"] == "15:00"
 
 
+def test_idle_persists_and_excludes_from_rooms(client):
+    login_admin(client)
+    today = datetime.now().strftime('%Y-%m-%d')
+    payload = {
+        "date": today,
+        "start_time": "13:00",
+        "end_time": "14:00",
+        "num_people": 2,
+        "contact_name": "IdleTester",
+        "contact_phone": "555-0102",
+        "contact_email": "",
+        "room_id": 1,
+        "language": "en",
+    }
+
+    # Create reservation and confirm it appears in room timeline
+    create_resp = client.post("/reservation", data=json.dumps(payload), content_type="application/json")
+    assert create_resp.status_code == 200
+
+    daily_before = client.get(f"/api/daily_reservations?date={today}").get_json()
+    res_list_before = daily_before["rooms"][0]["reservations"]
+    assert len(res_list_before) == 1
+    res_id = res_list_before[0]["id"]
+
+    # Move to idle and verify it no longer appears in rooms but does in idle_reservations
+    idle_resp = client.post(f"/move_to_idle/{res_id}")
+    assert idle_resp.status_code == 200
+
+    daily_after = client.get(f"/api/daily_reservations?date={today}").get_json()
+    assert daily_after["rooms"][0]["reservations"] == []
+    idle_list = daily_after.get("idle_reservations", [])
+    assert len(idle_list) == 1
+    assert idle_list[0]["id"] == res_id
+
+
+def test_move_from_idle_clears_idle_and_places_in_room(client):
+    login_admin(client)
+    today = datetime.now().strftime('%Y-%m-%d')
+    payload = {
+        "date": today,
+        "start_time": "11:30",
+        "end_time": "12:30",
+        "num_people": 3,
+        "contact_name": "Mover",
+        "contact_phone": "555-0103",
+        "contact_email": "",
+        "room_id": 1,
+        "language": "en",
+    }
+
+    create_resp = client.post("/reservation", data=json.dumps(payload), content_type="application/json")
+    assert create_resp.status_code == 200
+
+    res_id = client.get(f"/api/daily_reservations?date={today}").get_json()["rooms"][0]["reservations"][0]["id"]
+
+    # Move to idle
+    assert client.post(f"/move_to_idle/{res_id}").status_code == 200
+
+    # Move from idle to room 2 at 12:30
+    move_payload = {
+        "reservation_id": res_id,
+        "room_id": 2,
+        "start_time": "12:30",
+        "date": today,
+    }
+    move_resp = client.post("/move_reservation", data=json.dumps(move_payload), content_type="application/json")
+    assert move_resp.status_code == 200
+
+    # After move: idle list empty, room 1 empty, room 2 has the reservation at 12:30
+    daily_after = client.get(f"/api/daily_reservations?date={today}").get_json()
+    assert daily_after.get("idle_reservations", []) == []
+    assert daily_after["rooms"][0]["reservations"] == []  # room 1
+    room2_res = daily_after["rooms"][1]["reservations"]
+    assert len(room2_res) == 1
+    assert room2_res[0]["id"] == res_id
+    assert room2_res[0]["start_time"] == "12:30"
+
+
 def test_public_schedule_is_anonymized(client):
     login_admin(client)
     today = datetime.now().strftime('%Y-%m-%d')

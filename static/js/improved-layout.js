@@ -119,6 +119,10 @@ function initDragAndDrop() {
 
         // update snap preview height using the dragged item's duration
         if (snapPreview && evt.dragged && evt.dragged.dataset) {
+          // move preview into the active timeline so it doesn't linger in the original room
+          if (snapPreview.parentNode !== timeline) {
+            timeline.appendChild(snapPreview);
+          }
           const durationHours = parseFloat(evt.dragged.dataset.duration) || 1;
           const height = Math.round(durationHours * 2) * intervalHeight; // hours->30-min intervals
           snapPreview.style.top = top + "px";
@@ -186,7 +190,7 @@ function initDragAndDrop() {
           const roomId = timeline.dataset.roomId;
           const rect = timeline.getBoundingClientRect();
           const numIntervals = getNumIntervals(timeline) || 28;
-          const slotHeight = timeline.clientHeight / numIntervals;
+          const slotHeight = intervalHeight; // align with visual slot height
           const offsetY = (evt.clientY || rect.top + 10) - rect.top;
           let slotIndex = Math.floor(offsetY / slotHeight);
           if (slotIndex < 0) slotIndex = 0;
@@ -243,7 +247,7 @@ function initDragAndDrop() {
           const roomId = timeline.dataset.roomId;
           const rect = timeline.getBoundingClientRect();
           const numIntervals = getNumIntervals(timeline) || 28;
-          const slotHeight = timeline.clientHeight / numIntervals;
+          const slotHeight = intervalHeight; // align with visual slot height
           const offsetY = (evt.clientY || rect.top + 10) - rect.top;
           let slotIndex = Math.floor(offsetY / slotHeight);
           if (slotIndex < 0) slotIndex = 0;

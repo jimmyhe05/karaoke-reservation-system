@@ -811,7 +811,8 @@ def move_to_idle(reservation_id):
             (reservation_id,)).fetchone()
 
         if existing:
-            return jsonify({'message': 'Reservation already in idle area'}), 200
+            # Already idle — treat as success to avoid client-side failure toasts
+            return jsonify({'success': True, 'message': 'Reservation already in idle area'}), 200
 
         # Add to idle_reservations
         conn.execute('''
@@ -887,6 +888,11 @@ def move_reservation():
             return jsonify({'error': 'Missing required fields'}), 400
 
         try:
+            reservation_id_int = int(reservation_id)
+        except Exception:
+            return jsonify({'error': 'Invalid reservation id', 'fields': ['reservation_id']}), 400
+
+        try:
             room_id = int(room_id)
         except Exception:
             return jsonify({'error': 'Invalid room id', 'fields': ['room_id']}), 400
@@ -947,7 +953,7 @@ def move_reservation():
                 date,
                 new_start_time_str,
                 new_end_time_str,
-                exclude_id=reservation_id
+                exclude_id=reservation_id_int
             )
 
             if conflict:
@@ -958,12 +964,18 @@ def move_reservation():
                 UPDATE reservations
                 SET room_id = ?, start_time = ?, end_time = ?, date = ?
                 WHERE id = ?
-            ''', (room_id, new_start_time_str, new_end_time_str, date, reservation_id))
+            ''', (room_id, new_start_time_str, new_end_time_str, date, reservation_id_int))
+
+            # If this reservation was marked idle, remove the idle flag so it returns to timelines
+            conn.execute(
+                'DELETE FROM idle_reservations WHERE reservation_id = ? AND date = ?',
+                (reservation_id, date)
+            )
             conn.commit()
 
             log_action(
                 "reservation.move",
-                reservation_id=reservation_id,
+                reservation_id=reservation_id_int,
                 room_id=room_id,
                 date=date,
                 start_time=new_start_time_str,
@@ -971,7 +983,7 @@ def move_reservation():
             )
 
             return jsonify({'message': 'Reservation moved successfully', 'reservation': {
-                'id': reservation_id,
+                'id': reservation_id_int,
                 'room_id': room_id,
                 'start_time': new_start_time_str,
                 'end_time': new_end_time_str,
