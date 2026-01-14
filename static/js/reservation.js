@@ -1043,7 +1043,7 @@ window.deleteReservation = function () {
 
   // Use either the form ID, local variable, or global variable
   const reservationIdToDelete =
-    formReservationId || currentReservationId || window.currentReservationId;
+    formReservationId || window.currentReservationId;
 
   console.log("Attempting to delete reservation ID:", reservationIdToDelete);
 
@@ -1096,8 +1096,13 @@ window.deleteReservation = function () {
         // Close the modal
         closeReservationModal();
 
-        // Refresh the page to ensure all data is updated correctly
-        window.location.href = `/?date=${dateToKeep}`;
+        // Refresh data without full page reload
+        if (typeof window.updateRoomTimelines === "function" && dateToKeep) {
+          updateRoomTimelines(dateToKeep);
+        }
+        if (typeof window.updateIdleArea === "function") {
+          updateIdleArea();
+        }
 
         // Show success message
         window.showToast("Reservation deleted successfully!");
@@ -1240,6 +1245,10 @@ function initCurrentTimeIndicator() {
 function showNewReservationModal(hour, minute, roomId, selectedDate) {
   // Clear any existing reservation ID
   window.currentReservationId = null;
+
+  // Clear hidden reservation id to avoid accidental updates
+  const resIdInput = document.getElementById("reservation_id");
+  if (resIdInput) resIdInput.value = "";
 
   // Reset the form
   document.getElementById("reservationForm").reset();
@@ -1563,51 +1572,7 @@ document.addEventListener("DOMContentLoaded", function () {
   updateRoomTimelines(today);
   updateIdleArea();
 
-  // AJAX form submission to immediately show new reservation
-  const resForm = document.getElementById("reservationForm");
-  if (resForm) {
-    resForm.addEventListener("submit", function (evt) {
-      evt.preventDefault();
-      if (!requireAdmin()) return;
-      const formData = new FormData(resForm);
-      const payload = Object.fromEntries(formData.entries());
-      const isUpdate = !!payload.reservation_id;
-      fetch(
-        isUpdate
-          ? `/update_reservation/${payload.reservation_id}`
-          : "/reservation",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        }
-      )
-        .then((r) =>
-          r.json().then((j) => ({ ok: r.ok, status: r.status, body: j }))
-        )
-        .then((result) => {
-          if (!result.ok) {
-            showToast(result.body.error || "Failed to save", "error");
-            return;
-          }
-          showToast(
-            isUpdate ? "Reservation updated" : "Reservation created",
-            "success"
-          );
-          const activeDate = window.currentSelectedDate || payload.date;
-          updateRoomTimelines(activeDate);
-          updateIdleArea && updateIdleArea();
-          // close modal
-          const modalEl = document.getElementById("reservationModal");
-          const modal = bootstrap.Modal.getInstance(modalEl);
-          if (modal) modal.hide();
-        })
-        .catch((err) => {
-          console.error("Save error", err);
-          showToast("Error saving reservation", "error");
-        });
-    });
-  }
+  // Form submission is handled in form-validation.js (single handler to avoid double submits)
 });
 
 // Date selection helpers now handled in enhanced-calendar.js

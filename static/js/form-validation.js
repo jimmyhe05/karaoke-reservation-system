@@ -220,11 +220,13 @@ function handleReservationSubmit(event) {
   const formData = new FormData(form);
   const jsonData = {};
   formData.forEach((value, key) => {
-    // Use the hidden date_value for the date
-    if (key === "date_display") return;
-    if (key === "date_value") key = "date";
     jsonData[key] = value;
   });
+
+  // Drop empty reservation_id so we don't hit update endpoint when creating
+  if (!jsonData.reservation_id) {
+    delete jsonData.reservation_id;
+  }
 
   // Determine API endpoint (create or update)
   const reservationId = jsonData["reservation_id"];
@@ -272,8 +274,9 @@ function handleReservationSubmit(event) {
       if (modal) modal.hide();
 
       // Refresh the view (timelines and idle area)
-      const date = document.getElementById("date_value").value;
-      if (typeof window.updateRoomTimelines === "function")
+      const dateInput = document.getElementById("date");
+      const date = (dateInput && dateInput.value) || jsonData.date;
+      if (date && typeof window.updateRoomTimelines === "function")
         window.updateRoomTimelines(date);
       if (typeof window.updateIdleArea === "function") window.updateIdleArea();
     })
