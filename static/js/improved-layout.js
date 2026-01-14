@@ -381,6 +381,10 @@ function initTimeSlotClickHandlers() {
   // Remove previous listener if any to prevent duplicates
   contentArea.removeEventListener("click", handleTimeSlotClick);
   contentArea.addEventListener("click", handleTimeSlotClick);
+
+  // Reservation card click to edit (admin only)
+  contentArea.removeEventListener("click", handleReservationCardClick);
+  contentArea.addEventListener("click", handleReservationCardClick);
 }
 
 function handleTimeSlotClick(event) {
@@ -404,6 +408,17 @@ function handleTimeSlotClick(event) {
     new Date().toISOString().split("T")[0];
   if (!roomId || isNaN(hour)) return;
   showNewReservationModal(hour, minute, roomId, selectedDate);
+}
+
+function handleReservationCardClick(event) {
+  if (!window.isAdmin) return;
+  const card = event.target.closest(".reservation-card");
+  if (!card) return;
+  event.stopPropagation();
+  const reservationId = card.dataset.reservationId;
+  if (reservationId) {
+    openModalForEditing(reservationId);
+  }
 }
 
 // Function to initialize language toggle

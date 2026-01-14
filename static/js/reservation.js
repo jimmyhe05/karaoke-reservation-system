@@ -509,11 +509,16 @@ function timeSlotClickHandler(e) {
   const timeSlot = e.target.closest(".time-slot");
   if (timeSlot && !timeSlot.classList.contains("occupied")) {
     const hour = parseInt(timeSlot.dataset.hour);
+    const minute = parseInt(timeSlot.dataset.minute) || 0;
     const roomId = this.dataset.roomId;
-    const selectedDate = window.calendarEl.selectedDates[0];
-    if (selectedDate) {
-      console.log("Time slot clicked:", { hour, roomId, selectedDate });
-      showNewReservationModal(hour, roomId, selectedDate);
+    const selectedDate =
+      window.calendarSelectedDate ||
+      window.calendarEl?.selectedDates?.[0] ||
+      document.getElementById("date")?.value ||
+      new Date();
+    if (roomId && !isNaN(hour)) {
+      console.log("Time slot clicked:", { hour, minute, roomId, selectedDate });
+      showNewReservationModal(hour, minute, roomId, selectedDate);
     }
   }
 }
@@ -1297,9 +1302,15 @@ function openModalForEditing(reservationId) {
       // Populate the modal with the reservation data
       document.getElementById("reservation_id").value = data.id;
       document.getElementById("date").value = data.date;
-      // Initialize time pickers with fetched times
+      // Initialize time pickers with fetched times (pass as explicit start/end strings)
       if (typeof initializeTimePickers === "function") {
-        initializeTimePickers(null, data.start_time, data.end_time);
+        initializeTimePickers(
+          null, // initialHour not needed when using start/end strings
+          2,
+          0,
+          data.start_time,
+          data.end_time
+        );
       } else {
         // Fallback if picker function not ready (shouldn't happen with DOMContentLoaded)
         document.getElementById("start_time").value = data.start_time; // Use raw 24hr format for now
@@ -1479,7 +1490,20 @@ document.addEventListener("DOMContentLoaded", function () {
   const loginForm = document.getElementById("loginForm");
   const loginModalEl = document.getElementById("loginModal");
   const loginModal = loginModalEl ? new bootstrap.Modal(loginModalEl) : null;
+  const reservationModalEl = document.getElementById("reservationModal");
   const guestBtn = document.getElementById("guest-btn");
+
+  // Prevent stuck backdrops when closing any modal
+  const cleanupBackdrops = () => {
+    document.body.classList.remove("modal-open");
+    document.body.style.removeProperty("padding-right");
+    document.querySelectorAll(".modal-backdrop").forEach((el) => el.remove());
+  };
+
+  [loginModalEl, reservationModalEl].forEach((modalEl) => {
+    if (!modalEl) return;
+    modalEl.addEventListener("hidden.bs.modal", cleanupBackdrops);
+  });
 
   if (loginBtn && loginModal) {
     loginBtn.addEventListener("click", () => loginModal.show());

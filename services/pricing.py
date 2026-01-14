@@ -10,7 +10,7 @@ def compute_pricing(conn, room_id, start_time_str, end_time_str, tax_rate):
     """
     Compute subtotal, tax, and total for a reservation using room rates.
 
-    - Uses room.hourly_rate for 11:00-18:00
+    - Uses room.hourly_rate for 11:00-18:00 (Early Bird)
     - Uses room.peak_hour_rate for 18:00-25:00 (6 PM - 1 AM)
     - Supports minute-level durations and overnight via 24+ hour end times.
     Returns dict with subtotal, tax, total, and period_charges breakdown.
@@ -29,8 +29,7 @@ def compute_pricing(conn, room_id, start_time_str, end_time_str, tax_rate):
 
     # Boundaries in minutes from midnight
     EARLY_END = 18 * 60        # 18:00
-    PRIME_END = 21 * 60        # 21:00
-    LATE_END = 25 * 60         # 01:00 next day (25:00)
+    EVENING_END = 25 * 60      # 01:00 next day (25:00)
 
     current = start_minutes
     subtotal = 0.0
@@ -39,16 +38,12 @@ def compute_pricing(conn, room_id, start_time_str, end_time_str, tax_rate):
     while current < end_minutes:
         if current < EARLY_END:
             rate = room['hourly_rate']
-            period_label = 'Early (11 AM - 6 PM)'
+            period_label = 'Early Bird (11 AM - 6 PM)'
             period_end = min(end_minutes, EARLY_END)
-        elif current < PRIME_END:
-            rate = room['peak_hour_rate']
-            period_label = 'Prime (6 PM - 9 PM)'
-            period_end = min(end_minutes, PRIME_END)
         else:
             rate = room['peak_hour_rate']
-            period_label = 'Late (9 PM - 1 AM)'
-            period_end = min(end_minutes, LATE_END)
+            period_label = 'Evening / Late (6 PM - 1 AM)'
+            period_end = min(end_minutes, EVENING_END)
 
         duration_hours = (period_end - current) / 60.0
         cost = rate * duration_hours

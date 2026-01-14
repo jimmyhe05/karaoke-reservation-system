@@ -27,10 +27,10 @@ Built with **Python (Flask)** for the backend, **HTML/CSS/JavaScript** for the f
 - **Reservation Management** – Easily add, edit, or remove reservations for available rooms.
 - **Real-Time Availability** – Instantly see which rooms are booked and available.
 - **Dynamic Pricing System** – Automatically calculates cost based on time slots:
-  - 🕛 **Early Bird Special**: $30/hour (11 AM - 6 PM)
-  - 🌆 **Prime Time**: $45/hour (6 PM - 9 PM)
-  - 🌙 **Late Night**: $50/hour (9 PM - 1 AM)
-- **Business Hours Enforcement** – Ensures bookings fall within 11 AM - 1 AM.
+   - 🕛 **Early Bird Special 2026**: $35/hour (11 AM - 6 PM)
+   - 🌆 **Evening / Late Night**: $50/hour (6 PM - 1 AM)
+- **Business Hours Enforcement** – Karaoke available daily starting at 11 AM; we stay open until 1:00 AM when same-day reservations are made before 9:00 PM.
+- **Fresh Song Catalog** – All songs are updated through 2024.
 - **Tax Calculation** – 5.5% tax is automatically applied to all reservations.
 - **Intuitive UI** – Simple and modern CSS styling, interactive modals, and error messages for an enhanced user experience.
 - **Validation & Conflict Handling** – Prevents double bookings and ensures valid time selections.
