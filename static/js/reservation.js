@@ -537,6 +537,8 @@ function updateIdleArea(preloadedData = null) {
   idleArea.innerHTML = "";
 
   const renderEmptyState = () => {
+    // Ensure we don't stack multiple empty states
+    idleArea.querySelectorAll(".idle-empty-state").forEach((n) => n.remove());
     const empty = document.createElement("div");
     empty.className = "idle-empty-state";
     empty.textContent = "No idle reservations";
@@ -1413,6 +1415,12 @@ function initializeTimePickers(
     },
   });
 
+  // Ensure the start time input is populated immediately (not just when opening the picker)
+  const startTimeValue = `${String(defaultStartHour % 24).padStart(2, "0")}:${String(
+    defaultStartMinute
+  ).padStart(2, "0")}`;
+  window.startTimePicker.setDate(startTimeValue, true);
+
   // --- End Time Picker ---
   let defaultEndHour = defaultStartHour + durationHours;
   let defaultEndMinute = defaultStartMinute;
@@ -1444,6 +1452,12 @@ function initializeTimePickers(
       updatePriceEstimate();
     },
   });
+
+  // Prefill the end time based on the default duration
+  const endTimeValue = `${String(defaultEndHour % 24).padStart(2, "0")}:${String(
+    defaultEndMinute
+  ).padStart(2, "0")}`;
+  window.endTimePicker.setDate(endTimeValue, true);
 
   // Set initial minimum for end time based on initial start time
   if (startTimeStr) {
