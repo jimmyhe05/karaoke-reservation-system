@@ -545,8 +545,8 @@ function updateIdleArea(preloadedData = null) {
 
   // Get the current date
   const currentDate =
-    document.getElementById("date").value ||
-    window.calendarEl.dataset.selectedDate ||
+    document.getElementById("date")?.value ||
+    window.calendarEl?.dataset?.selectedDate ||
     new Date().toISOString().split("T")[0];
 
   console.log("Fetching idle reservations for date:", currentDate);
@@ -1116,6 +1116,15 @@ window.deleteReservation = function () {
       });
   }
 };
+
+// Helper to close the reservation modal safely
+function closeReservationModal() {
+  const modalEl = document.getElementById("reservationModal");
+  if (!modalEl) return;
+  const modal =
+    bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+  modal.hide();
+}
 
 // Function to update current time indicator
 function updateCurrentTimeIndicator() {
