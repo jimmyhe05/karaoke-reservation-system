@@ -142,21 +142,43 @@ function handleReservationMove(evt) {
   if (toContainer.id === "idle-area") {
     console.log(`Reservation ${reservationId} moved to idle area`);
 
+    const selectedDate =
+      window.calendarEl?.dataset?.selectedDate ||
+      document.getElementById("date")?.value ||
+      new Date().toISOString().split("T")[0];
+
     // Update the backend to mark this reservation as idle
     fetch(`/move_to_idle/${reservationId}`, {
       method: "POST",
     })
-      .then((response) => response.json())
-      .then((data) => {
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || data.success === false || data.error) {
+          throw new Error(data.error || "Failed to move reservation to idle");
+        }
         console.log("Moved to idle area:", data);
         showToast("Reservation moved to idle area");
 
         // Restack/sort the cards
         restackIdleCards();
+
+        // Clear any occupied markers for this reservation
+        clearOccupiedSlots(reservationId);
+
+        // Refresh timelines to reflect the freed slot
+        updateRoomTimelines(selectedDate);
       })
       .catch((error) => {
         console.error("Error moving to idle area:", error);
-        showToast("Error moving to idle area. Please try again.", "error");
+        showToast(
+          error?.message || "Error moving to idle area. Please try again.",
+          "error"
+        );
+
+        // Re-sync UI with server state if the server rejected the move
+        if (selectedDate) {
+          updateRoomTimelines(selectedDate);
+        }
       });
 
     return;
@@ -353,41 +375,39 @@ function moveReservation(reservationId, roomId, hour, minute = 0) {
     return;
   }
 
-  // Call the API to update the reservation
-  fetch(`/update_reservation/${reservationId}`, {
+  // Use move_reservation API (preserves duration, handles conflicts, and mirrors tests)
+  fetch(`/move_reservation`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
+      reservation_id: reservationId,
       room_id: roomId,
       start_time: startTime,
-      end_time: endTime,
       date: selectedDate,
     }),
   })
-    .then((response) => {
+    .then(async (response) => {
+      const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        return response.json().then((data) => {
-          if (data.conflict) {
-            throw new Error(
-              "This time slot is already occupied by another reservation. Please choose a different time."
-            );
-          } else {
-            throw new Error(data.error || "Failed to update reservation");
-          }
-        });
+        if (data.conflict) {
+          throw new Error(
+            "This time slot is already occupied by another reservation. Please choose a different time."
+          );
+        }
+        throw new Error(data.error || "Failed to update reservation");
       }
-      return response.json();
+      return data;
     })
     .then((data) => {
       console.log("Reservation updated successfully:", data);
-      // Show success message
       showToast("Reservation updated successfully!");
-      // Refresh the room timelines to show the updated reservation
       updateRoomTimelines(selectedDate);
-      // Also update the idle area
       updateIdleArea();
+      if (typeof window.refreshCalendarAvailability === "function") {
+        refreshCalendarAvailability();
+      }
     })
     .catch((error) => {
       console.error("Error updating reservation:", error);
@@ -395,7 +415,6 @@ function moveReservation(reservationId, roomId, hour, minute = 0) {
         error.message || "Error updating reservation. Please try again.",
         "error"
       );
-      // Refresh to restore the original state
       updateRoomTimelines(selectedDate);
     });
 }
@@ -614,6 +633,17 @@ function updateIdleArea(preloadedData = null) {
     });
 }
 
+// Refresh FullCalendar availability/reservation counts
+function refreshCalendarAvailability() {
+  try {
+    if (window.calendar && typeof window.calendar.refetchEvents === "function") {
+      window.calendar.refetchEvents();
+    }
+  } catch (e) {
+    console.warn("calendar refetch failed", e);
+  }
+}
+
 // Function to create a reservation card
 function createReservationCard(reservation, roomTimeline) {
   // Parse the start and end times
@@ -681,7 +711,7 @@ function createReservationCard(reservation, roomTimeline) {
         <div class="content">
             <div class="name-row">
                 <strong>${reservation.name}</strong>
-                <span class="people-count">${reservation.people} 人</span>
+                <span class="people-count">${reservation.people} ppl</span>
             </div>
             ${
               reservation.notes
@@ -792,7 +822,7 @@ function createIdleReservationCard(reservation, idleArea) {
         <div class="content">
             <div class="name-row">
                 <strong>${reservation.name}</strong>
-                <span class="people-count">${reservation.people} 人</span>
+                <span class="people-count">${reservation.people} ppl</span>
             </div>
             ${
               languageDisplay
@@ -855,6 +885,19 @@ function markOccupiedTimeSlots(
       slot.dataset.reservationId = reservationId;
     }
   });
+}
+
+// Clear occupied markers for a specific reservation across timelines
+function clearOccupiedSlots(reservationId) {
+  if (!reservationId) return;
+  document
+    .querySelectorAll(
+      `.time-slot.occupied[data-reservation-id="${reservationId}"]`
+    )
+    .forEach((slot) => {
+      slot.classList.remove("occupied");
+      delete slot.dataset.reservationId;
+    });
 }
 
 // Function to handle quick duration buttons
@@ -1104,6 +1147,9 @@ window.deleteReservation = function () {
         }
         if (typeof window.updateIdleArea === "function") {
           updateIdleArea();
+        }
+        if (typeof window.refreshCalendarAvailability === "function") {
+          refreshCalendarAvailability();
         }
 
         // Show success message
@@ -1370,6 +1416,41 @@ function initializeTimePickers(
   startTimeStr = null,
   endTimeStr = null
 ) {
+  const formatTime12h = (hour24, minute) => {
+    const h24 = ((hour24 % 24) + 24) % 24;
+    const displayHour = h24 % 12 || 12;
+    const ampm = h24 >= 12 ? "PM" : "AM";
+    return `${displayHour}:${String(minute).padStart(2, "0")}` + ` ${ampm}`;
+  };
+
+  // Consistent 12h formatter for flatpickr display
+  const formatDate12h = (date, format, locale) => {
+    if (format === "H:i") {
+      return flatpickr.formatDate(date, format, locale);
+    }
+    const h = date.getHours();
+    const m = date.getMinutes();
+    return formatTime12h(h, m);
+  };
+
+  const ensureAltInput = (picker, originalInput) => {
+    if (picker.altInput) {
+      picker.altInput.required = originalInput.required;
+      picker.altInput.classList.add("form-control");
+      picker.altInput.addEventListener("focus", () => picker.open());
+      return picker.altInput;
+    }
+    const alt = document.createElement("input");
+    alt.type = "text";
+    alt.className = originalInput.className;
+    alt.required = originalInput.required;
+    alt.readOnly = true;
+    originalInput.insertAdjacentElement("afterend", alt);
+    alt.addEventListener("focus", () => picker.open());
+    picker.altInput = alt;
+    return alt;
+  };
+
   const startTimeInput = document.getElementById("start_time");
   const endTimeInput = document.getElementById("end_time");
 
@@ -1378,9 +1459,15 @@ function initializeTimePickers(
     return;
   }
 
-  // Destroy existing instances if they exist
-  if (window.startTimePicker) window.startTimePicker.destroy();
-  if (window.endTimePicker) window.endTimePicker.destroy();
+  // Destroy existing instances if they exist (and clear refs to avoid calling methods on destroyed pickers)
+  if (window.startTimePicker) {
+    window.startTimePicker.destroy();
+    window.startTimePicker = null;
+  }
+  if (window.endTimePicker) {
+    window.endTimePicker.destroy();
+    window.endTimePicker = null;
+  }
 
   // --- Start Time Picker ---
   let defaultStartHour = 11;
@@ -1401,6 +1488,8 @@ function initializeTimePickers(
     altInput: true,
     altFormat: "h:i K", // 12-hour format for display
     time_24hr: false,
+    disableMobile: true,
+    formatDate: formatDate12h,
     minuteIncrement: 30,
     minTime: "11:00",
     maxTime: "23:59", // Allow up to 11:59 PM for start
@@ -1420,6 +1509,11 @@ function initializeTimePickers(
     defaultStartMinute
   ).padStart(2, "0")}`;
   window.startTimePicker.setDate(startTimeValue, true);
+  const startAlt = ensureAltInput(window.startTimePicker, startTimeInput);
+  const startDate = window.startTimePicker.selectedDates[0];
+  startAlt.value = startDate
+    ? formatDate12h(startDate, "h:i K")
+    : formatTime12h(defaultStartHour, defaultStartMinute);
 
   // --- End Time Picker ---
   let defaultEndHour = defaultStartHour + durationHours;
@@ -1437,6 +1531,8 @@ function initializeTimePickers(
     altInput: true,
     altFormat: "h:i K", // 12-hour format for display
     time_24hr: false,
+    disableMobile: true,
+    formatDate: formatDate12h,
     minuteIncrement: 30,
     minTime: "11:30", // Initial minimum
     maxTime: "01:00", // Allow up to 1:00 AM next day
@@ -1458,6 +1554,11 @@ function initializeTimePickers(
     defaultEndMinute
   ).padStart(2, "0")}`;
   window.endTimePicker.setDate(endTimeValue, true);
+  const endAlt = ensureAltInput(window.endTimePicker, endTimeInput);
+  const endDate = window.endTimePicker.selectedDates[0];
+  endAlt.value = endDate
+    ? formatDate12h(endDate, "h:i K")
+    : formatTime12h(defaultEndHour, defaultEndMinute);
 
   // Set initial minimum for end time based on initial start time
   if (startTimeStr) {
@@ -1608,11 +1709,13 @@ window.updateIdleArea = updateIdleArea;
 window.createReservationCard = createReservationCard;
 window.createIdleReservationCard = createIdleReservationCard;
 window.markOccupiedTimeSlots = markOccupiedTimeSlots;
+window.clearOccupiedSlots = clearOccupiedSlots;
 window.updatePriceEstimate = updatePriceEstimate;
 window.deleteReservation = deleteReservation;
 window.updateCurrentTimeIndicator = updateCurrentTimeIndicator;
 window.initCurrentTimeIndicator = initCurrentTimeIndicator;
 window.showNewReservationModal = showNewReservationModal;
+window.refreshCalendarAvailability = refreshCalendarAvailability;
 
 // ---- Admin auth helpers ----
 async function fetchAuthStatus() {

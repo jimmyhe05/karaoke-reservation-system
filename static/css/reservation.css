@@ -362,16 +362,16 @@ body {
 .reservation-card {
     position: absolute;
     width: 100%;
-    background: #e3f2fd;
-    color: #1976d2;
-    padding: 6px;
-    border-radius: 4px;
+    background: #f7fbff;
+    color: #12324f;
+    padding: 6px 6px 8px;
+    border-radius: 6px;
     cursor: grab;
     z-index: 100;
     font-size: 0.85em;
     overflow: hidden;
-    border: 1px solid #1976d2;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    border: 1px solid #1565c0;
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.12);
     transition: all 0.2s ease;
     box-sizing: border-box;
     margin: 0;
@@ -394,30 +394,35 @@ body {
     top: 0;
     left: 0;
     right: 0;
-    height: 18px;
-    background: #1976d2;
-    color: white;
-    font-size: 0.7em;
-    padding: 0px 4px;
+    height: 14px;
+    background: #1565c0;
+    color: #ffffff;
+    font-size: 0.6rem;
+    padding: 0 2px;
     display: flex;
     justify-content: space-between;
     align-items: center;
     font-weight: 500;
+    line-height: 1.1;
 }
 
 .reservation-card .time-indicator .time-range {
-    background: rgba(255, 255, 255, 0.2);
-    padding: 2px 6px;
+    background: rgba(255, 255, 255, 0.18);
+    padding: 0px 4px;
     border-radius: 3px;
     display: inline-block;
     width: 100%;
     text-align: center;
-    font-weight: 500;
+    font-weight: 600;
+    line-height: 1.05;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .reservation-card .content {
     margin-top: 18px;
-    padding: 2px 4px;
+    padding: 4px 4px 2px;
     display: flex;
     flex-direction: column;
     gap: 1px;
@@ -439,11 +444,14 @@ body {
 }
 
 .reservation-card .people-count {
-    font-size: 0.75em;
-    color: #555;
-    margin-left: 5px;
+    font-size: 0.78em;
+    color: #0f1f30;
+    background: rgba(21, 101, 192, 0.12);
+    padding: 2px 6px;
+    border-radius: 6px;
+    margin-left: 6px;
     white-space: nowrap;
-    font-weight: normal;
+    font-weight: 600;
 }
 
 .reservation-card strong {
@@ -451,8 +459,8 @@ body {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    color: #1565c0;
-    font-weight: 600;
+    color: #0f2f4f;
+    font-weight: 700;
     margin-bottom: 4px;
 }
 

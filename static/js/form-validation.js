@@ -115,9 +115,8 @@ function validateReservationForm(form) {
     {
       id: "num_people",
       required: true,
-      message: "Number of people must be between 1 and 20.",
+      message: "Number of people must be 1 or more.",
       min: 1,
-      max: 20,
     },
     { id: "room_id", required: true, message: "Please select a room." },
     {
@@ -252,12 +251,31 @@ function handleReservationSubmit(event) {
     body: JSON.stringify(jsonData),
   })
     .then(async (response) => {
-      const responseData = await response.json(); // Try to parse JSON regardless of status
+      let responseData = {};
+      try {
+        responseData = await response.json();
+      } catch (err) {
+        // Non-JSON response, keep empty
+      }
+
       if (!response.ok) {
-        // Throw an error with the message from the server's JSON response
-        throw new Error(
-          responseData.error || `Request failed with status ${response.status}`
-        );
+        // Build a readable error message (prefer plain message)
+        const rawMessage =
+          responseData?.message ||
+          responseData?.error ||
+          responseData?.detail ||
+          (response.status === 409
+            ? "Room is not available for the selected time"
+            : null) ||
+          `Request failed with status ${response.status}`;
+
+        // If still an object, fallback to a concise generic message
+        const formattedMessage =
+          typeof rawMessage === "object"
+            ? "Room is not available for the selected time"
+            : rawMessage;
+
+        throw new Error(formattedMessage);
       }
       return responseData; // Return parsed JSON data on success
     })
@@ -279,6 +297,8 @@ function handleReservationSubmit(event) {
       if (date && typeof window.updateRoomTimelines === "function")
         window.updateRoomTimelines(date);
       if (typeof window.updateIdleArea === "function") window.updateIdleArea();
+      if (typeof window.refreshCalendarAvailability === "function")
+        window.refreshCalendarAvailability();
     })
     .catch((error) => {
       console.error("Error saving reservation:", error);
