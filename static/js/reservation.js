@@ -650,10 +650,24 @@ function createReservationCard(reservation, roomTimeline) {
   const startTime = reservation.start_time;
   const endTime = reservation.end_time;
 
-  // Find the corresponding time slots
-  const startSlot = roomTimeline.querySelector(
-    `.time-slot[data-time="${startTime}"]`
+  // Locate the corresponding start slot (support 24/25 hour notation)
+  const [rawStartHour, rawStartMinute] = startTime.split(":").map((n) => parseInt(n, 10));
+  const startHourDisplay = rawStartHour % 24;
+  const startMinuteDisplay = parseInt(rawStartMinute) || 0;
+
+  let startSlot = roomTimeline.querySelector(
+    `.time-slot[data-hour="${rawStartHour}"][data-minute="${startMinuteDisplay}"]`
   );
+
+  if (!startSlot) {
+    const displayTime = `${startHourDisplay.toString().padStart(2, "0")}:${startMinuteDisplay
+      .toString()
+      .padStart(2, "0")}`;
+    startSlot = roomTimeline.querySelector(
+      `.time-slot[data-time="${displayTime}"]`
+    );
+  }
+
   if (!startSlot) return;
 
   // Calculate the position and height of the reservation card
