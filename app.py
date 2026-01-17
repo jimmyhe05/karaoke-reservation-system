@@ -437,7 +437,7 @@ def get_daily_reservations():
     for room in rooms:
         # Get all reservations for this room and date
         reservations = db.execute('''
-            SELECT id, start_time, end_time, contact_name, num_people, language
+            SELECT id, start_time, end_time, contact_name, num_people, language, notes
             FROM reservations
             WHERE room_id = ? AND date = ? AND status != 'cancelled'
             ORDER BY start_time
@@ -474,7 +474,8 @@ def get_daily_reservations():
                 'duration': end_hour - start_hour,
                 'contact_name': res['contact_name'],
                 'num_people': res['num_people'],
-                'language': res['language']
+                'language': res['language'],
+                'notes': res['notes']
             })
 
         result['rooms'].append(room_data)
@@ -1143,19 +1144,29 @@ def calendar_availability():
     result = []
 
     for date in date_range:
-        # Get reservation count for this date
-        reservation_count = conn.execute('''
-            SELECT COUNT(*) as count
-            FROM reservations
-            WHERE date = ? AND status != 'cancelled'
-        ''', (date,)).fetchone()['count']
+                # Exclude reservations placed in idle area for this date
+                        reservation_count = conn.execute('''
+                                SELECT COUNT(*) as count
+                                FROM reservations r
+                                WHERE r.date = ?
+                                    AND r.status != 'cancelled'
+                                    AND NOT EXISTS (
+                                        SELECT 1 FROM idle_reservations i
+                                        WHERE i.reservation_id = r.id AND i.date = r.date
+                                    )
+                        ''', (date,)).fetchone()['count']
 
-        # Get unique booked rooms for this date
-        booked_rooms = conn.execute('''
-            SELECT COUNT(DISTINCT room_id) as count
-            FROM reservations
-            WHERE date = ? AND status != 'cancelled'
-        ''', (date,)).fetchone()['count']
+                        # Get unique booked rooms for this date (also excluding idle)
+                        booked_rooms = conn.execute('''
+                                SELECT COUNT(DISTINCT r.room_id) as count
+                                FROM reservations r
+                                WHERE r.date = ?
+                                    AND r.status != 'cancelled'
+                                    AND NOT EXISTS (
+                                        SELECT 1 FROM idle_reservations i
+                                        WHERE i.reservation_id = r.id AND i.date = r.date
+                                    )
+                        ''', (date,)).fetchone()['count']
 
         # Calculate available rooms
         available_rooms = total_rooms - booked_rooms

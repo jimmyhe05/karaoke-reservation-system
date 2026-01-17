@@ -210,6 +210,37 @@ def test_move_from_idle_clears_idle_and_places_in_room(client):
     assert room2_res[0]["start_time"] == "12:30"
 
 
+def test_calendar_availability_excludes_idle(client):
+    login_admin(client)
+    today = datetime.now().strftime('%Y-%m-%d')
+    payload = {
+        "date": today,
+        "start_time": "12:00",
+        "end_time": "13:00",
+        "num_people": 2,
+        "contact_name": "CalIdle",
+        "contact_phone": "555-0110",
+        "contact_email": "",
+        "room_id": 1,
+        "language": "en",
+        "notes": ""
+    }
+
+    # Create reservation
+    create_resp = client.post("/reservation", data=json.dumps(payload), content_type="application/json")
+    assert create_resp.status_code == 200
+
+    # Move to idle
+    res_id = client.get(f"/api/daily_reservations?date={today}").get_json()["rooms"][0]["reservations"][0]["id"]
+    assert client.post(f"/move_to_idle/{res_id}").status_code == 200
+
+    # Calendar availability should show zero reservations for that day
+    cal = client.get(f"/api/calendar_availability?start={today}&end={today}").get_json()
+    assert isinstance(cal, list)
+    assert cal[0]["date"] == today
+    assert cal[0]["reservationCount"] == 0
+
+
 def test_public_schedule_is_anonymized(client):
     login_admin(client)
     today = datetime.now().strftime('%Y-%m-%d')

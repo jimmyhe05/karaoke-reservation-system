@@ -481,7 +481,7 @@ function updateRoomTimelines(date) {
               name: reservation.contact_name,
               people: reservation.num_people,
               phone: "", // These fields might not be available in the API response
-              notes: "",
+              notes: reservation.notes || "",
               room_id: roomId,
               start_time: reservation.start_time,
               end_time: reservation.end_time,
