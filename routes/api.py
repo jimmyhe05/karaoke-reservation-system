@@ -225,14 +225,24 @@ def api_calendar_availability():
     for date in date_range:
         reservation_count = conn.execute('''
             SELECT COUNT(*) as count
-            FROM reservations
-            WHERE date = ? AND status != 'cancelled'
+            FROM reservations r
+            WHERE r.date = ?
+              AND r.status != 'cancelled'
+              AND NOT EXISTS (
+                SELECT 1 FROM idle_reservations i
+                WHERE i.reservation_id = r.id AND i.date = r.date
+              )
         ''', (date,)).fetchone()['count']
 
         booked_rooms = conn.execute('''
-            SELECT COUNT(DISTINCT room_id) as count
-            FROM reservations
-            WHERE date = ? AND status != 'cancelled'
+            SELECT COUNT(DISTINCT r.room_id) as count
+            FROM reservations r
+            WHERE r.date = ?
+              AND r.status != 'cancelled'
+              AND NOT EXISTS (
+                SELECT 1 FROM idle_reservations i
+                WHERE i.reservation_id = r.id AND i.date = r.date
+              )
         ''', (date,)).fetchone()['count']
 
         available_rooms = total_rooms - booked_rooms

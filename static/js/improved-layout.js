@@ -111,7 +111,10 @@ function initDragAndDrop() {
         const rect = timeline.getBoundingClientRect();
         const numIntervals = getNumIntervals(timeline) || 28;
         const slotHeight = intervalHeight; // use configured interval height
-        const offsetY = (originalEvent.clientY || rect.top + 10) - rect.top;
+        const scrollContainer = timeline.closest(".scroll-sync-inner");
+        const scrollTop = scrollContainer ? scrollContainer.scrollTop : 0;
+        const offsetY =
+          (originalEvent.clientY || rect.top + 10) - rect.top + scrollTop;
         let slotIndex = Math.floor(offsetY / slotHeight);
         if (slotIndex < 0) slotIndex = 0;
         const top = slotIndex * slotHeight;
@@ -162,6 +165,16 @@ function initDragAndDrop() {
           }
         }
 
+        function refreshSchedule() {
+          if (typeof window.updateRoomTimelines === "function") {
+            updateRoomTimelines(date);
+            return;
+          }
+          if (typeof window.updateIdleArea === "function") {
+            updateIdleArea();
+          }
+        }
+
         // Moved into idle
         if (toIsIdle && !fromIsIdle) {
           // optimistic UI already moved the element; call server
@@ -170,6 +183,10 @@ function initDragAndDrop() {
             .then((res) => {
               if (res.success) {
                 showToast && showToast("Moved to idle", "success");
+                if (item && item.parentNode) {
+                  item.remove();
+                }
+                refreshSchedule();
               } else {
                 showToast &&
                   showToast(res.error || "Failed to move to idle", "error");
@@ -191,7 +208,9 @@ function initDragAndDrop() {
           const rect = timeline.getBoundingClientRect();
           const numIntervals = getNumIntervals(timeline) || 28;
           const slotHeight = intervalHeight; // align with visual slot height
-          const offsetY = (evt.clientY || rect.top + 10) - rect.top;
+          const scrollContainer = timeline.closest(".scroll-sync-inner");
+          const scrollTop = scrollContainer ? scrollContainer.scrollTop : 0;
+          const offsetY = (evt.clientY || rect.top + 10) - rect.top + scrollTop;
           let slotIndex = Math.floor(offsetY / slotHeight);
           if (slotIndex < 0) slotIndex = 0;
           const hour = 11 + Math.floor(slotIndex / 2);
@@ -228,6 +247,7 @@ function initDragAndDrop() {
             .then((res) => {
               if (res.message) {
                 showToast && showToast("Moved reservation", "success");
+                refreshSchedule();
               } else {
                 showToast &&
                   showToast(res.error || "Failed to move reservation", "error");
@@ -248,7 +268,9 @@ function initDragAndDrop() {
           const rect = timeline.getBoundingClientRect();
           const numIntervals = getNumIntervals(timeline) || 28;
           const slotHeight = intervalHeight; // align with visual slot height
-          const offsetY = (evt.clientY || rect.top + 10) - rect.top;
+          const scrollContainer = timeline.closest(".scroll-sync-inner");
+          const scrollTop = scrollContainer ? scrollContainer.scrollTop : 0;
+          const offsetY = (evt.clientY || rect.top + 10) - rect.top + scrollTop;
           let slotIndex = Math.floor(offsetY / slotHeight);
           if (slotIndex < 0) slotIndex = 0;
           const hour = 11 + Math.floor(slotIndex / 2);
@@ -280,6 +302,7 @@ function initDragAndDrop() {
             .then((res) => {
               if (res.message) {
                 showToast && showToast("Moved reservation", "success");
+                refreshSchedule();
               } else {
                 showToast &&
                   showToast(res.error || "Failed to move reservation", "error");

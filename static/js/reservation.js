@@ -34,7 +34,7 @@ window.showToast = function (message, type = "success") {
   // Remove toast after animation completes
   setTimeout(() => {
     toast.remove();
-  }, 4200); // Animation duration (700ms in + 3500ms visible + 700ms out)
+  }, 2000); // Keep toast visible briefly (2s total)
 };
 
 // Legacy drag-and-drop initialization was replaced by the improved
@@ -306,8 +306,11 @@ function moveReservation(reservationId, roomId, hour, minute = 0) {
 
   // Get the current date from the calendar
   const selectedDate =
-    window.calendarEl.dataset.selectedDate ||
-    document.getElementById("date").value;
+    window.calendarEl?.dataset?.selectedDate ||
+    window.currentSelectedDate ||
+    window.initialSelectedDate ||
+    document.getElementById("date")?.value ||
+    new Date().toISOString().split("T")[0];
 
   // Find the reservation card
   const card = document.querySelector(

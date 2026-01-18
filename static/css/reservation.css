@@ -16,7 +16,7 @@
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
     display: flex;
     align-items: center;
-    animation: toast-in-right 0.7s, toast-out 0.7s 3.5s forwards;
+    animation: toast-in-right 0.3s, toast-out 0.3s 1.4s forwards;
     opacity: 0;
 }
 
