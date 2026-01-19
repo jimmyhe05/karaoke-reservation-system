@@ -241,6 +241,43 @@ def test_calendar_availability_excludes_idle(client):
     assert cal[0]["reservationCount"] == 0
 
 
+def test_audit_and_history_written(client):
+    from services.db import get_db
+    login_admin(client)
+    today = datetime.now().strftime('%Y-%m-%d')
+    payload = {
+        "date": today,
+        "start_time": "12:00",
+        "end_time": "13:00",
+        "num_people": 2,
+        "contact_name": "AuditTester",
+        "contact_phone": "555-0120",
+        "contact_email": "",
+        "room_id": 1,
+        "language": "en",
+        "notes": ""
+    }
+
+    create_resp = client.post("/reservation", data=json.dumps(payload), content_type="application/json")
+    assert create_resp.status_code == 200
+
+    res_id = client.get(f"/api/daily_reservations?date={today}").get_json()["rooms"][0]["reservations"][0]["id"]
+
+    with app.app_context():
+        conn = get_db()
+        audit_count = conn.execute(
+            "SELECT COUNT(*) as count FROM audit_log WHERE action = ?",
+            ("reservation.create.api",)
+        ).fetchone()["count"]
+        history_count = conn.execute(
+            "SELECT COUNT(*) as count FROM reservation_history WHERE reservation_id = ?",
+            (res_id,)
+        ).fetchone()["count"]
+
+    assert audit_count >= 1
+    assert history_count >= 1
+
+
 def test_public_schedule_is_anonymized(client):
     login_admin(client)
     today = datetime.now().strftime('%Y-%m-%d')

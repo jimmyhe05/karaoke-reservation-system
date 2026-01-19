@@ -1,4 +1,5 @@
 from datetime import datetime
+import json
 from flask import current_app, request, session
 
 from services.db import get_db
@@ -75,6 +76,37 @@ def log_action(action: str, **details):
     }
     metadata.update(details)
     current_app.logger.info(metadata)
+
+    # Persist to audit_log (best-effort)
+    try:
+        conn = get_db()
+        conn.execute(
+            '''INSERT INTO audit_log (action, role, path, method, request_id, details)
+               VALUES (?, ?, ?, ?, ?, ?)''',
+            (
+                metadata.get("action"),
+                metadata.get("role"),
+                metadata.get("path"),
+                metadata.get("method"),
+                metadata.get("request_id"),
+                json.dumps(details or {}),
+            ),
+        )
+        conn.commit()
+    except Exception as exc:
+        current_app.logger.warning({"action": "audit_log.failed", "error": str(exc)})
+
+
+def record_reservation_history(conn, reservation_id: int, action: str, snapshot: dict):
+    try:
+        conn.execute(
+            '''INSERT INTO reservation_history (reservation_id, action, snapshot)
+               VALUES (?, ?, ?)''',
+            (reservation_id, action, json.dumps(snapshot)),
+        )
+        conn.commit()
+    except Exception as exc:
+        current_app.logger.warning({"action": "reservation_history.failed", "error": str(exc)})
 
 
 # ---- API payload helpers ----
@@ -164,6 +196,12 @@ def create_reservation_api_payload(
     conn.commit()
 
     new_row = conn.execute('SELECT * FROM reservations WHERE id = ?', (cursor.lastrowid,)).fetchone()
+    record_reservation_history(
+        conn,
+        cursor.lastrowid,
+        "created",
+        serialize_reservation_row(new_row),
+    )
     log_action(
         "reservation.create.api",
         reservation_id=cursor.lastrowid,
@@ -280,6 +318,12 @@ def update_reservation_api_payload(reservation_id, data, api_error, api_ok):
     conn.commit()
 
     updated = conn.execute('SELECT * FROM reservations WHERE id = ?', (reservation_id,)).fetchone()
+    record_reservation_history(
+        conn,
+        reservation_id,
+        "updated",
+        serialize_reservation_row(updated),
+    )
     log_action(
         "reservation.update.api",
         reservation_id=reservation_id,
@@ -299,6 +343,7 @@ def delete_reservation_api_payload(reservation_id, api_error, api_ok):
     if not reservation:
         return api_error('Reservation not found', 404, code='not_found')
 
+    conn.execute('DELETE FROM reservation_history WHERE reservation_id = ?', (reservation_id,))
     conn.execute('DELETE FROM idle_reservations WHERE reservation_id = ?', (reservation_id,))
     conn.execute('DELETE FROM reservations WHERE id = ?', (reservation_id,))
     conn.commit()

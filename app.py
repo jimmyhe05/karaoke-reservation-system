@@ -27,6 +27,7 @@ from services.reservations import (
     update_reservation_api_payload,
     delete_reservation_api_payload,
     log_action,
+    record_reservation_history,
     get_today_stats,
 )
 from routes.api import api_bp
@@ -619,6 +620,9 @@ def delete_reservation(reservation_id):
         conn.execute('DELETE FROM idle_reservations WHERE reservation_id = ?',
                      (reservation_id,))
 
+        # Delete history entries first to avoid foreign key violations
+        conn.execute('DELETE FROM reservation_history WHERE reservation_id = ?', (reservation_id,))
+
         # Delete the reservation
         conn.execute('DELETE FROM reservations WHERE id = ?',
                      (reservation_id,))
@@ -755,6 +759,17 @@ def update_reservation(reservation_id):
 
         conn.commit()
 
+        updated = conn.execute(
+            'SELECT * FROM reservations WHERE id = ?', (reservation_id,)
+        ).fetchone()
+        if updated:
+            record_reservation_history(
+                conn,
+                reservation_id,
+                "updated",
+                serialize_reservation_row(updated),
+            )
+
         log_action(
             "reservation.update",
             reservation_id=reservation_id,
@@ -828,6 +843,12 @@ def move_to_idle(reservation_id):
             date=reservation['date'],
             room_id=reservation['room_id'],
         )
+        record_reservation_history(
+            conn,
+            reservation_id,
+            "moved_to_idle",
+            serialize_reservation_row(reservation, in_idle=True),
+        )
         return jsonify({'success': True}), 200
     except Exception as e:
         conn.rollback()
@@ -862,6 +883,16 @@ def remove_from_idle(reservation_id):
             reservation_id=reservation_id,
             date=existing['date'],
         )
+        reservation = conn.execute(
+            'SELECT * FROM reservations WHERE id = ?', (reservation_id,)
+        ).fetchone()
+        if reservation:
+            record_reservation_history(
+                conn,
+                reservation_id,
+                "removed_from_idle",
+                serialize_reservation_row(reservation, in_idle=False),
+            )
         return jsonify({'success': True}), 200
     except Exception as e:
         conn.rollback()
@@ -973,6 +1004,17 @@ def move_reservation():
                 (reservation_id, date)
             )
             conn.commit()
+
+            updated = conn.execute(
+                'SELECT * FROM reservations WHERE id = ?', (reservation_id_int,)
+            ).fetchone()
+            if updated:
+                record_reservation_history(
+                    conn,
+                    reservation_id_int,
+                    "moved",
+                    serialize_reservation_row(updated),
+                )
 
             log_action(
                 "reservation.move",

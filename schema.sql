@@ -57,7 +57,31 @@ CREATE TABLE IF NOT EXISTS idle_reservations (
     FOREIGN KEY (reservation_id) REFERENCES reservations(id)
 );
 
+-- Audit log for admin actions and API activity
+CREATE TABLE IF NOT EXISTS audit_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    action TEXT NOT NULL,
+    role TEXT NOT NULL,
+    path TEXT,
+    method TEXT,
+    request_id TEXT,
+    details TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Reservation history snapshots for traceability
+CREATE TABLE IF NOT EXISTS reservation_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    reservation_id INTEGER NOT NULL,
+    action TEXT NOT NULL,
+    snapshot TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (reservation_id) REFERENCES reservations(id)
+);
+
 -- Helpful indexes for common queries
 CREATE INDEX IF NOT EXISTS idx_reservations_room_date ON reservations(room_id, date);
 CREATE INDEX IF NOT EXISTS idx_reservations_date_status ON reservations(date, status);
 CREATE INDEX IF NOT EXISTS idx_idle_reservations_date_res ON idle_reservations(date, reservation_id);
+CREATE INDEX IF NOT EXISTS idx_audit_log_action_time ON audit_log(action, created_at);
+CREATE INDEX IF NOT EXISTS idx_reservation_history_res ON reservation_history(reservation_id, created_at);
