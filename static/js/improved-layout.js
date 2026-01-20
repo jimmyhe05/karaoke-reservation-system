@@ -78,6 +78,34 @@ function initDragAndDrop() {
     return labels.querySelectorAll(".time-label").length;
   }
 
+  function getTimelinePaddingTop(timeline) {
+    const paddingTop = parseFloat(
+      getComputedStyle(timeline).getPropertyValue("padding-top") || "0"
+    );
+    return isNaN(paddingTop) ? 0 : paddingTop;
+  }
+
+  function getSlotIndex(timeline, item, clientY, slotHeight) {
+    const rect = timeline.getBoundingClientRect();
+    const scrollContainer = timeline.closest(".scroll-sync-inner");
+    const scrollTop = scrollContainer ? scrollContainer.scrollTop : 0;
+    const paddingTop = getTimelinePaddingTop(timeline);
+
+    let offsetY = null;
+    if (typeof clientY === "number") {
+      offsetY = clientY - rect.top + scrollTop - paddingTop;
+    } else if (item) {
+      const itemRect = item.getBoundingClientRect();
+      offsetY = itemRect.top - rect.top + scrollTop - paddingTop;
+    } else {
+      offsetY = scrollTop - paddingTop;
+    }
+
+    let slotIndex = Math.floor(offsetY / slotHeight);
+    if (slotIndex < 0) slotIndex = 0;
+    return slotIndex;
+  }
+
   // Create sortable for each room-timeline and idle-drop-area
   document.querySelectorAll(".room-timeline, .idle-drop-area").forEach((el) => {
     if (el._sortableInitialized) return;
@@ -108,16 +136,15 @@ function initDragAndDrop() {
         if (!to) return true;
         const timeline = to.closest(".room-timeline");
         if (!timeline) return true;
-        const rect = timeline.getBoundingClientRect();
         const numIntervals = getNumIntervals(timeline) || 28;
         const slotHeight = intervalHeight; // use configured interval height
-        const scrollContainer = timeline.closest(".scroll-sync-inner");
-        const scrollTop = scrollContainer ? scrollContainer.scrollTop : 0;
-        const offsetY =
-          (originalEvent.clientY || rect.top + 10) - rect.top + scrollTop;
-        let slotIndex = Math.floor(offsetY / slotHeight);
-        if (slotIndex < 0) slotIndex = 0;
-        const top = slotIndex * slotHeight;
+        const slotIndex = getSlotIndex(
+          timeline,
+          evt.dragged,
+          originalEvent?.clientY,
+          slotHeight
+        );
+        const top = getTimelinePaddingTop(timeline) + slotIndex * slotHeight;
         showDropIndicator(timeline, top, slotHeight);
 
         // update snap preview height using the dragged item's duration
@@ -205,14 +232,14 @@ function initDragAndDrop() {
           // compute start_time (HH:MM) based on drop position
           const timeline = to.closest(".room-timeline") || to;
           const roomId = timeline.dataset.roomId;
-          const rect = timeline.getBoundingClientRect();
           const numIntervals = getNumIntervals(timeline) || 28;
           const slotHeight = intervalHeight; // align with visual slot height
-          const scrollContainer = timeline.closest(".scroll-sync-inner");
-          const scrollTop = scrollContainer ? scrollContainer.scrollTop : 0;
-          const offsetY = (evt.clientY || rect.top + 10) - rect.top + scrollTop;
-          let slotIndex = Math.floor(offsetY / slotHeight);
-          if (slotIndex < 0) slotIndex = 0;
+          const slotIndex = getSlotIndex(
+            timeline,
+            item,
+            evt.originalEvent?.clientY,
+            slotHeight
+          );
           const hour = 11 + Math.floor(slotIndex / 2);
           const minute = slotIndex % 2 ? 30 : 0;
           const start_time = `${String(hour).padStart(2, "0")}:${String(
@@ -221,7 +248,7 @@ function initDragAndDrop() {
 
           // Optimistically set position and attributes for the card
           const durationHours = parseFloat(item.dataset.duration) || 1;
-          const cardTop = slotIndex * slotHeight;
+          const cardTop = getTimelinePaddingTop(timeline) + slotIndex * slotHeight;
           const cardHeight = Math.round(durationHours * 2) * intervalHeight; // durationHours -> number of 30-min intervals * intervalHeight
           item.style.position = "absolute";
           item.style.top = `${cardTop}px`;
@@ -265,14 +292,14 @@ function initDragAndDrop() {
         if (!fromIsIdle && !toIsIdle) {
           const timeline = to.closest(".room-timeline") || to;
           const roomId = timeline.dataset.roomId;
-          const rect = timeline.getBoundingClientRect();
           const numIntervals = getNumIntervals(timeline) || 28;
           const slotHeight = intervalHeight; // align with visual slot height
-          const scrollContainer = timeline.closest(".scroll-sync-inner");
-          const scrollTop = scrollContainer ? scrollContainer.scrollTop : 0;
-          const offsetY = (evt.clientY || rect.top + 10) - rect.top + scrollTop;
-          let slotIndex = Math.floor(offsetY / slotHeight);
-          if (slotIndex < 0) slotIndex = 0;
+          const slotIndex = getSlotIndex(
+            timeline,
+            item,
+            evt.originalEvent?.clientY,
+            slotHeight
+          );
           const hour = 11 + Math.floor(slotIndex / 2);
           const minute = slotIndex % 2 ? 30 : 0;
           const start_time = `${String(hour).padStart(2, "0")}:${String(
@@ -281,7 +308,7 @@ function initDragAndDrop() {
 
           // Optimistically position
           const durationHours = parseFloat(item.dataset.duration) || 1;
-          const cardTop = slotIndex * slotHeight;
+          const cardTop = getTimelinePaddingTop(timeline) + slotIndex * slotHeight;
           const cardHeight = Math.round(durationHours * 2) * intervalHeight;
           item.style.position = "absolute";
           item.style.top = `${cardTop}px`;
@@ -426,6 +453,9 @@ function handleTimeSlotClick(event) {
   const hour = parseInt(slot.dataset.hour);
   const minute = parseInt(slot.dataset.minute) || 0;
   const selectedDate =
+    window.calendarEl?.dataset?.selectedDate ||
+    window.currentSelectedDate ||
+    window.initialSelectedDate ||
     window.calendarSelectedDate ||
     document.getElementById("date")?.value ||
     new Date().toISOString().split("T")[0];

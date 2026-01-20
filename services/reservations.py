@@ -61,8 +61,8 @@ def validate_room_capacity(conn, room_id, num_people):
     room = conn.execute('SELECT capacity FROM rooms WHERE id = ?', (room_id,)).fetchone()
     if not room:
         return False, f"Invalid room id {room_id}", room
-    if num_people <= 0 or num_people > room['capacity']:
-        return False, f"Number of people must be between 1 and {room['capacity']}", room
+    if num_people <= 0:
+        return False, "Number of people must be 1 or more", room
     return True, None, room
 
 
@@ -134,6 +134,8 @@ def create_reservation_api_payload(
     except Exception:
         return api_error('Invalid room id', 400, code='validation_error', fields=['room_id'])
 
+    idle_selected = str(data.get('idle', '')).lower() in ('true', '1', 'yes')
+
     try:
         num_people = int(data.get('num_people'))
     except Exception:
@@ -162,15 +164,16 @@ def create_reservation_api_payload(
             details={'blackout': win}
         )
 
-    conflict = find_conflict(conn, room_id, data.get('date'), normalized_start, normalized_end)
-    if conflict:
-        return api_error(
-            'Room is not available for the selected time',
-            409,
-            code='conflict',
-            fields=['room_id', 'start_time', 'end_time'],
-            details={'conflict_with': conflict['id']}
-        )
+    if not idle_selected:
+        conflict = find_conflict(conn, room_id, data.get('date'), normalized_start, normalized_end)
+        if conflict:
+            return api_error(
+                'Room is not available for the selected time',
+                409,
+                code='conflict',
+                fields=['room_id', 'start_time', 'end_time'],
+                details={'conflict_with': conflict['id']}
+            )
 
     total_cost = calculate_cost(conn, room_id, normalized_start, normalized_end, current_app.config['TAX_RATE'])
 
@@ -193,6 +196,13 @@ def create_reservation_api_payload(
             data.get('language', 'en'),
         )
     )
+    if idle_selected:
+        conn.execute(
+            '''INSERT INTO idle_reservations (reservation_id, date)
+               VALUES (?, ?)''',
+            (cursor.lastrowid, data.get('date')),
+        )
+
     conn.commit()
 
     new_row = conn.execute('SELECT * FROM reservations WHERE id = ?', (cursor.lastrowid,)).fetchone()
@@ -200,7 +210,7 @@ def create_reservation_api_payload(
         conn,
         cursor.lastrowid,
         "created",
-        serialize_reservation_row(new_row),
+        serialize_reservation_row(new_row, in_idle=idle_selected),
     )
     log_action(
         "reservation.create.api",
@@ -211,7 +221,7 @@ def create_reservation_api_payload(
         end_time=normalized_end,
         num_people=num_people,
     )
-    payload = {'reservation': serialize_reservation_row(new_row)}
+    payload = {'reservation': serialize_reservation_row(new_row, in_idle=idle_selected)}
     if include_success:
         payload['success'] = True
     return api_ok(payload, message=success_message, status=status_code)

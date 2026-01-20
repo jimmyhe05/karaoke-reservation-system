@@ -725,9 +725,9 @@ def update_reservation(reservation_id):
         room = conn.execute('SELECT capacity FROM rooms WHERE id = ?', (room_id,)).fetchone()
         if not room:
             return jsonify({'error': 'Invalid room id', 'fields': ['room_id']}), 400
-        if num_people_int <= 0 or num_people_int > room['capacity']:
+        if num_people_int <= 0:
             return jsonify({
-                'error': f"Number of people must be between 1 and {room['capacity']}",
+                'error': "Number of people must be 1 or more",
                 'fields': ['num_people']
             }), 400
         language = data.get('language', existing_reservation['language'])

@@ -241,6 +241,38 @@ def test_calendar_availability_excludes_idle(client):
     assert cal[0]["reservationCount"] == 0
 
 
+def test_idle_creation_bypasses_conflict(client):
+    login_admin(client)
+    today = datetime.now().strftime('%Y-%m-%d')
+
+    payload = {
+        "date": today,
+        "start_time": "12:00",
+        "end_time": "13:00",
+        "num_people": 2,
+        "contact_name": "ConflictTester",
+        "contact_phone": "555-0200",
+        "contact_email": "",
+        "room_id": 1,
+        "language": "en",
+    }
+
+    first = client.post("/api/reservations", data=json.dumps(payload), content_type="application/json")
+    assert first.status_code == 201
+
+    idle_payload = payload.copy()
+    idle_payload["idle"] = True
+    second = client.post("/api/reservations", data=json.dumps(idle_payload), content_type="application/json")
+    assert second.status_code == 201
+
+    idle_res = second.get_json()["reservation"]
+    assert idle_res.get("in_idle") is True
+    res_id = idle_res["id"]
+    daily = client.get(f"/api/daily_reservations?date={today}").get_json()
+    idle_ids = {r["id"] for r in daily.get("idle_reservations", [])}
+    assert res_id in idle_ids
+
+
 def test_audit_and_history_written(client):
     from services.db import get_db
     login_admin(client)

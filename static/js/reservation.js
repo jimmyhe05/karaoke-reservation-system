@@ -578,12 +578,30 @@ function updateIdleArea(preloadedData = null) {
   const populate = (data) => {
     console.log("Received data for idle area:", data);
 
+    const roomReservationIds = new Set();
+    if (data.rooms) {
+      data.rooms.forEach((room) => {
+        (room.reservations || []).forEach((res) => {
+          if (res && res.id !== undefined && res.id !== null) {
+            roomReservationIds.add(res.id);
+          }
+        });
+      });
+    }
+
     // Check if there are idle reservations in the response
-    if (data.idle_reservations && data.idle_reservations.length > 0) {
-      console.log(`Found ${data.idle_reservations.length} idle reservations`);
+    const idleReservations = (data.idle_reservations || []).filter(
+      (reservation) => !roomReservationIds.has(reservation.id)
+    );
+
+    const seenIdleIds = new Set();
+    if (idleReservations.length > 0) {
+      console.log(`Found ${idleReservations.length} idle reservations`);
 
       // For each idle reservation, create a reservation card
-      data.idle_reservations.forEach((reservation) => {
+      idleReservations.forEach((reservation) => {
+        if (seenIdleIds.has(reservation.id)) return;
+        seenIdleIds.add(reservation.id);
         console.log("Creating idle card for reservation:", reservation);
 
         // Convert the reservation data to the format expected by createIdleReservationCard
@@ -598,7 +616,9 @@ function updateIdleArea(preloadedData = null) {
           start_time: reservation.start_time,
           end_time: reservation.end_time,
         };
-        createIdleReservationCard(formattedReservation, idleArea);
+        if (!idleArea.querySelector(`[data-reservation-id="${reservation.id}"]`)) {
+          createIdleReservationCard(formattedReservation, idleArea);
+        }
       });
 
       // Stack the cards
@@ -924,7 +944,27 @@ function initQuickDurationButtons() {
       const hours = parseFloat(this.dataset.hours || this.textContent);
       if (!window.startTimePicker || !window.endTimePicker) return;
 
-      const startDate = window.startTimePicker.selectedDates[0];
+      let startDate = window.startTimePicker.selectedDates[0];
+      if (!startDate) {
+        const startInput = document.getElementById("start_time");
+        if (startInput?.value) {
+          const [rawHour, rawMinute] = startInput.value
+            .split(":")
+            .map((val) => parseInt(val, 10));
+          if (!isNaN(rawHour)) {
+            const base = new Date();
+            base.setHours(0, 0, 0, 0);
+            const hour = rawHour >= 24 ? rawHour - 24 : rawHour;
+            base.setHours(hour, rawMinute || 0, 0, 0);
+            if (rawHour >= 24) {
+              base.setDate(base.getDate() + 1);
+            }
+            startDate = base;
+            window.startTimePicker.setDate(startDate, false);
+          }
+        }
+      }
+
       if (!startDate) return;
 
       // Calculate new end time
@@ -1228,46 +1268,24 @@ function updateCurrentTimeIndicator() {
     timeIndicator.className = "current-time-indicator";
     timeIndicator.setAttribute("data-timestamp", now.getTime());
 
-    // Find the corresponding time slot
-    let displayHour = currentHour;
-    if (currentHour >= 0 && currentHour < 1) {
-      displayHour = currentHour + 24;
-    }
-
-    // Find the time slot for the current hour
-    let timeSlot = timeline.querySelector(
-      `.time-slot[data-hour="${displayHour}"]`
-    );
-
-    if (!timeSlot) {
-      // If we can't find the exact hour, find the closest one
-      const timeSlots = timeline.querySelectorAll(".time-slot");
-      let closestSlot = null;
-      let minDistance = Infinity;
-
-      timeSlots.forEach((slot) => {
-        const slotHour = parseInt(slot.dataset.hour);
-        const distance = Math.abs(slotHour - displayHour);
-
-        if (distance < minDistance) {
-          minDistance = distance;
-          closestSlot = slot;
-        }
-      });
-
-      timeSlot = closestSlot;
-    }
-
-    if (!timeSlot) {
-      console.error(`No time slot found for hour ${displayHour}`);
+    const firstSlot = timeline.querySelector(".time-slot");
+    if (!firstSlot) {
+      console.error("No time slots found for indicator");
       return;
     }
 
-    // Calculate position
-    const slotTop = timeSlot.offsetTop;
-    const intervalH = getIntervalHeight();
-    const minuteOffset = (currentMinute / 60) * (intervalH * 2); // hour = 2 intervals
-    const topPosition = slotTop + minuteOffset;
+    const paddingTop = parseFloat(
+      getComputedStyle(timeline).getPropertyValue("padding-top") || "0"
+    );
+    const intervalH = firstSlot.offsetHeight || getIntervalHeight();
+
+    // Convert to minutes since 11:00 (supports after-midnight hours)
+    let displayHour = currentHour;
+    if (currentHour >= 0 && currentHour < 11) {
+      displayHour = currentHour + 24;
+    }
+    const minutesSinceOpen = displayHour * 60 + currentMinute - 11 * 60;
+    const topPosition = paddingTop + (minutesSinceOpen / 30) * intervalH;
 
     // Set the position
     timeIndicator.style.top = `${topPosition}px`;
@@ -1334,7 +1352,14 @@ function showNewReservationModal(hour, minute, roomId, selectedDate) {
     dateStr = selectedDate.toISOString().split("T")[0];
   }
   document.getElementById("date").value = dateStr;
-  document.getElementById("room_id").value = roomId;
+  const roomSelect = document.getElementById("room_id");
+  if (roomSelect) {
+    roomSelect.value = roomId;
+    const modalEl = document.getElementById("reservationModal");
+    if (modalEl) {
+      modalEl.dataset.inIdle = roomSelect.value === "idle" ? "true" : "false";
+    }
+  }
 
   // Format the hour for display (handle after midnight cases)
   let displayHour = parseInt(hour);
@@ -1363,6 +1388,10 @@ function showNewReservationModal(hour, minute, roomId, selectedDate) {
 
 // Refactored function to open modal for editing
 function openModalForEditing(reservationId) {
+  const cardEl = document.querySelector(
+    `.reservation-card[data-reservation-id="${reservationId}"]`
+  );
+  const inIdle = !!cardEl?.closest(".idle-drop-area");
   if (!reservationId || reservationId === "undefined") {
     console.error("Invalid reservation ID for editing");
     return;
@@ -1400,6 +1429,10 @@ function openModalForEditing(reservationId) {
         document.getElementById("end_time").value = data.end_time;
       }
       document.getElementById("room_id").value = data.room_id;
+      const roomSelect = document.getElementById("room_id");
+      if (roomSelect && inIdle) {
+        roomSelect.value = "idle";
+      }
       document.getElementById("num_people").value = data.num_people;
       document.getElementById("contact_name").value = data.contact_name;
       document.getElementById("contact_phone").value = data.contact_phone;
@@ -1408,6 +1441,11 @@ function openModalForEditing(reservationId) {
       // Add notes if the field exists in the modal
       const notesField = document.getElementById("notes");
       if (notesField) notesField.value = data.notes || "";
+
+      const modalEl = document.getElementById("reservationModal");
+      if (modalEl) {
+        modalEl.dataset.inIdle = inIdle ? "true" : "false";
+      }
 
       // Show the delete button
       document.getElementById("delete-reservation-btn").style.display = "block";
@@ -1642,6 +1680,7 @@ document.addEventListener("DOMContentLoaded", function () {
   const loginModal = loginModalEl ? new bootstrap.Modal(loginModalEl) : null;
   const reservationModalEl = document.getElementById("reservationModal");
   const guestBtn = document.getElementById("guest-btn");
+  const newReservationBtn = document.getElementById("new-reservation-btn");
 
   // Prevent stuck backdrops when closing any modal
   const cleanupBackdrops = () => {
@@ -1699,7 +1738,30 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
+  if (newReservationBtn) {
+    newReservationBtn.addEventListener("click", () => {
+      if (!window.isAdmin) {
+        showToast("Admin login required", "error");
+        return;
+      }
+      const selectedDate =
+        window.calendarEl?.dataset?.selectedDate ||
+        window.currentSelectedDate ||
+        window.initialSelectedDate ||
+        document.getElementById("date")?.value ||
+        new Date().toISOString().split("T")[0];
+      const firstRoom = document.querySelector(
+        ".room-container[data-room-id]"
+      );
+      const roomId = firstRoom?.dataset?.roomId || "1";
+      showNewReservationModal(11, 0, roomId, selectedDate);
+    });
+  }
+
   fetchAuthStatus().then((me) => setAuthUI(!!me.is_admin));
+
+  // Wire duration shortcuts once on load
+  initQuickDurationButtons();
 
   // Initialize drag and drop
   initDragAndDrop();

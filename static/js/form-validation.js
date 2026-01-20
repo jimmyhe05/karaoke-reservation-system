@@ -234,6 +234,17 @@ function handleReservationSubmit(event) {
     : "/reservation"; // Use /reservation for creation
   const method = "POST"; // Always POST for both create and update in this setup
 
+  // Handle idle selection by mapping to a valid room id and deferring idle state
+  const roomSelect = form.querySelector("#room_id");
+  const idleSelected = roomSelect && roomSelect.value === "idle";
+  const modalEl = document.getElementById("reservationModal");
+  const wasIdle = modalEl?.dataset?.inIdle === "true";
+  if (idleSelected) {
+    const fallbackRoom = roomSelect?.querySelector('option[value]:not([value="idle"])');
+    jsonData["room_id"] = fallbackRoom ? fallbackRoom.value : "1";
+    jsonData["idle"] = true;
+  }
+
   // Show loading state
   const submitButton = form.querySelector('button[type="submit"]');
   const originalText = submitButton.innerHTML;
@@ -294,11 +305,33 @@ function handleReservationSubmit(event) {
       // Refresh the view (timelines and idle area)
       const dateInput = document.getElementById("date");
       const date = (dateInput && dateInput.value) || jsonData.date;
-      if (date && typeof window.updateRoomTimelines === "function")
-        window.updateRoomTimelines(date);
-      if (typeof window.updateIdleArea === "function") window.updateIdleArea();
-      if (typeof window.refreshCalendarAvailability === "function")
-        window.refreshCalendarAvailability();
+      const finalizeRefresh = () => {
+        if (typeof window.updateRoomTimelines === "function" && date)
+          window.updateRoomTimelines(date);
+        if (typeof window.updateIdleArea === "function") window.updateIdleArea();
+        if (typeof window.refreshCalendarAvailability === "function")
+          window.refreshCalendarAvailability();
+      };
+
+      if (idleSelected) {
+        if (data.reservation?.in_idle) {
+          finalizeRefresh();
+        } else {
+          fetch(`/move_to_idle/${data.reservation?.id || reservationId}`, {
+            method: "POST",
+          })
+            .then(() => finalizeRefresh())
+            .catch(() => finalizeRefresh());
+        }
+      } else if (wasIdle) {
+        fetch(`/remove_from_idle/${data.reservation?.id || reservationId}`, {
+          method: "POST",
+        })
+          .then(() => finalizeRefresh())
+          .catch(() => finalizeRefresh());
+      } else {
+        finalizeRefresh();
+      }
     })
     .catch((error) => {
       console.error("Error saving reservation:", error);

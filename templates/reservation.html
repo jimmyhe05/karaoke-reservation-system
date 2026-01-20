@@ -26,6 +26,7 @@
             </h1>
             <div class="header-actions">
                 <div class="admin-status badge bg-secondary me-2" id="admin-status">Not signed in</div>
+                <button id="new-reservation-btn" class="btn btn-sm btn-outline-light me-2">New Reservation</button>
                 <button id="login-btn" class="btn btn-sm btn-outline-light me-2">Login</button>
                 <button id="guest-btn" class="btn btn-sm btn-outline-light me-2">Guest view</button>
                 <button id="logout-btn" class="btn btn-sm btn-outline-light d-none">Logout</button>
@@ -145,6 +146,7 @@
                                                 <span class="en">Room</span>
                                             </label>
                                             <select id="room_id" name="room_id" class="form-control">
+                                                <option value="idle">Idle</option>
                                                 {% for room in rooms %}
                                                 <option value="{{ room.id }}">Room {{ room.id }}</option>
                                                 {% endfor %}
