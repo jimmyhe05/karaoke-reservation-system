@@ -17,21 +17,17 @@ from services.validation import (
 )
 from services.validation import slots_overlap  # noqa: F401 (re-export for tests)
 from services.pricing import compute_pricing as compute_pricing_service, calculate_cost as calculate_cost_service
-from services.blackout import is_blackout as is_blackout_service
 from services.reservations import (
-    fetch_idle_set,
     serialize_reservation_row,
     validate_room_capacity,
     is_blackout,
     create_reservation_api_payload,
-    update_reservation_api_payload,
-    delete_reservation_api_payload,
     log_action,
     record_reservation_history,
     get_today_stats,
 )
 from routes.api import api_bp
-from services.http import api_error, api_ok, require_admin
+from services.http import api_error, api_ok
 
 
 app = Flask(__name__)
@@ -80,8 +76,36 @@ def configure_logging(flask_app: Flask):
 
 configure_logging(app)
 
-if not app.config['SECRET_KEY']:
-    raise RuntimeError("SECRET_KEY must be set (see .env)")
+
+def validate_security_config(flask_app: Flask):
+    """Fail closed in production when unsafe placeholder credentials are active."""
+    if not flask_app.config['SECRET_KEY']:
+        raise RuntimeError("SECRET_KEY must be set (see .env)")
+    if flask_app.config.get('TESTING'):
+        return
+
+    weak_values = {
+        'SECRET_KEY': {'dev-change-me', 'change-me', 'change-me-in-prod', 'karaoke'},
+        'ADMIN_PASSWORD': {'admin', 'password', 'change-me', 'change-me-in-prod'},
+        'STAFF_PASSWORD': {'staff', 'password', 'change-me', 'change-me-in-prod'},
+    }
+    weak_keys = [
+        key for key, placeholders in weak_values.items()
+        if str(flask_app.config.get(key, '')).strip() in placeholders
+    ]
+    if not weak_keys:
+        return
+
+    message = (
+        "Unsafe placeholder configuration detected for "
+        f"{', '.join(weak_keys)}. Update .env before deploying."
+    )
+    if flask_app.config.get('APP_ENV') in {'prod', 'production'}:
+        raise RuntimeError(message)
+    flask_app.logger.warning(message)
+
+
+validate_security_config(app)
 
 TAX_RATE = app.config['TAX_RATE']
 DATABASE = app.config['DATABASE']
@@ -90,13 +114,11 @@ DATABASE = app.config['DATABASE']
 OPEN_HOUR = 11
 CLOSE_HOUR = 1
 
-# Add these constants at the top of the file
 ROOMS = [
     {'id': 1, 'name': 'Room 1'},
     {'id': 2, 'name': 'Room 2'},
     {'id': 3, 'name': 'Room 3'}
 ]
-
 
 
 @app.before_request
@@ -295,7 +317,7 @@ def is_room_available(room_id, start_time, end_time, exclude_id=None):
 
 def calculate_cost(start_time, end_time, room_id):
     pricing = compute_pricing_service(get_db(), room_id, start_time, end_time, TAX_RATE)
-    return pricing['subtotal']
+    return pricing['total']
 
 
 def get_rooms_with_reservations(selected_date=None):
@@ -519,7 +541,7 @@ def get_daily_reservations():
     return jsonify(result)
 
 
-#! API routes moved to routes/api.py blueprint
+# API routes moved to routes/api.py blueprint
 
 
 @app.route('/')
@@ -722,13 +744,11 @@ def update_reservation(reservation_id):
         except Exception:
             return jsonify({'error': 'Invalid number of people', 'fields': ['num_people']}), 400
 
-        room = conn.execute('SELECT capacity FROM rooms WHERE id = ?', (room_id,)).fetchone()
-        if not room:
-            return jsonify({'error': 'Invalid room id', 'fields': ['room_id']}), 400
-        if num_people_int <= 0:
+        ok, msg, room = validate_room_capacity(conn, room_id, num_people_int)
+        if not ok:
             return jsonify({
-                'error': "Number of people must be 1 or more",
-                'fields': ['num_people']
+                'error': msg,
+                'fields': ['room_id', 'num_people']
             }), 400
         language = data.get('language', existing_reservation['language'])
         notes = data.get('notes', existing_reservation['notes'])
@@ -1137,9 +1157,14 @@ def check_room_availability():
 
         # Get booked rooms for the date
         booked_rooms = conn.execute('''
-            SELECT DISTINCT room_id
-            FROM reservations
-            WHERE date = ?
+            SELECT DISTINCT r.room_id
+            FROM reservations r
+            WHERE r.date = ?
+              AND r.status != 'cancelled'
+              AND NOT EXISTS (
+                SELECT 1 FROM idle_reservations i
+                WHERE i.reservation_id = r.id AND i.date = r.date
+              )
         ''', (date,)).fetchall()
         booked_room_ids = [room['room_id'] for room in booked_rooms]
 

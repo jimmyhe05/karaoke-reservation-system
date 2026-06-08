@@ -241,6 +241,39 @@ def test_calendar_availability_excludes_idle(client):
     assert cal[0]["reservationCount"] == 0
 
 
+def test_room_availability_excludes_idle(client):
+    login_admin(client)
+    today = datetime.now().strftime('%Y-%m-%d')
+    payload = {
+        "date": today,
+        "start_time": "12:00",
+        "end_time": "13:00",
+        "num_people": 2,
+        "contact_name": "RoomIdle",
+        "contact_phone": "555-0111",
+        "contact_email": "",
+        "room_id": 1,
+        "language": "en",
+        "notes": ""
+    }
+
+    create_resp = client.post("/reservation", data=json.dumps(payload), content_type="application/json")
+    assert create_resp.status_code == 200
+    res_id = client.get(f"/api/daily_reservations?date={today}").get_json()["rooms"][0]["reservations"][0]["id"]
+    assert client.post(f"/move_to_idle/{res_id}").status_code == 200
+
+    availability = client.get(f"/api/room_availability?date={today}").get_json()
+    assert availability["available_rooms"] == [1, 2, 3]
+    assert availability["booked_rooms"] == 0
+
+
+def test_rendered_timeline_does_not_show_invalid_130_am_slot(client):
+    response = client.get(f"/{datetime.now().strftime('%m-%d-%Y')}")
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert ">1:30 AM<" not in html
+
+
 def test_idle_creation_bypasses_conflict(client):
     login_admin(client)
     today = datetime.now().strftime('%Y-%m-%d')

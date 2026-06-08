@@ -16,6 +16,7 @@ class Config:
     - ADMIN_USERNAME / ADMIN_PASSWORD: Simple admin auth gate for mutating routes
     """
 
+    APP_ENV = os.getenv("APP_ENV", os.getenv("FLASK_ENV", "development")).lower()
     SECRET_KEY = os.getenv("SECRET_KEY", "dev-change-me")
     DATABASE = os.getenv("DATABASE", "karaoke.db")
     TAX_RATE = float(os.getenv("TAX_RATE", "0.055"))
@@ -42,3 +43,9 @@ class Config:
     # Flask settings
     DEBUG = os.getenv("FLASK_DEBUG", "false").lower() == "true"
     TESTING = False
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = os.getenv("SESSION_COOKIE_SAMESITE", "Lax")
+    SESSION_COOKIE_SECURE = os.getenv(
+        "SESSION_COOKIE_SECURE",
+        "true" if APP_ENV in {"prod", "production"} else "false",
+    ).lower() == "true"

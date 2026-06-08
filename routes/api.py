@@ -173,9 +173,14 @@ def check_room_availability():
         room_ids = [room['id'] for room in rooms]
 
         booked_rooms = conn.execute('''
-            SELECT DISTINCT room_id
-            FROM reservations
-            WHERE date = ?
+            SELECT DISTINCT r.room_id
+            FROM reservations r
+            WHERE r.date = ?
+              AND r.status != 'cancelled'
+              AND NOT EXISTS (
+                SELECT 1 FROM idle_reservations i
+                WHERE i.reservation_id = r.id AND i.date = r.date
+              )
         ''', (date,)).fetchall()
         booked_room_ids = [room['room_id'] for room in booked_rooms]
 
@@ -201,7 +206,12 @@ def api_calendar_availability():
         start_date = end_date = single_date
 
     if not start_date or not end_date:
-        return api_error('Start and end date parameters are required', 400, code='validation_error', fields=['start', 'end'])
+        return api_error(
+            'Start and end date parameters are required',
+            400,
+            code='validation_error',
+            fields=['start', 'end'],
+        )
 
     try:
         start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()

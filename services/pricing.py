@@ -3,7 +3,7 @@ from services.validation import time_to_minutes
 
 def calculate_cost(conn, room_id, start_time_str, end_time_str, tax_rate):
     pricing = compute_pricing(conn, room_id, start_time_str, end_time_str, tax_rate)
-    return pricing['subtotal']
+    return pricing['total']
 
 
 def compute_pricing(conn, room_id, start_time_str, end_time_str, tax_rate):

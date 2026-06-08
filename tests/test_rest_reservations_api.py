@@ -75,6 +75,20 @@ def test_create_list_get_success(client):
     assert detail_body['id'] == created['id']
 
 
+def test_create_preserves_notes_and_total_cost_includes_tax(client):
+    login_admin(client)
+    create = client.post(
+        '/api/reservations',
+        data=json.dumps(sample_payload(notes='Birthday setup')),
+        content_type='application/json',
+    )
+
+    assert create.status_code == 201
+    created = create.get_json()['reservation']
+    assert created['notes'] == 'Birthday setup'
+    assert created['total_cost'] == pytest.approx(36.93)
+
+
 def test_conflict_returns_409(client):
     login_admin(client)
     today = datetime.now().strftime('%Y-%m-%d')

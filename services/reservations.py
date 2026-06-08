@@ -63,6 +63,8 @@ def validate_room_capacity(conn, room_id, num_people):
         return False, f"Invalid room id {room_id}", room
     if num_people <= 0:
         return False, "Number of people must be 1 or more", room
+    if num_people > room['capacity']:
+        return False, f"Room capacity is {room['capacity']} people", room
     return True, None, room
 
 
@@ -181,8 +183,8 @@ def create_reservation_api_payload(
         '''INSERT INTO reservations
            (date, start_time, end_time, num_people,
             contact_name, contact_phone, contact_email, room_id,
-            total_cost, language)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+            total_cost, language, notes)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
         (
             data.get('date'),
             normalized_start,
@@ -194,6 +196,7 @@ def create_reservation_api_payload(
             room_id,
             total_cost,
             data.get('language', 'en'),
+            data.get('notes', ''),
         )
     )
     if idle_selected:

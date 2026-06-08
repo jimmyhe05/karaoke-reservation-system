@@ -617,23 +617,32 @@ function showToast(message, type = "info") {
   toast.setAttribute("aria-live", "assertive");
   toast.setAttribute("aria-atomic", "true");
 
-  let icon = "";
+  let iconClass = "";
   if (type === "success") {
-    icon = '<i class="fas fa-check-circle me-2"></i>'; // Using Font Awesome example
+    iconClass = "fas fa-check-circle me-2";
   } else if (type === "error") {
-    icon = '<i class="fas fa-times-circle me-2"></i>';
+    iconClass = "fas fa-times-circle me-2";
   } else if (type === "info") {
-    icon = '<i class="fas fa-info-circle me-2"></i>';
+    iconClass = "fas fa-info-circle me-2";
   }
 
-  toast.innerHTML = `
-        <div class="d-flex">
-            <div class="toast-body">
-                ${icon}${message}
-            </div>
-            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
-        </div>
-    `;
+  const wrapper = document.createElement("div");
+  wrapper.className = "d-flex";
+  const body = document.createElement("div");
+  body.className = "toast-body";
+  if (iconClass) {
+    const icon = document.createElement("i");
+    icon.className = iconClass;
+    body.appendChild(icon);
+  }
+  body.appendChild(document.createTextNode(message || ""));
+  const closeButton = document.createElement("button");
+  closeButton.type = "button";
+  closeButton.className = "btn-close btn-close-white me-2 m-auto";
+  closeButton.setAttribute("data-bs-dismiss", "toast");
+  closeButton.setAttribute("aria-label", "Close");
+  wrapper.append(body, closeButton);
+  toast.appendChild(wrapper);
 
   toastContainer.appendChild(toast);
 

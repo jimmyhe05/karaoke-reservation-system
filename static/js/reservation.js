@@ -1,6 +1,7 @@
 // Toast notification function - make it globally accessible
 window.showToast = function (message, type = "success") {
   const toastContainer = document.querySelector(".toast-container");
+  if (!toastContainer) return;
 
   // Create toast element
   const toast = document.createElement("div");
@@ -16,11 +17,14 @@ window.showToast = function (message, type = "success") {
     icon = "ℹ";
   }
 
-  // Create toast content
-  toast.innerHTML = `
-        <div class="toast-icon">${icon}</div>
-        <div class="toast-message">${message}</div>
-    `;
+  // Create toast content safely; messages can include server-provided text.
+  const iconEl = document.createElement("div");
+  iconEl.className = "toast-icon";
+  iconEl.textContent = icon;
+  const messageEl = document.createElement("div");
+  messageEl.className = "toast-message";
+  messageEl.textContent = message || "";
+  toast.append(iconEl, messageEl);
 
   // Add toast to container
   toastContainer.appendChild(toast);
@@ -86,7 +90,12 @@ function setLoading(isLoading, message = "Loading...") {
   if (!overlay) {
     overlay = document.createElement("div");
     overlay.id = "loading-overlay";
-    overlay.innerHTML = `<div class="loading-spinner" role="status" aria-live="polite">${message}</div>`;
+    const spinner = document.createElement("div");
+    spinner.className = "loading-spinner";
+    spinner.setAttribute("role", "status");
+    spinner.setAttribute("aria-live", "polite");
+    spinner.textContent = message;
+    overlay.appendChild(spinner);
     document.body.appendChild(overlay);
   }
 
@@ -115,6 +124,44 @@ function timeStringToMinutes(t) {
   const hours = parseInt(h, 10);
   const mins = parseInt(m, 10) || 0;
   return hours * 60 + mins;
+}
+
+function buildReservationCardContent(card, reservation, displayStartTime, displayEndTime, languageDisplay = "") {
+  const timeIndicator = document.createElement("div");
+  timeIndicator.className = "time-indicator";
+  const timeRange = document.createElement("span");
+  timeRange.className = "time-range";
+  timeRange.textContent = `${displayStartTime} - ${displayEndTime}`;
+  timeIndicator.appendChild(timeRange);
+
+  const content = document.createElement("div");
+  content.className = "content";
+
+  const nameRow = document.createElement("div");
+  nameRow.className = "name-row";
+  const name = document.createElement("strong");
+  name.textContent = reservation.name || "";
+  const people = document.createElement("span");
+  people.className = "people-count";
+  people.textContent = `${reservation.people || 0} ppl`;
+  nameRow.append(name, people);
+  content.appendChild(nameRow);
+
+  if (languageDisplay) {
+    const language = document.createElement("div");
+    language.className = "language";
+    language.textContent = languageDisplay;
+    content.appendChild(language);
+  }
+
+  if (reservation.notes) {
+    const notes = document.createElement("div");
+    notes.className = "notes";
+    notes.textContent = reservation.notes;
+    content.appendChild(notes);
+  }
+
+  card.replaceChildren(timeIndicator, content);
 }
 
 // Handle reservation moves between containers
@@ -449,28 +496,29 @@ function updateRoomTimelines(date) {
         // Clear the existing time slots (leave static labels outside untouched)
         roomTimeline.innerHTML = "";
 
-        // Create time slots from 11:00 to 01:00 (next day)
-        for (let hour = 11; hour <= 25; hour++) {
-          for (let minute = 0; minute < 60; minute += 30) {
-            const displayHour = hour % 24;
-            const ampm = displayHour >= 12 ? "PM" : "AM";
-            const hour12 = displayHour % 12 || 12;
-            const timeLabel = `${hour12}:${
-              minute === 0 ? "00" : minute
-            } ${ampm}`;
-            const timeValue = `${displayHour.toString().padStart(2, "0")}:${
-              minute === 0 ? "00" : minute
-            }`;
+        // Create valid reservation start slots from 11:00 through 00:30.
+        // 01:00 is the closing boundary, not a start slot.
+        for (let slotIndex = 0; slotIndex < 28; slotIndex++) {
+          const hour = 11 + Math.floor(slotIndex / 2);
+          const minute = slotIndex % 2 ? 30 : 0;
+          const displayHour = hour % 24;
+          const ampm = displayHour >= 12 ? "PM" : "AM";
+          const hour12 = displayHour % 12 || 12;
+          const timeLabel = `${hour12}:${
+            minute === 0 ? "00" : minute
+          } ${ampm}`;
+          const timeValue = `${displayHour.toString().padStart(2, "0")}:${
+            minute === 0 ? "00" : minute
+          }`;
 
-            const timeSlot = document.createElement("div");
-            timeSlot.className = "time-slot";
-            timeSlot.dataset.time = timeValue;
-            timeSlot.dataset.hour = hour.toString();
-            timeSlot.dataset.minute = minute.toString();
+          const timeSlot = document.createElement("div");
+          timeSlot.className = "time-slot";
+          timeSlot.dataset.time = timeValue;
+          timeSlot.dataset.hour = hour.toString();
+          timeSlot.dataset.minute = minute.toString();
 
-            // We only display a single time column elsewhere; keep slots label-free
-            roomTimeline.appendChild(timeSlot);
-          }
+          // We only display a single time column elsewhere; keep slots label-free
+          roomTimeline.appendChild(timeSlot);
         }
 
         // Find the room data in the response
@@ -740,23 +788,7 @@ function createReservationCard(reservation, roomTimeline) {
   const displayEndTime =
     typeof formatTime === "function" ? formatTime(endHour, endMinute) : endTime;
 
-  // Set the card content
-  card.innerHTML = `
-        <div class="time-indicator">
-            <span class="time-range">${displayStartTime} - ${displayEndTime}</span>
-        </div>
-        <div class="content">
-            <div class="name-row">
-                <strong>${reservation.name}</strong>
-                <span class="people-count">${reservation.people} ppl</span>
-            </div>
-            ${
-              reservation.notes
-                ? `<div class="notes">${reservation.notes}</div>`
-                : ""
-            }
-        </div>
-    `;
+  buildReservationCardContent(card, reservation, displayStartTime, displayEndTime);
 
   // Set the card position and size
   card.style.top = `${top}px`;
@@ -851,28 +883,13 @@ function createIdleReservationCard(reservation, idleArea) {
       languageDisplay = "";
   }
 
-  // Set the card content
-  card.innerHTML = `
-        <div class="time-indicator">
-            <span class="time-range">${displayStartTime} - ${displayEndTime}</span>
-        </div>
-        <div class="content">
-            <div class="name-row">
-                <strong>${reservation.name}</strong>
-                <span class="people-count">${reservation.people} ppl</span>
-            </div>
-            ${
-              languageDisplay
-                ? `<div class="language">${languageDisplay}</div>`
-                : ""
-            }
-            ${
-              reservation.notes
-                ? `<div class="notes">${reservation.notes}</div>`
-                : ""
-            }
-        </div>
-    `;
+  buildReservationCardContent(
+    card,
+    reservation,
+    displayStartTime,
+    displayEndTime,
+    languageDisplay
+  );
 
   // Add the card to the idle area
   idleArea.appendChild(card);
@@ -1087,27 +1104,39 @@ function updatePriceEstimate() {
     // Update period charges
     const periodChargesContainer = document.getElementById("period-charges");
     if (periodChargesContainer && periodCharges.length > 0) {
-      const periodChargesHtml = periodCharges
-        .map((charge) => {
-          return `
-          <div class="period-charge">
-            <div class="period-charge-row">
-              <div class="period-label">${charge.label}</div>
-              <div class="period-amount">$${charge.amount.toFixed(2)}</div>
-            </div>
-            <div class="period-details">
-              $${charge.rate}/hr × ${charge.duration} ${
-            charge.duration === 1 ? "hour" : "hours"
-          }
-            </div>
-          </div>
-        `;
-        })
-        .join("");
-      periodChargesContainer.innerHTML = periodChargesHtml;
+      periodChargesContainer.replaceChildren();
+      periodCharges.forEach((charge) => {
+        const periodCharge = document.createElement("div");
+        periodCharge.className = "period-charge";
+
+        const row = document.createElement("div");
+        row.className = "period-charge-row";
+
+        const label = document.createElement("div");
+        label.className = "period-label";
+        label.textContent = charge.label;
+
+        const amount = document.createElement("div");
+        amount.className = "period-amount";
+        amount.textContent = `$${charge.amount.toFixed(2)}`;
+
+        row.append(label, amount);
+
+        const details = document.createElement("div");
+        details.className = "period-details";
+        details.textContent = `$${charge.rate}/hr x ${charge.duration} ${
+          charge.duration === 1 ? "hour" : "hours"
+        }`;
+
+        periodCharge.append(row, details);
+        periodChargesContainer.appendChild(periodCharge);
+      });
     } else {
-      periodChargesContainer.innerHTML =
-        '<div class="no-charges">No charges calculated</div>';
+      periodChargesContainer.replaceChildren();
+      const noCharges = document.createElement("div");
+      noCharges.className = "no-charges";
+      noCharges.textContent = "No charges calculated";
+      periodChargesContainer.appendChild(noCharges);
     }
 
     // Log the calculation for debugging
