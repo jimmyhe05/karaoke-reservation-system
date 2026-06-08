@@ -10,7 +10,8 @@ class Config:
     """Central application configuration.
 
     - SECRET_KEY: Flask session/signing key (set in .env for prod)
-    - DATABASE: SQLite file path
+    - DATABASE_URL: PostgreSQL connection URL for production
+    - DATABASE: SQLite file path used when DATABASE_URL is not set
     - TAX_RATE: Sales tax rate as float (e.g., 0.055 for 5.5%)
     - LOG_LEVEL: Logging level (DEBUG, INFO, WARNING, ERROR)
     - ADMIN_USERNAME / ADMIN_PASSWORD: Simple admin auth gate for mutating routes
@@ -18,6 +19,7 @@ class Config:
 
     APP_ENV = os.getenv("APP_ENV", os.getenv("FLASK_ENV", "development")).lower()
     SECRET_KEY = os.getenv("SECRET_KEY", "dev-change-me")
+    DATABASE_URL = os.getenv("DATABASE_URL")
     DATABASE = os.getenv("DATABASE", "karaoke.db")
     TAX_RATE = float(os.getenv("TAX_RATE", "0.055"))
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")

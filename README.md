@@ -119,9 +119,32 @@ docker run -p 5000:5000 -v karaoke_data:/data --env DATABASE=/data/karaoke.db ka
 ```
 
 Environment variables you can override:
-- `DATABASE` (default `/data/karaoke.db` in the container)
+- `DATABASE_URL` for production PostgreSQL (recommended)
+- `DATABASE` for local SQLite (default `/data/karaoke.db` in the container)
 - `SECRET_KEY`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`
 - `LOG_LEVEL`, `LOG_FORMAT` (`json` or `text`)
+
+## Production Database
+
+SQLite is still supported for local development, but PostgreSQL is the recommended
+database for hosted customer use.
+
+Set `DATABASE_URL` to switch the app to PostgreSQL:
+
+```bash
+DATABASE_URL=postgresql://user:password@host:5432/database?sslmode=require
+APP_ENV=production
+SESSION_COOKIE_SECURE=true
+```
+
+Then initialize the production schema:
+
+```bash
+python -m flask --app app.py init-db
+```
+
+If `DATABASE_URL` is set, the app uses `schema_postgres.sql`. If it is not set,
+the app falls back to local SQLite using `schema.sql`.
 
 9. **Access the app in your browser**:
    Open http://127.0.0.1:5000.

@@ -14,6 +14,7 @@ from services.validation import (
     parse_time_safe,
     normalize_time_range,
     find_conflict,
+    time_to_minutes,
 )
 from services.validation import slots_overlap  # noqa: F401 (re-export for tests)
 from services.pricing import compute_pricing as compute_pricing_service, calculate_cost as calculate_cost_service
@@ -1080,15 +1081,16 @@ def today_stats():
     total_hours = 14  # 11 AM to 1 AM = 14 hours
     total_room_hours = total_rooms * total_hours
 
-    occupied_hours = conn.execute('''
-        SELECT SUM(
-            CAST(
-                (julianday(end_time) - julianday(start_time)) * 24
-                AS INTEGER)
-        ) as hours
-        FROM reservations
-        WHERE date = ?
-    ''', (today,)).fetchone()['hours'] or 0
+    reservations = conn.execute(
+        '''SELECT start_time, end_time
+           FROM reservations
+           WHERE date = ? AND status != 'cancelled' ''',
+        (today,),
+    ).fetchall()
+    occupied_hours = sum(
+        (time_to_minutes(row['end_time']) - time_to_minutes(row['start_time'])) / 60
+        for row in reservations
+    )
 
     occupancy_rate = round((occupied_hours / total_room_hours) * 100, 1)
 

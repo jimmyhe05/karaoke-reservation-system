@@ -2,9 +2,9 @@ from datetime import datetime
 import json
 from flask import current_app, request, session
 
-from services.db import get_db
+from services.db import get_db, is_postgres_connection
 from services.blackout import is_blackout as is_blackout_service
-from services.validation import normalize_time_range, find_conflict
+from services.validation import normalize_time_range, find_conflict, time_to_minutes
 from services.pricing import calculate_cost
 
 
@@ -179,45 +179,50 @@ def create_reservation_api_payload(
 
     total_cost = calculate_cost(conn, room_id, normalized_start, normalized_end, current_app.config['TAX_RATE'])
 
-    cursor = conn.execute(
-        '''INSERT INTO reservations
-           (date, start_time, end_time, num_people,
-            contact_name, contact_phone, contact_email, room_id,
-            total_cost, language, notes)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-        (
-            data.get('date'),
-            normalized_start,
-            normalized_end,
-            num_people,
-            data.get('contact_name'),
-            data.get('contact_phone'),
-            data.get('contact_email', ''),
-            room_id,
-            total_cost,
-            data.get('language', 'en'),
-            data.get('notes', ''),
-        )
+    insert_sql = '''INSERT INTO reservations
+       (date, start_time, end_time, num_people,
+        contact_name, contact_phone, contact_email, room_id,
+        total_cost, language, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'''
+    insert_params = (
+        data.get('date'),
+        normalized_start,
+        normalized_end,
+        num_people,
+        data.get('contact_name'),
+        data.get('contact_phone'),
+        data.get('contact_email', ''),
+        room_id,
+        total_cost,
+        data.get('language', 'en'),
+        data.get('notes', ''),
     )
+    if is_postgres_connection(conn):
+        cursor = conn.execute(f"{insert_sql} RETURNING id", insert_params)
+        reservation_id = cursor.fetchone()['id']
+    else:
+        cursor = conn.execute(insert_sql, insert_params)
+        reservation_id = cursor.lastrowid
+
     if idle_selected:
         conn.execute(
             '''INSERT INTO idle_reservations (reservation_id, date)
                VALUES (?, ?)''',
-            (cursor.lastrowid, data.get('date')),
+            (reservation_id, data.get('date')),
         )
 
     conn.commit()
 
-    new_row = conn.execute('SELECT * FROM reservations WHERE id = ?', (cursor.lastrowid,)).fetchone()
+    new_row = conn.execute('SELECT * FROM reservations WHERE id = ?', (reservation_id,)).fetchone()
     record_reservation_history(
         conn,
-        cursor.lastrowid,
+        reservation_id,
         "created",
         serialize_reservation_row(new_row, in_idle=idle_selected),
     )
     log_action(
         "reservation.create.api",
-        reservation_id=cursor.lastrowid,
+        reservation_id=reservation_id,
         room_id=room_id,
         date=data.get('date'),
         start_time=normalized_start,
@@ -387,15 +392,16 @@ def get_today_stats(conn):
     total_hours = 14  # 11 AM to 1 AM = 14 hours
     total_room_hours = total_rooms * total_hours
 
-    occupied_hours = conn.execute('''
-        SELECT SUM(
-            CAST(
-                (julianday(end_time) - julianday(start_time)) * 24
-                AS INTEGER)
-        ) as hours
-        FROM reservations
-        WHERE date = ?
-    ''', (today,)).fetchone()['hours'] or 0
+    reservations = conn.execute(
+        '''SELECT start_time, end_time
+           FROM reservations
+           WHERE date = ? AND status != 'cancelled' ''',
+        (today,),
+    ).fetchall()
+    occupied_hours = sum(
+        (time_to_minutes(row['end_time']) - time_to_minutes(row['start_time'])) / 60
+        for row in reservations
+    )
 
     occupancy_rate = round((occupied_hours / total_room_hours) * 100, 1)
 

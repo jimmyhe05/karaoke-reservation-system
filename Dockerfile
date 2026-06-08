@@ -24,4 +24,4 @@ ENV FLASK_APP=app.py \
 EXPOSE 5000
 VOLUME ["/data"]
 
-CMD ["flask", "run", "--host=0.0.0.0", "--port=5000"]
+CMD ["sh", "-c", "gunicorn app:app --bind 0.0.0.0:${PORT:-5000}"]

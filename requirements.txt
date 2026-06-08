@@ -1,5 +1,7 @@
 Flask>=2.3,<3.0
 pytest>=8.2,<9.0
 python-dotenv>=1.0,<2.0
+psycopg[binary]>=3.2,<4.0
+gunicorn>=22.0,<23.0
 flake8>=6.0,<7.0
 black>=23.0,<24.0
