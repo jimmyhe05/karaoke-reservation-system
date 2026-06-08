@@ -230,9 +230,9 @@ function handleReservationSubmit(event) {
   // Determine API endpoint (create or update)
   const reservationId = jsonData["reservation_id"];
   const apiUrl = reservationId
-    ? `/update_reservation/${reservationId}`
-    : "/reservation"; // Use /reservation for creation
-  const method = "POST"; // Always POST for both create and update in this setup
+    ? `/api/reservations/${reservationId}`
+    : "/api/reservations";
+  const method = reservationId ? "PATCH" : "POST";
 
   // Handle idle selection by mapping to a valid room id and deferring idle state
   const roomSelect = form.querySelector("#room_id");

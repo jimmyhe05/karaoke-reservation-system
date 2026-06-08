@@ -51,7 +51,12 @@ function initEnhancedCalendar() {
 
       // Fetch availability data for the visible date range
       fetch(`/api/calendar_availability?start=${startDate}&end=${endDate}`)
-        .then((response) => response.json())
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error(`Calendar availability failed: ${response.status}`);
+          }
+          return response.json();
+        })
         .then((data) => {
           // Transform the data into events
           const events = data.map((day) => ({

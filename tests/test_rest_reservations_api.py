@@ -54,6 +54,19 @@ def test_create_requires_admin(client):
     assert resp.status_code == 401
 
 
+def test_create_accepts_json_from_frontend(client):
+    login_admin(client)
+    resp = client.post(
+        '/api/reservations',
+        data=json.dumps(sample_payload(contact_name='Frontend JSON')),
+        content_type='application/json',
+    )
+
+    assert resp.status_code == 201
+    body = resp.get_json()
+    assert body['reservation']['contact_name'] == 'Frontend JSON'
+
+
 def test_create_list_get_success(client):
     login_admin(client)
     create = client.post(
