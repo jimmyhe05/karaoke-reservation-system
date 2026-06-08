@@ -63,6 +63,26 @@ def test_create_reservation_success(client):
     assert data.get("message") == "Reservation created successfully"
 
 
+def test_create_reservation_accepts_form_post(client):
+    login_admin(client)
+    payload = {
+        "date": datetime.now().strftime('%Y-%m-%d'),
+        "start_time": "13:00",
+        "end_time": "14:00",
+        "num_people": 2,
+        "contact_name": "Form Tester",
+        "contact_phone": "555-0104",
+        "contact_email": "",
+        "room_id": 1,
+        "language": "en",
+    }
+
+    resp = client.post("/reservation", data=payload)
+
+    assert resp.status_code == 200
+    assert resp.get_json()["message"] == "Reservation created successfully"
+
+
 def test_conflict_detection(client):
     login_admin(client)
     today = datetime.now().strftime('%Y-%m-%d')

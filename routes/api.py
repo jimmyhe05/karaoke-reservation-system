@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify, session
 
 from services.db import get_db
-from services.http import api_error, api_ok, require_admin
+from services.http import api_error, api_ok, require_admin, request_payload
 from services.validation import parse_time_safe, normalize_time_range, find_conflict
 from flask import current_app
 from services.pricing import compute_pricing
@@ -110,13 +110,13 @@ def api_get_reservation(reservation_id):
 @api_bp.route('/api/reservations', methods=['POST'])
 @require_admin
 def api_create_reservation():
-    return create_reservation_api_payload(request.get_json() or {}, api_error, api_ok)
+    return create_reservation_api_payload(request_payload(), api_error, api_ok)
 
 
 @api_bp.route('/api/reservations/<int:reservation_id>', methods=['PATCH'])
 @require_admin
 def api_update_reservation_route(reservation_id):
-    return update_reservation_api_payload(reservation_id, request.get_json() or {}, api_error, api_ok)
+    return update_reservation_api_payload(reservation_id, request_payload(), api_error, api_ok)
 
 
 @api_bp.route('/api/reservations/<int:reservation_id>', methods=['DELETE'])
@@ -273,7 +273,7 @@ def api_calendar_availability():
 @api_bp.route('/api/price_estimate', methods=['POST'])
 @require_admin
 def price_estimate():
-    payload = request.get_json() or {}
+    payload = request_payload()
     room_id = payload.get('room_id')
     start_time = payload.get('start_time')
     end_time = payload.get('end_time')
@@ -309,7 +309,7 @@ def price_estimate():
 @api_bp.route('/api/room_suggestion', methods=['POST'])
 @require_admin
 def room_suggestion():
-    data = request.get_json() or {}
+    data = request_payload()
     date = data.get('date')
     start_time = data.get('start_time')
     end_time = data.get('end_time')
@@ -339,7 +339,7 @@ def room_suggestion():
 @api_bp.route('/api/alternative_times', methods=['POST'])
 @require_admin
 def alternative_times():
-    data = request.get_json() or {}
+    data = request_payload()
     date = data.get('date')
     start_time = data.get('start_time')
     end_time = data.get('end_time')

@@ -1,5 +1,5 @@
 from functools import wraps
-from flask import jsonify, session
+from flask import jsonify, request, session
 
 
 def api_error(message: str, status: int = 400, code=None, fields=None, details=None):
@@ -21,6 +21,16 @@ def api_ok(data=None, message=None, status: int = 200):
     if data is not None:
         payload.update(data)
     return jsonify(payload), status
+
+
+def request_payload():
+    """Return request data without raising on non-JSON content types."""
+    data = request.get_json(silent=True)
+    if data is not None:
+        return data
+    if request.form:
+        return request.form.to_dict()
+    return {}
 
 
 def require_role(*roles):

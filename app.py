@@ -28,7 +28,7 @@ from services.reservations import (
     get_today_stats,
 )
 from routes.api import api_bp
-from services.http import api_error, api_ok
+from services.http import api_error, api_ok, request_payload
 
 
 app = Flask(__name__)
@@ -584,7 +584,7 @@ def reservation():
     if request.method == 'POST':
         if not is_admin_authenticated():
             return api_error('Admin authentication required', 401, code='auth_required')
-        data = request.get_json() or {}
+        data = request_payload()
         # Reuse shared validator/creator but keep legacy success message/status for compatibility
         return create_reservation_api_payload(
             data,
@@ -670,7 +670,7 @@ def delete_reservation(reservation_id):
 def update_reservation(reservation_id):
     if not is_admin_authenticated():
         return jsonify({'error': 'Admin authentication required'}), 401
-    data = request.get_json()
+    data = request_payload()
     conn = get_db()
 
     try:
@@ -928,7 +928,7 @@ def move_reservation():
     if not is_admin_authenticated():
         return jsonify({'error': 'Admin authentication required'}), 401
     try:
-        data = request.get_json()
+        data = request_payload()
         if not data:
             return jsonify({'error': 'No data provided'}), 400
 
@@ -1258,7 +1258,7 @@ def calendar_availability():
 
 @app.route('/api/price_estimate', methods=['POST'])
 def price_estimate():
-    data = request.get_json()
+    data = request_payload()
     try:
         normalized_start, normalized_end, _, _ = normalize_time_range(
             data['date'], data['start_time'], data['end_time'])
@@ -1280,7 +1280,7 @@ def price_estimate():
 
 @app.route('/api/room_suggestion', methods=['POST'])
 def room_suggestion():
-    data = request.get_json()
+    data = request_payload()
     try:
         num_people = int(data['num_people'])
 
@@ -1315,7 +1315,7 @@ def room_suggestion():
 
 @app.route('/api/alternative_times', methods=['POST'])
 def alternative_times():
-    data = request.get_json()
+    data = request_payload()
     try:
         date = datetime.strptime(data['date'], '%Y-%m-%d').date()
         start_time = datetime.strptime(data['start_time'], '%H:%M').time()
@@ -1371,7 +1371,7 @@ def alternative_times():
 
 @app.route('/login', methods=['POST'])
 def admin_login():
-    data = request.get_json() or {}
+    data = request_payload()
     username = data.get('username')
     password = data.get('password')
     role = None
