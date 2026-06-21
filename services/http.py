@@ -40,12 +40,17 @@ def require_role(*roles):
             role = session.get('role', 'guest')
             if role not in roles:
                 if role == 'guest':
-                    return api_error('Admin authentication required', 401, code='auth_required')
+                    return api_error('Worker login required', 401, code='auth_required')
                 return api_error('Forbidden', 403, code='forbidden')
             return fn(*args, **kwargs)
         return wrapper
     return decorator
 
 
-def require_admin(fn):
-    return require_role('admin')(fn)
+def require_worker(fn):
+    """Allow any authenticated restaurant worker to manage reservations."""
+    return require_role('admin', 'staff')(fn)
+
+
+# Backward-compatible import for extensions using the old helper name.
+require_admin = require_worker

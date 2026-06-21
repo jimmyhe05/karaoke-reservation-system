@@ -301,44 +301,48 @@ function createTooltipContent(dateStr, props) {
 
 // Initialize the enhanced calendar when the DOM is loaded
 document.addEventListener("DOMContentLoaded", function () {
-  // Initialize calendar; we use simple title-based tooltips (CSS) instead of tippy
-  initEnhancedCalendar();
-
-  // Hook day navigation buttons (prev/next day modify selected date)
-  function shiftDay(offset) {
-    const base = new Date(
-      window.currentSelectedDate || new Date().toISOString().split("T")[0]
-    );
-    base.setDate(base.getDate() + offset);
-    const ymd = base.toISOString().split("T")[0];
-    applySelectedDate(ymd);
-  }
-  // Optional month navigation using existing FullCalendar API (if we decide to add buttons later)
+  // Month navigation keeps the selected day when possible so the calendar and
+  // room schedule always describe the same date.
   window.shiftMonth = function (offset) {
     if (window.calendar) {
-      window.calendar.incrementDate({ months: offset });
-      // Keep selected date within new month (set to first day if month changed drastically)
-      const current = window.calendar.getDate();
-      const y = current.getFullYear(),
-        m = String(current.getMonth() + 1).padStart(2, "0");
-      // preserve day if possible else fallback to 01
-      let day = (window.currentSelectedDate || "").split("-")[2] || "01";
-      const tentative = new Date(`${y}-${m}-${day}T00:00:00`);
-      if (tentative.getMonth() + 1 !== current.getMonth() + 1) {
-        day = "01";
-      }
+      const selectedDate =
+        window.currentSelectedDate ||
+        window.calendarEl?.dataset?.selectedDate ||
+        new Date().toISOString().split("T")[0];
+      const [selectedYear, selectedMonth, selectedDay] = selectedDate
+        .split("-")
+        .map(Number);
+
+      // Always calculate from day 1. Moving directly from dates such as July 31
+      // to June would otherwise overflow back into July.
+      const targetMonth = new Date(
+        selectedYear,
+        selectedMonth - 1 + offset,
+        1
+      );
+      const y = targetMonth.getFullYear();
+      const targetMonthIndex = targetMonth.getMonth();
+      const m = String(targetMonthIndex + 1).padStart(2, "0");
+      const lastDayOfMonth = new Date(y, targetMonthIndex + 1, 0).getDate();
+      const day = String(Math.min(selectedDay, lastDayOfMonth)).padStart(2, "0");
       applySelectedDate(`${y}-${m}-${day}`);
     }
   };
-  const prevBtn = document.getElementById("prev-day-btn");
-  const nextBtn = document.getElementById("next-day-btn");
+  const prevMonthBtn = document.getElementById("prev-month-btn");
+  const nextMonthBtn = document.getElementById("next-month-btn");
   const todayBtn = document.getElementById("today-btn");
-  if (prevBtn) prevBtn.addEventListener("click", () => shiftDay(-1));
-  if (nextBtn) nextBtn.addEventListener("click", () => shiftDay(1));
+  if (prevMonthBtn)
+    prevMonthBtn.addEventListener("click", () => window.shiftMonth(-1));
+  if (nextMonthBtn)
+    nextMonthBtn.addEventListener("click", () => window.shiftMonth(1));
   if (todayBtn)
     todayBtn.addEventListener("click", () =>
       applySelectedDate(new Date().toISOString().split("T")[0])
     );
+
+  // Bind controls before calendar setup so a later initialization failure cannot
+  // leave visible navigation buttons inert.
+  initEnhancedCalendar();
 
   // Fallback: if something wipes calendar innerHTML later, re-init
   const observer = new MutationObserver(() => {

@@ -80,8 +80,8 @@ function restackIdleCards() {
 
 // Simple global loading overlay helper
 let loadingCounter = 0;
-// Global auth flag
-window.isAdmin = false;
+// Global worker permission flag (staff and admin share reservation access).
+window.canManageReservations = false;
 function setLoading(isLoading, message = "Loading...") {
   let overlay = document.getElementById("loading-overlay");
   if (!overlay) {
@@ -168,7 +168,10 @@ function buildReservationCardContent(card, reservation, displayStartTime, displa
   card.replaceChildren(timeIndicator, content);
 }
 
-function updateReservationCardAccessibility(card, isAdmin = !!window.isAdmin) {
+function updateReservationCardAccessibility(
+  card,
+  canManage = !!window.canManageReservations
+) {
   if (!card) return;
 
   const guestName = card.querySelector(".name-row strong")?.textContent?.trim() || "Guest";
@@ -176,15 +179,15 @@ function updateReservationCardAccessibility(card, isAdmin = !!window.isAdmin) {
   const timeRange = card.querySelector(".time-range")?.textContent?.trim() || "time unavailable";
   const location = card.dataset.location ||
     (card.dataset.roomId ? `room ${card.dataset.roomId}` : "unassigned queue");
-  const labelPrefix = isAdmin ? "Edit reservation" : "Reservation";
+  const labelPrefix = canManage ? "Edit reservation" : "Reservation";
 
   card.tabIndex = 0;
-  card.setAttribute("role", isAdmin ? "button" : "article");
+  card.setAttribute("role", canManage ? "button" : "article");
   card.setAttribute(
     "aria-label",
     `${labelPrefix} for ${guestName}, ${people}, ${timeRange}, ${location}`
   );
-  card.classList.toggle("is-read-only", !isAdmin);
+  card.classList.toggle("is-read-only", !canManage);
 }
 
 function createIdleEmptyState() {
@@ -194,7 +197,7 @@ function createIdleEmptyState() {
   const title = document.createElement("strong");
   title.textContent = "Everything is assigned";
   const detail = document.createElement("span");
-  detail.textContent = window.isAdmin
+  detail.textContent = window.canManageReservations
     ? "Drag a booking here to remove its room assignment."
     : "No bookings are waiting for a room.";
 
@@ -206,7 +209,7 @@ function updateIdleEmptyStateCopy() {
   const empty = document.querySelector("#idle-area .idle-empty-state");
   const detail = empty?.querySelector("span");
   if (detail) {
-    detail.textContent = window.isAdmin
+    detail.textContent = window.canManageReservations
       ? "Drag a booking here to remove its room assignment."
       : "No bookings are waiting for a room.";
   }
@@ -636,8 +639,8 @@ function timeSlotClickHandler(e) {
   // The timeline owns slot activation. Stop the content-level fallback from
   // opening a second modal for the same click.
   e.stopPropagation();
-  if (!window.isAdmin) {
-    showToast("Staff login required to create a reservation", "info");
+  if (!window.canManageReservations) {
+    showToast("Worker login required to create a reservation", "info");
     return;
   }
 
@@ -1230,7 +1233,7 @@ function updatePriceEstimate() {
 
 // Function to delete a reservation
 window.deleteReservation = function () {
-  if (!requireAdmin()) return;
+  if (!requireWorker()) return;
   console.log(
     "Delete function called, currentReservationId:",
     currentReservationId,
@@ -1832,9 +1835,10 @@ document.addEventListener("DOMContentLoaded", function () {
           '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Logging in…';
       }
       try {
-        await submitLogin(username, password);
-        setAuthUI(true);
-        showToast("Logged in as admin", "success");
+        const loginResult = await submitLogin(username, password);
+        const role = loginResult.role || "guest";
+        setAuthUI(role);
+        showToast(`Logged in as ${role}`, "success");
         loginModal && loginModal.hide();
       } catch (err) {
         showToast(err.message, "error");
@@ -1851,7 +1855,7 @@ document.addEventListener("DOMContentLoaded", function () {
     logoutBtn.addEventListener("click", async () => {
       try {
         await submitLogout();
-        setAuthUI(false);
+        setAuthUI("guest");
         showToast("Logged out", "info");
       } catch (err) {
         showToast(err.message, "error");
@@ -1866,15 +1870,15 @@ document.addEventListener("DOMContentLoaded", function () {
       } catch (err) {
         console.warn("logout (guest) failed", err);
       }
-      setAuthUI(false);
+      setAuthUI("guest");
       showToast("Guest view: read-only schedule", "info");
     });
   }
 
   if (newReservationBtn) {
     newReservationBtn.addEventListener("click", () => {
-      if (!window.isAdmin) {
-        showToast("Admin login required", "error");
+      if (!window.canManageReservations) {
+        showToast("Worker login required", "error");
         return;
       }
       const selectedDate =
@@ -1891,7 +1895,9 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
-  fetchAuthStatus().then((me) => setAuthUI(!!me.is_admin));
+  fetchAuthStatus().then((me) =>
+    setAuthUI(me.role || (me.is_admin ? "admin" : "guest"))
+  );
 
   // Wire duration shortcuts once on load
   initQuickDurationButtons();
@@ -1929,49 +1935,64 @@ window.initCurrentTimeIndicator = initCurrentTimeIndicator;
 window.showNewReservationModal = showNewReservationModal;
 window.refreshCalendarAvailability = refreshCalendarAvailability;
 
-// ---- Admin auth helpers ----
+// ---- Worker auth helpers ----
 async function fetchAuthStatus() {
   try {
     const res = await fetch("/api/me");
-    if (!res.ok) return { is_admin: false };
+    if (!res.ok) return { is_admin: false, role: "guest" };
     return res.json();
   } catch (e) {
     console.error("/api/me failed", e);
-    return { is_admin: false };
+    return { is_admin: false, role: "guest" };
   }
 }
 
-function setAuthUI(isAdmin) {
+function setAuthUI(authState) {
   const statusEl = document.getElementById("admin-status");
   const loginBtn = document.getElementById("login-btn");
   const logoutBtn = document.getElementById("logout-btn");
-  window.isAdmin = !!isAdmin;
+  const role =
+    typeof authState === "string"
+      ? authState
+      : authState
+        ? "admin"
+        : "guest";
+  const isSignedIn = role === "admin" || role === "staff";
+  window.currentRole = role;
+  window.isAdmin = role === "admin";
+  window.canManageReservations = isSignedIn;
   if (statusEl) {
+    const statusText =
+      role === "admin"
+        ? "Admin signed in"
+        : role === "staff"
+          ? "Staff signed in"
+          : "Not signed in";
     const statusLabel = statusEl.querySelector(".status-label");
     if (statusLabel) {
-      statusLabel.textContent = isAdmin ? "Admin signed in" : "Not signed in";
+      statusLabel.textContent = statusText;
     } else {
-      statusEl.textContent = isAdmin ? "Admin signed in" : "Not signed in";
+      statusEl.textContent = statusText;
     }
-    statusEl.classList.toggle("bg-success", isAdmin);
-    statusEl.classList.toggle("bg-secondary", !isAdmin);
+    statusEl.classList.toggle("bg-success", isSignedIn);
+    statusEl.classList.toggle("bg-secondary", !isSignedIn);
   }
-  if (loginBtn) loginBtn.classList.toggle("d-none", isAdmin);
-  if (logoutBtn) logoutBtn.classList.toggle("d-none", !isAdmin);
+  if (loginBtn) loginBtn.classList.toggle("d-none", isSignedIn);
+  if (logoutBtn) logoutBtn.classList.toggle("d-none", !isSignedIn);
   if (typeof window.refreshDragAuth === "function") {
-    window.refreshDragAuth(window.isAdmin);
+    window.refreshDragAuth(window.canManageReservations);
   }
   document.querySelectorAll(".reservation-card").forEach((card) => {
-    updateReservationCardAccessibility(card, window.isAdmin);
+    updateReservationCardAccessibility(card, window.canManageReservations);
   });
   updateIdleEmptyStateCopy();
 }
 
 window.updateReservationCardAccessibility = updateReservationCardAccessibility;
 
-function requireAdmin() {
-  if (!window.isAdmin) {
-    showToast && showToast("Admin login required", "error");
+function requireWorker() {
+  if (!window.canManageReservations) {
+    showToast && showToast("Worker login required", "error");
     return false;
   }
   return true;
@@ -1984,7 +2005,13 @@ async function submitLogin(username, password) {
     body: JSON.stringify({ username, password }),
   });
   const body = await res.json();
-  if (!res.ok) throw new Error(body.error || "Login failed");
+  if (!res.ok) {
+    const message =
+      typeof body.error === "string"
+        ? body.error
+        : body.error?.message || body.message || "Login failed";
+    throw new Error(message);
+  }
   return body;
 }
 

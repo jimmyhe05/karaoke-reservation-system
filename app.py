@@ -132,8 +132,8 @@ def attach_request_metadata():
 # ---- Auth helpers ----
 
 
-def is_admin_authenticated():
-    return session.get('role') == 'admin'
+def is_worker_authenticated():
+    return session.get('role') in {'admin', 'staff'}
 
 
 def seed_sample_data(target_date=None):
@@ -582,8 +582,8 @@ def reservation_by_date(date_str):
 @app.route('/reservation', methods=['GET', 'POST'])
 def reservation():
     if request.method == 'POST':
-        if not is_admin_authenticated():
-            return api_error('Admin authentication required', 401, code='auth_required')
+        if not is_worker_authenticated():
+            return api_error('Worker login required', 401, code='auth_required')
         data = request_payload()
         # Reuse shared validator/creator but keep legacy success message/status for compatibility
         return create_reservation_api_payload(
@@ -628,8 +628,8 @@ def get_reservation(reservation_id):
 
 @app.route('/delete_reservation/<int:reservation_id>', methods=['POST'])
 def delete_reservation(reservation_id):
-    if not is_admin_authenticated():
-        return jsonify({'error': 'Admin authentication required'}), 401
+    if not is_worker_authenticated():
+        return jsonify({'error': 'Worker login required'}), 401
     conn = get_db()
     try:
         # Check if reservation exists
@@ -668,8 +668,8 @@ def delete_reservation(reservation_id):
 
 @app.route('/update_reservation/<int:reservation_id>', methods=['POST'])
 def update_reservation(reservation_id):
-    if not is_admin_authenticated():
-        return jsonify({'error': 'Admin authentication required'}), 401
+    if not is_worker_authenticated():
+        return jsonify({'error': 'Worker login required'}), 401
     data = request_payload()
     conn = get_db()
 
@@ -830,8 +830,8 @@ def update_reservation(reservation_id):
 @app.route('/move_to_idle/<int:reservation_id>', methods=['POST'])
 def move_to_idle(reservation_id):
     """Move a reservation to the idle area."""
-    if not is_admin_authenticated():
-        return jsonify({'error': 'Admin authentication required'}), 401
+    if not is_worker_authenticated():
+        return jsonify({'error': 'Worker login required'}), 401
     conn = get_db()
     try:
         # Check if the reservation exists
@@ -881,8 +881,8 @@ def move_to_idle(reservation_id):
 @app.route('/remove_from_idle/<int:reservation_id>', methods=['POST'])
 def remove_from_idle(reservation_id):
     """Remove a reservation from the idle area."""
-    if not is_admin_authenticated():
-        return jsonify({'error': 'Admin authentication required'}), 401
+    if not is_worker_authenticated():
+        return jsonify({'error': 'Worker login required'}), 401
     conn = get_db()
     try:
         # Check if the reservation exists in idle area
@@ -925,8 +925,8 @@ def remove_from_idle(reservation_id):
 @app.route('/move_reservation', methods=['POST'])
 def move_reservation():
     """Move a reservation to a different room or time slot."""
-    if not is_admin_authenticated():
-        return jsonify({'error': 'Admin authentication required'}), 401
+    if not is_worker_authenticated():
+        return jsonify({'error': 'Worker login required'}), 401
     try:
         data = request_payload()
         if not data:
@@ -1397,7 +1397,11 @@ def admin_logout():
 @app.route('/api/me')
 def current_user():
     role = session.get('role', 'guest')
-    return jsonify({'is_admin': role == 'admin', 'role': role})
+    return jsonify({
+        'is_admin': role == 'admin',
+        'role': role,
+        'can_manage_reservations': role in {'admin', 'staff'},
+    })
 
 
 if __name__ == '__main__':

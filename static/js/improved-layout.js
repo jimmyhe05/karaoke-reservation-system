@@ -58,7 +58,7 @@ function syncInnerScrolls() {
 function initDragAndDrop() {
   if (typeof Sortable === "undefined") return;
 
-  const dragDisabled = () => !window.isAdmin;
+  const dragDisabled = () => !window.canManageReservations;
 
   // current interval height (reads CSS variable)
   let intervalHeight = parseInt(
@@ -349,10 +349,10 @@ function initDragAndDrop() {
   });
 
   // expose a helper to toggle drag based on auth
-  window.refreshDragAuth = function (isAdmin) {
+  window.refreshDragAuth = function (canManage) {
     document.querySelectorAll(".room-timeline, .idle-drop-area").forEach((el) => {
       if (el._sortableInstance && typeof el._sortableInstance.option === "function") {
-        el._sortableInstance.option("disabled", !isAdmin);
+        el._sortableInstance.option("disabled", !canManage);
       }
     });
   };
@@ -432,7 +432,7 @@ function initTimeSlotClickHandlers() {
   contentArea.removeEventListener("click", handleTimeSlotClick);
   contentArea.addEventListener("click", handleTimeSlotClick);
 
-  // Reservation card click to edit (admin only)
+  // Reservation card click to edit (authenticated workers only)
   contentArea.removeEventListener("click", handleReservationCardClick);
   contentArea.addEventListener("click", handleReservationCardClick);
   contentArea.removeEventListener("keydown", handleReservationCardKeydown);
@@ -440,8 +440,8 @@ function initTimeSlotClickHandlers() {
 }
 
 function handleTimeSlotClick(event) {
-  if (!window.isAdmin) {
-    if (window.showToast) window.showToast("Admin login required", "error");
+  if (!window.canManageReservations) {
+    if (window.showToast) window.showToast("Worker login required", "error");
     return;
   }
   const slot = event.target.closest(".time-slot");
@@ -466,7 +466,7 @@ function handleTimeSlotClick(event) {
 }
 
 function handleReservationCardClick(event) {
-  if (!window.isAdmin) return;
+  if (!window.canManageReservations) return;
   const card = event.target.closest(".reservation-card");
   if (!card) return;
   event.stopPropagation();
@@ -479,7 +479,7 @@ function handleReservationCardClick(event) {
 function handleReservationCardKeydown(event) {
   if (event.key !== "Enter" && event.key !== " ") return;
   const card = event.target.closest(".reservation-card");
-  if (!card || !window.isAdmin) return;
+  if (!card || !window.canManageReservations) return;
 
   event.preventDefault();
   const reservationId = card.dataset.reservationId;

@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify, session
 
 from services.db import get_db
-from services.http import api_error, api_ok, require_admin, request_payload
+from services.http import api_error, api_ok, require_worker, request_payload
 from services.validation import parse_time_safe, normalize_time_range, find_conflict
 from flask import current_app
 from services.pricing import compute_pricing
@@ -63,7 +63,7 @@ def api_daily_reservations():
 
 
 @api_bp.route('/api/reservations', methods=['GET'])
-@require_admin
+@require_worker
 def api_list_reservations():
     date = request.args.get('date')
     room_id = request.args.get('room_id')
@@ -97,7 +97,7 @@ def api_list_reservations():
 
 
 @api_bp.route('/api/reservations/<int:reservation_id>', methods=['GET'])
-@require_admin
+@require_worker
 def api_get_reservation(reservation_id):
     conn = get_db()
     row = conn.execute('SELECT * FROM reservations WHERE id = ?', (reservation_id,)).fetchone()
@@ -108,19 +108,19 @@ def api_get_reservation(reservation_id):
 
 
 @api_bp.route('/api/reservations', methods=['POST'])
-@require_admin
+@require_worker
 def api_create_reservation():
     return create_reservation_api_payload(request_payload(), api_error, api_ok)
 
 
 @api_bp.route('/api/reservations/<int:reservation_id>', methods=['PATCH'])
-@require_admin
+@require_worker
 def api_update_reservation_route(reservation_id):
     return update_reservation_api_payload(reservation_id, request_payload(), api_error, api_ok)
 
 
 @api_bp.route('/api/reservations/<int:reservation_id>', methods=['DELETE'])
-@require_admin
+@require_worker
 def api_delete_reservation_route(reservation_id):
     return delete_reservation_api_payload(reservation_id, api_error, api_ok)
 
@@ -271,7 +271,7 @@ def api_calendar_availability():
 
 
 @api_bp.route('/api/price_estimate', methods=['POST'])
-@require_admin
+@require_worker
 def price_estimate():
     payload = request_payload()
     room_id = payload.get('room_id')
@@ -307,7 +307,7 @@ def price_estimate():
 
 
 @api_bp.route('/api/room_suggestion', methods=['POST'])
-@require_admin
+@require_worker
 def room_suggestion():
     data = request_payload()
     date = data.get('date')
@@ -337,7 +337,7 @@ def room_suggestion():
 
 
 @api_bp.route('/api/alternative_times', methods=['POST'])
-@require_admin
+@require_worker
 def alternative_times():
     data = request_payload()
     date = data.get('date')
@@ -378,4 +378,8 @@ def alternative_times():
 @api_bp.route('/api/me')
 def api_me():
     role = session.get('role', 'guest')
-    return api_ok({'is_admin': role == 'admin', 'role': role})
+    return api_ok({
+        'is_admin': role == 'admin',
+        'role': role,
+        'can_manage_reservations': role in {'admin', 'staff'},
+    })

@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/reservation.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/enhanced-calendar.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/improved-layout.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/ui-polish.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/ui-polish.css', v='20260621-3') }}">
     <!-- tippy removed: using simple title-based tooltips instead -->
 </head>
 
@@ -66,12 +66,12 @@
                     </div>
                 </div>
                 <div class="calendar-controls simple d-flex justify-content-between align-items-center">
-                    <button class="btn btn-sm btn-outline-secondary icon-button" id="prev-day-btn" aria-label="Previous day">
-                        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m15 18-6-6 6-6"/></svg>
+                    <button type="button" class="btn btn-sm btn-outline-secondary icon-button" id="prev-month-btn" data-month-offset="-1" aria-label="Previous month" title="Previous month">
+                        <span class="month-nav-label" aria-hidden="true">&lt;&lt;</span>
                     </button>
-                    <button class="btn btn-sm btn-outline-secondary" id="today-btn">Today</button>
-                    <button class="btn btn-sm btn-outline-secondary icon-button" id="next-day-btn" aria-label="Next day">
-                        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m9 18 6-6-6-6"/></svg>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="today-btn">Today</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary icon-button" id="next-month-btn" data-month-offset="1" aria-label="Next month" title="Next month">
+                        <span class="month-nav-label" aria-hidden="true">&gt;&gt;</span>
                     </button>
                 </div>
                 <div id="calendar"></div>
@@ -388,10 +388,10 @@
             <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
             <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
             <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
-            <script src="{{ url_for('static', filename='js/reservation.js') }}"></script>
+            <script src="{{ url_for('static', filename='js/reservation.js', v='20260621-worker-1') }}"></script>
             <script src="{{ url_for('static', filename='js/form-validation.js') }}"></script>
-            <script src="{{ url_for('static', filename='js/enhanced-calendar.js') }}"></script>
-            <script src="{{ url_for('static', filename='js/improved-layout.js') }}"></script>
+            <script src="{{ url_for('static', filename='js/enhanced-calendar.js', v='20260621-3') }}"></script>
+            <script src="{{ url_for('static', filename='js/improved-layout.js', v='20260621-worker-1') }}"></script>
 </body>
 
 </html>

@@ -53,6 +53,7 @@ def test_staff_can_login_and_me_reflects_role(client):
     me = client.get('/api/me').get_json()
     assert me['role'] == 'staff'
     assert me['is_admin'] is False
+    assert me['can_manage_reservations'] is True
 
 
 def test_admin_role_allows_mutation(client):
@@ -61,12 +62,28 @@ def test_admin_role_allows_mutation(client):
     assert create.status_code == 201
 
 
-def test_staff_cannot_mutate_admin_routes(client):
+def test_staff_can_create_edit_and_delete_reservations(client):
     login(client, 'staff', 'staff')
     create = client.post('/api/reservations', data=json.dumps(sample_payload()), content_type='application/json')
-    assert create.status_code == 403
-    body = create.get_json()
-    assert body['error']['code'] == 'forbidden'
+    assert create.status_code == 201
+
+    reservation_id = create.get_json()['reservation']['id']
+    update = client.patch(
+        f'/api/reservations/{reservation_id}',
+        data=json.dumps({'notes': 'Updated by staff'}),
+        content_type='application/json',
+    )
+    assert update.status_code == 200
+    assert update.get_json()['reservation']['notes'] == 'Updated by staff'
+
+    delete = client.delete(f'/api/reservations/{reservation_id}')
+    assert delete.status_code == 200
+
+
+def test_home_page_is_not_auth_gated(client):
+    assert client.get('/').status_code == 302
+    login(client, 'staff', 'staff')
+    assert client.get('/').status_code == 302
 
 
 def test_invalid_credentials(client):

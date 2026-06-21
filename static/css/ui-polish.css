@@ -312,13 +312,18 @@ button,
   display: block;
   min-width: 0;
   min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #b9afc8 transparent;
 }
 
 .calendar-container {
   display: flex;
   width: 100%;
   height: auto;
-  max-height: 100%;
+  max-height: none;
   min-height: 0;
   margin: 0;
   padding: 0;
@@ -409,6 +414,14 @@ button,
 .icon-button svg {
   width: 18px;
   height: 18px;
+}
+
+.month-nav-label {
+  color: currentColor;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.92rem;
+  font-weight: 800;
+  line-height: 1;
 }
 
 .calendar-container #calendar {
@@ -1384,6 +1397,11 @@ textarea.form-control {
     height: auto;
     min-height: calc(100dvh - 20px);
     overflow: visible;
+  }
+
+  .sidebar {
+    overflow: visible;
+    overscroll-behavior: auto;
   }
 
   .header {
