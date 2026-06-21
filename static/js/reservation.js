@@ -7,24 +7,21 @@ window.showToast = function (message, type = "success") {
   const toast = document.createElement("div");
   toast.className = `toast ${type}`;
 
-  // Create icon based on type
-  let icon = "";
-  if (type === "success") {
-    icon = "✓";
-  } else if (type === "error") {
-    icon = "✗";
-  } else if (type === "info") {
-    icon = "ℹ";
-  }
-
   // Create toast content safely; messages can include server-provided text.
   const iconEl = document.createElement("div");
   iconEl.className = "toast-icon";
-  iconEl.textContent = icon;
+  iconEl.setAttribute("aria-hidden", "true");
+  iconEl.innerHTML =
+    type === "success"
+      ? '<svg viewBox="0 0 24 24" focusable="false"><path d="m5 12 4 4L19 6"/></svg>'
+      : type === "error"
+      ? '<svg viewBox="0 0 24 24" focusable="false"><path d="m7 7 10 10M17 7 7 17"/></svg>'
+      : '<svg viewBox="0 0 24 24" focusable="false"><path d="M12 11v5M12 8h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg>';
   const messageEl = document.createElement("div");
   messageEl.className = "toast-message";
   messageEl.textContent = message || "";
   toast.append(iconEl, messageEl);
+  toast.setAttribute("role", type === "error" ? "alert" : "status");
 
   // Add toast to container
   toastContainer.appendChild(toast);
@@ -38,7 +35,7 @@ window.showToast = function (message, type = "success") {
   // Remove toast after animation completes
   setTimeout(() => {
     toast.remove();
-  }, 2000); // Keep toast visible briefly (2s total)
+  }, 4000);
 };
 
 // Legacy drag-and-drop initialization was replaced by the improved
@@ -1843,7 +1840,12 @@ function setAuthUI(isAdmin) {
   const logoutBtn = document.getElementById("logout-btn");
   window.isAdmin = !!isAdmin;
   if (statusEl) {
-    statusEl.textContent = isAdmin ? "Admin signed in" : "Not signed in";
+    const statusLabel = statusEl.querySelector(".status-label");
+    if (statusLabel) {
+      statusLabel.textContent = isAdmin ? "Admin signed in" : "Not signed in";
+    } else {
+      statusEl.textContent = isAdmin ? "Admin signed in" : "Not signed in";
+    }
     statusEl.classList.toggle("bg-success", isAdmin);
     statusEl.classList.toggle("bg-secondary", !isAdmin);
   }

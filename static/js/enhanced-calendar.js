@@ -138,11 +138,11 @@ function initEnhancedCalendar() {
 
       applySelectedDate(info.dateStr);
     },
-    // Calendar header
+    // Keep the month title without duplicating the external navigation controls.
     headerToolbar: {
-      left: "prev,next today",
+      left: "",
       center: "title",
-      right: "dayGridMonth",
+      right: "",
     },
     // Only allow dates from today onwards
     validRange: {
