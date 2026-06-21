@@ -1,0 +1,4 @@
+interface:
+  display_name: "Recruiter Perspective Review"
+  short_description: "Evaluate projects through a hiring lens"
+  default_prompt: "Use $recruiter-perspective-review to assess this portfolio project as an internship recruiter."

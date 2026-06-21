@@ -166,22 +166,25 @@ the app falls back to local SQLite using `schema.sql`.
 
 ## 💡 Inspiration
 
-This project was inspired by my experience working at **Nam's Noodle**, a family-owned restaurant in **Madison, Wisconsin**. The restaurant features karaoke rooms, and managing reservations manually became a frustrating and time-consuming process.
+This project grew out of my experience bartending at **Nam's Noodle**, a family-owned restaurant in **Madison, Wisconsin** that is owned by my cousins. While they were away for several weeks, I was the only person responsible for both making drinks and managing the restaurant's karaoke reservations.
 
-With this automated system, I aimed to:
+### The original reservation workflow
 
-- ✅ **Eliminate double bookings**
-- ✅ **Streamline reservation management**
-- ✅ **Ensure customers are charged correctly**
-- ✅ **Improve the overall efficiency of running karaoke services**
+Customers submitted a form online or called the restaurant. Their reservation details were then passed to the restaurant through a separate app. I had to manually copy each booking onto sticky notes for the individual karaoke rooms and compare the requested date and time against the other notes to determine whether a room was available. If a request could not be accommodated, I had to call or text the customer to arrange another time.
 
-Now, managing room availability, pricing, and customer details is fast, simple, and efficient! 🚀
+Handling that process while bartending made the limitations of the manual system clear. Availability was difficult to understand at a glance, checking for conflicts took extra time, and transferring information between the app and sticky notes created opportunities for scheduling mistakes.
+
+### What this project is designed to improve
+
+The Karaoke Reservation System brings the workflow into one visual schedule. Customers can check room availability for a particular date and time before choosing when to book. Restaurant staff can create, edit, assign, and review reservations without manually comparing sticky notes. The system also checks for scheduling conflicts and calculates karaoke pricing and tax automatically.
+
+The goal is to make karaoke reservations more convenient for customers while reducing the time and manual effort required from restaurant staff.
 
 ---
 
 ## 🌟 Future Enhancements
 
-- **User Authentication** – Secure login for staff & admins.
+- **Customer Notifications** – Send confirmations and alternative-time suggestions by text or email.
 - **Payment Integration** – Add online payment support.
 - **Multi-language Support** – Localized UI for diverse users.
 
