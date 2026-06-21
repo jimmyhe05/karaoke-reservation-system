@@ -638,9 +638,10 @@ button,
 }
 
 .room-header {
+  position: relative;
   display: flex;
   min-height: 58px;
-  padding: 10px 12px;
+  padding: 10px 78px 10px 12px;
   align-items: flex-start;
   justify-content: center;
   flex-direction: column;
@@ -665,6 +666,31 @@ button,
   color: #fff;
   font-size: 0.92rem;
   font-weight: 700;
+}
+
+.room-status {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  max-width: 70px;
+  padding: 4px 7px;
+  overflow: hidden;
+  color: #e7e0f5;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.09);
+  font-size: 0.59rem;
+  font-weight: 700;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transform: translateY(-50%);
+}
+
+.room-status.has-bookings {
+  color: #ffe6ed;
+  border-color: rgba(255, 199, 214, 0.28);
+  background: rgba(217, 45, 92, 0.24);
 }
 
 .room-timeline-wrapper {
@@ -733,6 +759,26 @@ button,
   background: #fbfafc;
 }
 
+.idle-drop-area .reservation-card {
+  color: #443618;
+  border: 1px solid #e5c66e;
+  border-left: 4px solid #b87500;
+  background: #fff8e6;
+  box-shadow: 0 3px 9px rgba(116, 77, 0, 0.1);
+}
+
+.idle-drop-area .reservation-card:hover,
+.idle-drop-area .reservation-card:focus-visible {
+  border-color: #b87500;
+  background: #fff3cf;
+}
+
+.idle-drop-area .reservation-card strong,
+.idle-drop-area .reservation-card .content strong,
+.idle-drop-area .reservation-card .people-count {
+  color: #443618;
+}
+
 .idle-empty-state {
   display: grid;
   min-height: 112px;
@@ -744,6 +790,7 @@ button,
   background: #fff;
   font-size: 0.78rem;
   line-height: 1.45;
+  text-align: center;
 }
 
 .idle-empty-state::before {
@@ -754,6 +801,18 @@ button,
   border-radius: 99px;
   background: #c8bfd3;
   box-shadow: 0 7px 0 #ddd6e5;
+}
+
+.idle-empty-state strong {
+  align-self: end;
+  color: #43394f;
+  font-size: 0.79rem;
+}
+
+.idle-empty-state span {
+  align-self: start;
+  color: var(--ink-soft);
+  font-size: 0.7rem;
 }
 
 .reservation-card {
@@ -776,6 +835,33 @@ button,
   background: #e8def8;
   box-shadow: 0 6px 14px rgba(64, 39, 113, 0.18);
   transform: none;
+}
+
+.reservation-card:focus-visible {
+  z-index: 120;
+  border-color: var(--brand);
+  box-shadow:
+    0 0 0 3px #fff,
+    0 0 0 6px rgba(91, 53, 181, 0.45);
+}
+
+.reservation-card.is-read-only {
+  cursor: default;
+}
+
+.room-timeline .reservation-card.is-short .content {
+  display: none;
+}
+
+.room-timeline .reservation-card.is-short .time-indicator {
+  height: 100%;
+  min-height: 20px;
+}
+
+.room-timeline .reservation-card.is-compact .people-count,
+.room-timeline .reservation-card.is-compact .language,
+.room-timeline .reservation-card.is-compact .notes {
+  display: none;
 }
 
 .reservation-card .time-indicator {
@@ -921,6 +1007,49 @@ button,
   color: #766e80;
   font-size: 0.67rem;
   font-weight: 600;
+}
+
+.password-field {
+  position: relative;
+}
+
+.password-field .form-control {
+  padding-right: 54px;
+}
+
+.password-toggle {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  place-items: center;
+  color: #665979;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  transition:
+    color var(--motion-fast) ease,
+    background-color var(--motion-fast) ease;
+}
+
+.password-toggle:hover,
+.password-toggle:focus-visible,
+.password-toggle[aria-pressed="true"] {
+  color: var(--brand);
+  background: var(--surface-tint);
+}
+
+.password-toggle svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .form-control,
@@ -1100,6 +1229,17 @@ textarea.form-control {
   color: var(--ink);
   border-color: #afa2bd;
   background: var(--surface-tint);
+}
+
+.btn:disabled,
+.duration-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  transform: none;
+}
+
+.btn .spinner-border {
+  margin-right: 6px;
 }
 
 #loading-overlay {
@@ -1293,7 +1433,7 @@ textarea.form-control {
 
   .header {
     gap: 14px;
-    padding: 16px;
+    padding: max(16px, env(safe-area-inset-top)) 16px 16px;
   }
 
   .brand-mark {
@@ -1407,7 +1547,7 @@ textarea.form-control {
 
   .toast-container {
     right: 16px;
-    bottom: 16px;
+    bottom: max(16px, env(safe-area-inset-bottom));
   }
 
   .edit-page {

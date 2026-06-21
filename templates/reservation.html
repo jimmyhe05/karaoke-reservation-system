@@ -102,7 +102,15 @@
                             </div>
                             <div class="mb-3">
                                 <label for="login-password" class="form-label">Password</label>
-                                <input type="password" id="login-password" class="form-control" autocomplete="current-password" required>
+                                <div class="password-field">
+                                    <input type="password" id="login-password" class="form-control" autocomplete="current-password" required>
+                                    <button type="button" class="password-toggle" id="password-toggle" aria-label="Show password" aria-pressed="false">
+                                        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                            <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/>
+                                            <circle cx="12" cy="12" r="2.5"/>
+                                        </svg>
+                                    </button>
+                                </div>
                             </div>
                             <div class="d-flex justify-content-end modal-actions">
                                 <button type="submit" class="btn btn-primary">Log in</button>
@@ -129,10 +137,14 @@
                     <div class="room-header">
                         <span class="room-kicker">Queue</span>
                         <strong class="en">Unassigned</strong>
+                        <span class="room-status" id="idle-summary">None</span>
                     </div>
                     <div class="room-timeline-wrapper">
-                        <div id="idle-area" class="idle-drop-area" aria-label="Idle reservations">
-                            <div class="idle-empty-state" aria-hidden="true">No idle reservations</div>
+                        <div id="idle-area" class="idle-drop-area" aria-label="Unassigned reservations" aria-live="polite">
+                            <div class="idle-empty-state">
+                                <strong>Everything is assigned</strong>
+                                <span>No bookings are waiting for a room.</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -141,6 +153,7 @@
                     <div class="room-header">
                         <span class="room-kicker">Studio</span>
                         <strong class="en">Room {{ room.id }}</strong>
+                        <span class="room-status" data-room-summary>0 bookings</span>
                     </div>
                     <div class="room-timeline-wrapper">
                         <div class="scroll-sync-inner">

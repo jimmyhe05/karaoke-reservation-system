@@ -435,6 +435,8 @@ function initTimeSlotClickHandlers() {
   // Reservation card click to edit (admin only)
   contentArea.removeEventListener("click", handleReservationCardClick);
   contentArea.addEventListener("click", handleReservationCardClick);
+  contentArea.removeEventListener("keydown", handleReservationCardKeydown);
+  contentArea.addEventListener("keydown", handleReservationCardKeydown);
 }
 
 function handleTimeSlotClick(event) {
@@ -468,6 +470,18 @@ function handleReservationCardClick(event) {
   const card = event.target.closest(".reservation-card");
   if (!card) return;
   event.stopPropagation();
+  const reservationId = card.dataset.reservationId;
+  if (reservationId) {
+    openModalForEditing(reservationId);
+  }
+}
+
+function handleReservationCardKeydown(event) {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  const card = event.target.closest(".reservation-card");
+  if (!card || !window.isAdmin) return;
+
+  event.preventDefault();
   const reservationId = card.dataset.reservationId;
   if (reservationId) {
     openModalForEditing(reservationId);

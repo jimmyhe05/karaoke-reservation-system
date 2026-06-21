@@ -93,16 +93,23 @@ function setLoading(isLoading, message = "Loading...") {
     spinner.setAttribute("aria-live", "polite");
     spinner.textContent = message;
     overlay.appendChild(spinner);
+    overlay.setAttribute("aria-hidden", "true");
     document.body.appendChild(overlay);
   }
 
   if (isLoading) {
     loadingCounter += 1;
+    const spinner = overlay.querySelector(".loading-spinner");
+    if (spinner) spinner.textContent = message;
+    document.querySelector(".content-area")?.setAttribute("aria-busy", "true");
+    overlay.setAttribute("aria-hidden", "false");
     overlay.classList.add("visible");
   } else {
     loadingCounter = Math.max(0, loadingCounter - 1);
     if (loadingCounter === 0) {
       overlay.classList.remove("visible");
+      overlay.setAttribute("aria-hidden", "true");
+      document.querySelector(".content-area")?.setAttribute("aria-busy", "false");
     }
   }
 }
@@ -159,6 +166,50 @@ function buildReservationCardContent(card, reservation, displayStartTime, displa
   }
 
   card.replaceChildren(timeIndicator, content);
+}
+
+function updateReservationCardAccessibility(card, isAdmin = !!window.isAdmin) {
+  if (!card) return;
+
+  const guestName = card.querySelector(".name-row strong")?.textContent?.trim() || "Guest";
+  const people = card.querySelector(".people-count")?.textContent?.trim() || "party size unavailable";
+  const timeRange = card.querySelector(".time-range")?.textContent?.trim() || "time unavailable";
+  const location = card.dataset.location ||
+    (card.dataset.roomId ? `room ${card.dataset.roomId}` : "unassigned queue");
+  const labelPrefix = isAdmin ? "Edit reservation" : "Reservation";
+
+  card.tabIndex = 0;
+  card.setAttribute("role", isAdmin ? "button" : "article");
+  card.setAttribute(
+    "aria-label",
+    `${labelPrefix} for ${guestName}, ${people}, ${timeRange}, ${location}`
+  );
+  card.classList.toggle("is-read-only", !isAdmin);
+}
+
+function createIdleEmptyState() {
+  const empty = document.createElement("div");
+  empty.className = "idle-empty-state";
+
+  const title = document.createElement("strong");
+  title.textContent = "Everything is assigned";
+  const detail = document.createElement("span");
+  detail.textContent = window.isAdmin
+    ? "Drag a booking here to remove its room assignment."
+    : "No bookings are waiting for a room.";
+
+  empty.append(title, detail);
+  return empty;
+}
+
+function updateIdleEmptyStateCopy() {
+  const empty = document.querySelector("#idle-area .idle-empty-state");
+  const detail = empty?.querySelector("span");
+  if (detail) {
+    detail.textContent = window.isAdmin
+      ? "Drag a booking here to remove its room assignment."
+      : "No bookings are waiting for a room.";
+  }
 }
 
 // Handle reservation moves between containers
@@ -520,6 +571,12 @@ function updateRoomTimelines(date) {
 
         // Find the room data in the response
         const roomData = data.rooms.find((r) => r.id === roomId);
+        const bookingCount = roomData?.reservations?.length || 0;
+        const roomSummary = roomContainer.querySelector("[data-room-summary]");
+        if (roomSummary) {
+          roomSummary.textContent = `${bookingCount} booking${bookingCount === 1 ? "" : "s"}`;
+          roomSummary.classList.toggle("has-bookings", bookingCount > 0);
+        }
         if (roomData && roomData.reservations) {
           // For each reservation, create a reservation card
           roomData.reservations.forEach((reservation) => {
@@ -574,7 +631,17 @@ function initTimeSlots() {
 // Time slot click handler function
 function timeSlotClickHandler(e) {
   const timeSlot = e.target.closest(".time-slot");
-  if (timeSlot && !timeSlot.classList.contains("occupied")) {
+  if (!timeSlot) return;
+
+  // The timeline owns slot activation. Stop the content-level fallback from
+  // opening a second modal for the same click.
+  e.stopPropagation();
+  if (!window.isAdmin) {
+    showToast("Staff login required to create a reservation", "info");
+    return;
+  }
+
+  if (!timeSlot.classList.contains("occupied")) {
     const hour = parseInt(timeSlot.dataset.hour);
     const minute = parseInt(timeSlot.dataset.minute) || 0;
     const roomId = this.dataset.roomId;
@@ -602,15 +669,6 @@ function updateIdleArea(preloadedData = null) {
 
   // Clear the existing idle reservations
   idleArea.innerHTML = "";
-
-  const renderEmptyState = () => {
-    // Ensure we don't stack multiple empty states
-    idleArea.querySelectorAll(".idle-empty-state").forEach((n) => n.remove());
-    const empty = document.createElement("div");
-    empty.className = "idle-empty-state";
-    empty.textContent = "No idle reservations";
-    idleArea.appendChild(empty);
-  };
 
   // Get the current date
   const currentDate =
@@ -640,6 +698,13 @@ function updateIdleArea(preloadedData = null) {
     );
 
     const seenIdleIds = new Set();
+    const idleSummary = document.getElementById("idle-summary");
+    if (idleSummary) {
+      idleSummary.textContent = idleReservations.length
+        ? `${idleReservations.length} waiting`
+        : "None";
+      idleSummary.classList.toggle("has-bookings", idleReservations.length > 0);
+    }
     if (idleReservations.length > 0) {
       console.log(`Found ${idleReservations.length} idle reservations`);
 
@@ -673,7 +738,7 @@ function updateIdleArea(preloadedData = null) {
       initDragAndDrop();
     } else {
       console.log("No idle reservations found");
-      renderEmptyState();
+      idleArea.appendChild(createIdleEmptyState());
     }
   };
 
@@ -776,6 +841,11 @@ function createReservationCard(reservation, roomTimeline) {
   card.dataset.endTime = endTime;
   card.dataset.hour = startHour;
   card.dataset.duration = (durationMinutes / 60).toFixed(1); // Store duration in hours
+  if (durationMinutes <= 30) {
+    card.classList.add("is-short");
+  } else if (durationMinutes <= 60) {
+    card.classList.add("is-compact");
+  }
 
   // Format the time for display using formatTime function if available
   const displayStartTime =
@@ -793,6 +863,7 @@ function createReservationCard(reservation, roomTimeline) {
 
   // Add the card to the room timeline
   roomTimeline.appendChild(card);
+  updateReservationCardAccessibility(card);
 
   // Mark the occupied time slots
   markOccupiedTimeSlots(roomTimeline, startTime, endTime, reservation.id);
@@ -813,6 +884,7 @@ function createIdleReservationCard(reservation, idleArea) {
   card.dataset.phone = reservation.phone || "";
   card.dataset.notes = reservation.notes || "";
   card.dataset.language = reservation.language || "en";
+  card.dataset.location = "unassigned queue";
 
   // Parse the start and end times
   const startTime = reservation.start_time;
@@ -890,6 +962,7 @@ function createIdleReservationCard(reservation, idleArea) {
 
   // Add the card to the idle area
   idleArea.appendChild(card);
+  updateReservationCardAccessibility(card);
 }
 
 // Function to mark occupied time slots
@@ -1368,8 +1441,14 @@ function showNewReservationModal(hour, minute, roomId, selectedDate) {
   const resIdInput = document.getElementById("reservation_id");
   if (resIdInput) resIdInput.value = "";
 
-  // Reset the form
-  document.getElementById("reservationForm").reset();
+  // Reset the form and any validation left by the previous booking.
+  const reservationForm = document.getElementById("reservationForm");
+  reservationForm.reset();
+  if (typeof clearFormValidation === "function") {
+    clearFormValidation(reservationForm);
+  }
+  const modalTitle = document.querySelector("#reservationModalTitle .en");
+  if (modalTitle) modalTitle.textContent = "New reservation";
 
   // Set the date, room, and start time
   // selectedDate may already be a YYYY-MM-DD string; normalize
@@ -1472,6 +1551,8 @@ function openModalForEditing(reservationId) {
       if (modalEl) {
         modalEl.dataset.inIdle = inIdle ? "true" : "false";
       }
+      const modalTitle = document.querySelector("#reservationModalTitle .en");
+      if (modalTitle) modalTitle.textContent = "Edit reservation";
 
       // Show the delete button
       document.getElementById("delete-reservation-btn").style.display = "block";
@@ -1707,6 +1788,8 @@ document.addEventListener("DOMContentLoaded", function () {
   const reservationModalEl = document.getElementById("reservationModal");
   const guestBtn = document.getElementById("guest-btn");
   const newReservationBtn = document.getElementById("new-reservation-btn");
+  const passwordToggle = document.getElementById("password-toggle");
+  const passwordInput = document.getElementById("login-password");
 
   // Prevent stuck backdrops when closing any modal
   const cleanupBackdrops = () => {
@@ -1724,11 +1807,30 @@ document.addEventListener("DOMContentLoaded", function () {
     loginBtn.addEventListener("click", () => loginModal.show());
   }
 
+  if (passwordToggle && passwordInput) {
+    passwordToggle.addEventListener("click", () => {
+      const shouldShow = passwordInput.type === "password";
+      passwordInput.type = shouldShow ? "text" : "password";
+      passwordToggle.setAttribute("aria-pressed", String(shouldShow));
+      passwordToggle.setAttribute(
+        "aria-label",
+        shouldShow ? "Hide password" : "Show password"
+      );
+    });
+  }
+
   if (loginForm) {
     loginForm.addEventListener("submit", async (e) => {
       e.preventDefault();
       const username = document.getElementById("login-username").value;
       const password = document.getElementById("login-password").value;
+      const submitButton = loginForm.querySelector('button[type="submit"]');
+      const originalText = submitButton?.textContent || "Log in";
+      if (submitButton) {
+        submitButton.disabled = true;
+        submitButton.innerHTML =
+          '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Logging in…';
+      }
       try {
         await submitLogin(username, password);
         setAuthUI(true);
@@ -1736,6 +1838,11 @@ document.addEventListener("DOMContentLoaded", function () {
         loginModal && loginModal.hide();
       } catch (err) {
         showToast(err.message, "error");
+      } finally {
+        if (submitButton) {
+          submitButton.disabled = false;
+          submitButton.textContent = originalText;
+        }
       }
     });
   }
@@ -1854,7 +1961,13 @@ function setAuthUI(isAdmin) {
   if (typeof window.refreshDragAuth === "function") {
     window.refreshDragAuth(window.isAdmin);
   }
+  document.querySelectorAll(".reservation-card").forEach((card) => {
+    updateReservationCardAccessibility(card, window.isAdmin);
+  });
+  updateIdleEmptyStateCopy();
 }
+
+window.updateReservationCardAccessibility = updateReservationCardAccessibility;
 
 function requireAdmin() {
   if (!window.isAdmin) {

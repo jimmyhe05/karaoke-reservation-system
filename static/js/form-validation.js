@@ -210,6 +210,10 @@ function handleReservationSubmit(event) {
       alertElement.textContent = "Please correct the errors highlighted below.";
       alertElement.classList.remove("d-none");
     }
+    const firstInvalidField = form.querySelector(".is-invalid");
+    if (firstInvalidField) {
+      firstInvalidField.focus();
+    }
     // Optionally show a toast
     // window.showToast("Please correct the errors in the form.", "error");
     return;
