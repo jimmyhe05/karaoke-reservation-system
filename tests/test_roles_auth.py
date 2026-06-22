@@ -1,6 +1,7 @@
 import json
 import pytest
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from app import app, init_db
 
@@ -33,7 +34,7 @@ def login(client, username, password):
 
 def sample_payload(**overrides):
     base = {
-        "date": datetime.now().strftime('%Y-%m-%d'),
+        "date": datetime.now(ZoneInfo('America/Chicago')).strftime('%Y-%m-%d'),
         "start_time": "12:00",
         "end_time": "13:00",
         "num_people": 2,

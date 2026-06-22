@@ -1,6 +1,7 @@
 import json
 import pytest
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from app import app, init_db
 
@@ -31,7 +32,7 @@ def login_admin(client):
 
 def sample_payload(**overrides):
     base = {
-        "date": datetime.now().strftime('%Y-%m-%d'),
+        "date": datetime.now(ZoneInfo('America/Chicago')).strftime('%Y-%m-%d'),
         "start_time": "12:00",
         "end_time": "13:00",
         "num_people": 2,
@@ -47,7 +48,7 @@ def sample_payload(**overrides):
 
 def test_full_day_blackout_blocks_creation(client):
     login_admin(client)
-    today = datetime.now().strftime('%Y-%m-%d')
+    today = datetime.now(ZoneInfo('America/Chicago')).strftime('%Y-%m-%d')
     app.config['BLACKOUT_WINDOWS'] = [{"date": today, "room_id": 1}]
 
     resp = client.post(
@@ -62,7 +63,7 @@ def test_full_day_blackout_blocks_creation(client):
 
 def test_partial_blackout_blocks_overlap(client):
     login_admin(client)
-    today = datetime.now().strftime('%Y-%m-%d')
+    today = datetime.now(ZoneInfo('America/Chicago')).strftime('%Y-%m-%d')
     app.config['BLACKOUT_WINDOWS'] = [{"date": today, "room_id": 1, "start_time": "12:30", "end_time": "14:00"}]
 
     resp = client.post(
@@ -77,7 +78,7 @@ def test_partial_blackout_blocks_overlap(client):
 
 def test_non_matching_room_allows_creation(client):
     login_admin(client)
-    today = datetime.now().strftime('%Y-%m-%d')
+    today = datetime.now(ZoneInfo('America/Chicago')).strftime('%Y-%m-%d')
     app.config['BLACKOUT_WINDOWS'] = [{"date": today, "room_id": 2}]
 
     resp = client.post(
@@ -90,7 +91,7 @@ def test_non_matching_room_allows_creation(client):
 
 def test_move_respects_blackout(client):
     login_admin(client)
-    today = datetime.now().strftime('%Y-%m-%d')
+    today = datetime.now(ZoneInfo('America/Chicago')).strftime('%Y-%m-%d')
     app.config['BLACKOUT_WINDOWS'] = [{"date": today, "room_id": 2}]
 
     created = client.post(

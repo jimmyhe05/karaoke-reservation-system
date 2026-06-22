@@ -1,6 +1,7 @@
 import json
 import pytest
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from app import app, init_db
 
@@ -31,7 +32,7 @@ def login_admin(client):
 
 def sample_payload(**overrides):
     base = {
-        "date": datetime.now().strftime('%Y-%m-%d'),
+        "date": datetime.now(ZoneInfo('America/Chicago')).strftime('%Y-%m-%d'),
         "start_time": "12:00",
         "end_time": "13:00",
         "num_people": 3,
@@ -104,7 +105,7 @@ def test_create_preserves_notes_and_total_cost_includes_tax(client):
 
 def test_conflict_returns_409(client):
     login_admin(client)
-    today = datetime.now().strftime('%Y-%m-%d')
+    today = datetime.now(ZoneInfo('America/Chicago')).strftime('%Y-%m-%d')
     payload = sample_payload(date=today, start_time="14:00", end_time="15:00")
     first = client.post(
         '/api/reservations',

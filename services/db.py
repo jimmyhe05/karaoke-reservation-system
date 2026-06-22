@@ -79,6 +79,9 @@ def init_db():
         db.cursor().executescript(schema)
     db.commit()
 
+    from migrations.runner import run_migrations
+    run_migrations(db)
+
 
 def _split_sql_statements(script):
     statements = []

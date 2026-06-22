@@ -1,6 +1,7 @@
 from werkzeug.routing import BaseConverter
 from flask import Flask, render_template, request, redirect, url_for, jsonify, abort, session
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from flask import g
 import json
 import click
@@ -34,6 +35,10 @@ from services.http import api_error, api_ok, request_payload
 app = Flask(__name__)
 app.config.from_object(Config)
 app.register_blueprint(api_bp)
+
+@app.context_processor
+def inject_env():
+    return dict(APP_ENV=app.config.get('APP_ENV', 'development'))
 
 
 def _json_formatter(record):
@@ -140,7 +145,7 @@ def seed_sample_data(target_date=None):
     """Seed a few sample reservations if none exist for the target date."""
     conn = get_db()
     if target_date is None:
-        target_date = datetime.now().strftime('%Y-%m-%d')
+        target_date = datetime.now(ZoneInfo('America/Chicago')).strftime('%Y-%m-%d')
 
     existing = conn.execute(
         'SELECT COUNT(*) as c FROM reservations WHERE date = ?', (target_date,)
@@ -327,7 +332,7 @@ def get_rooms_with_reservations(selected_date=None):
 
     # Use the selected date or default to today
     if selected_date is None:
-        selected_date = datetime.now().strftime('%Y-%m-%d')
+        selected_date = datetime.now(ZoneInfo('America/Chicago')).strftime('%Y-%m-%d')
 
     # Get all bookable rooms (exclude idle placeholder if present)
     rooms = conn.execute('SELECT * FROM rooms WHERE id > 0 ORDER BY id').fetchall()
@@ -548,7 +553,7 @@ def get_daily_reservations():
 @app.route('/')
 def index():
     # Redirect root to today's date path
-    today_path = datetime.now().strftime('%m-%d-%Y')
+    today_path = datetime.now(ZoneInfo('America/Chicago')).strftime('%m-%d-%Y')
     return redirect(f'/{today_path}')
 
 
@@ -556,11 +561,11 @@ def index():
 def improved_reservation():
     # Backward compatibility: redirect to date path
     selected_date = request.args.get(
-        'date', datetime.now().strftime('%Y-%m-%d'))
+        'date', datetime.now(ZoneInfo('America/Chicago')).strftime('%Y-%m-%d'))
     try:
         dt = datetime.strptime(selected_date, '%Y-%m-%d')
     except ValueError:
-        dt = datetime.now()
+        dt = datetime.now(ZoneInfo('America/Chicago'))
     return redirect(f"/{dt.strftime('%m-%d-%Y')}")
 
 
@@ -1066,7 +1071,7 @@ def move_reservation():
 @app.route('/today_stats')
 def today_stats():
     conn = get_db()
-    today = datetime.now().strftime('%Y-%m-%d')
+    today = datetime.now(ZoneInfo('America/Chicago')).strftime('%Y-%m-%d')
 
     # Get total reservations for today
     total_reservations = conn.execute('''
@@ -1105,7 +1110,7 @@ def today_stats():
 @app.route('/api/public_schedule')
 def public_schedule():
     """Public, anonymized schedule: rooms with time slots only."""
-    date = request.args.get('date') or datetime.now().strftime('%Y-%m-%d')
+    date = request.args.get('date') or datetime.now(ZoneInfo('America/Chicago')).strftime('%Y-%m-%d')
     conn = get_db()
 
     rooms = conn.execute('SELECT id, name FROM rooms WHERE id > 0 ORDER BY id').fetchall()

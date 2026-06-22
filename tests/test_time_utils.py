@@ -1,5 +1,6 @@
 import pytest
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from services.validation import parse_time_safe, normalize_time_range, time_to_minutes
 from app import app, init_db, compute_pricing, get_db
@@ -28,7 +29,7 @@ def test_parse_time_rejects_bad_formats():
 
 
 def test_normalize_time_range_over_midnight():
-    today = datetime.now().strftime('%Y-%m-%d')
+    today = datetime.now(ZoneInfo('America/Chicago')).strftime('%Y-%m-%d')
     start, end, start_min, end_min = normalize_time_range(today, "23:30", "01:00")
     assert start == "23:30"
     assert end == "25:00"
@@ -37,13 +38,13 @@ def test_normalize_time_range_over_midnight():
 
 
 def test_normalize_time_range_rejects_before_open():
-    today = datetime.now().strftime('%Y-%m-%d')
+    today = datetime.now(ZoneInfo('America/Chicago')).strftime('%Y-%m-%d')
     with pytest.raises(ValueError):
         normalize_time_range(today, "10:00", "12:00")
 
 
 def test_normalize_time_range_rejects_past_date():
-    yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+    yesterday = (datetime.now(ZoneInfo('America/Chicago')) - timedelta(days=1)).strftime('%Y-%m-%d')
     with pytest.raises(ValueError):
         normalize_time_range(yesterday, "11:00", "12:00")
 

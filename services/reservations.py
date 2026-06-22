@@ -1,4 +1,5 @@
 from datetime import datetime
+from zoneinfo import ZoneInfo
 import json
 from flask import current_app, request, session
 
@@ -378,8 +379,9 @@ def delete_reservation_api_payload(reservation_id, api_error, api_ok):
 # ---- Misc helpers ----
 
 
-def get_today_stats(conn):
-    today = datetime.now().strftime('%Y-%m-%d')
+def get_today_stats(conn, today=None):
+    if today is None:
+        today = datetime.now(ZoneInfo('America/Chicago')).strftime('%Y-%m-%d')
 
     total_reservations = conn.execute('''
         SELECT COUNT(*) as count

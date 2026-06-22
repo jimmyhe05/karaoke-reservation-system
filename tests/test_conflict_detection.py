@@ -1,5 +1,6 @@
 import pytest
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from app import app, init_db, get_db
 from services.validation import find_conflict
@@ -16,7 +17,7 @@ def app_context(tmp_path):
 
 def make_reservation(conn, **kwargs):
     defaults = {
-        'date': datetime.now().strftime('%Y-%m-%d'),
+        'date': datetime.now(ZoneInfo('America/Chicago')).strftime('%Y-%m-%d'),
         'start_time': '12:00',
         'end_time': '13:00',
         'num_people': 2,
@@ -49,7 +50,7 @@ def make_reservation(conn, **kwargs):
 def test_overlap_detected():
     with app.app_context():
         conn = get_db()
-        date = datetime.now().strftime('%Y-%m-%d')
+        date = datetime.now(ZoneInfo('America/Chicago')).strftime('%Y-%m-%d')
         make_reservation(conn, date=date, start_time='12:00', end_time='13:00')
         conflict = find_conflict(conn, 1, date, '12:30', '13:30')
         assert conflict is not None
@@ -58,7 +59,7 @@ def test_overlap_detected():
 def test_back_to_back_allowed():
     with app.app_context():
         conn = get_db()
-        date = datetime.now().strftime('%Y-%m-%d')
+        date = datetime.now(ZoneInfo('America/Chicago')).strftime('%Y-%m-%d')
         make_reservation(conn, date=date, start_time='12:00', end_time='13:00')
         conflict = find_conflict(conn, 1, date, '13:00', '14:00')
         assert conflict is None
@@ -67,7 +68,7 @@ def test_back_to_back_allowed():
 def test_idle_excluded_from_conflict():
     with app.app_context():
         conn = get_db()
-        date = datetime.now().strftime('%Y-%m-%d')
+        date = datetime.now(ZoneInfo('America/Chicago')).strftime('%Y-%m-%d')
         res_id = make_reservation(conn, date=date, start_time='14:00', end_time='15:00')
         conn.execute('INSERT INTO idle_reservations (reservation_id, date) VALUES (?, ?)', (res_id, date))
         conn.commit()
@@ -78,7 +79,7 @@ def test_idle_excluded_from_conflict():
 def test_cancelled_excluded_from_conflict():
     with app.app_context():
         conn = get_db()
-        date = datetime.now().strftime('%Y-%m-%d')
+        date = datetime.now(ZoneInfo('America/Chicago')).strftime('%Y-%m-%d')
         make_reservation(conn, date=date, start_time='16:00', end_time='17:00', status='cancelled')
         conflict = find_conflict(conn, 1, date, '16:00', '17:00')
         assert conflict is None
@@ -87,7 +88,7 @@ def test_cancelled_excluded_from_conflict():
 def test_overnight_conflict_detected():
     with app.app_context():
         conn = get_db()
-        date = datetime.now().strftime('%Y-%m-%d')
+        date = datetime.now(ZoneInfo('America/Chicago')).strftime('%Y-%m-%d')
         make_reservation(conn, date=date, start_time='23:30', end_time='25:00')
         conflict = find_conflict(conn, 1, date, '24:30', '25:30')
         assert conflict is not None

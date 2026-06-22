@@ -1,4 +1,5 @@
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 
 def parse_time_safe(time_str):
@@ -74,7 +75,7 @@ def normalize_time_range(date_str, start_str, end_str):
             'Reservation must be between 11:00 and 01:00 next day, and end after start.'
         )
 
-    if date_obj < datetime.now().date():
+    if date_obj < datetime.now(ZoneInfo('America/Chicago')).date():
         raise ValueError('Date cannot be in the past.')
 
     return normalized_start, normalized_end, start_minutes, end_minutes
