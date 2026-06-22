@@ -6,14 +6,14 @@ from app import app, configure_logging
 
 
 def test_json_logging_format(monkeypatch, caplog):
-    app.config['LOG_FORMAT'] = 'json'
+    app.config["LOG_FORMAT"] = "json"
     configure_logging(app)
 
-    with app.test_request_context('/api/test', method='GET'):
+    with app.test_request_context("/api/test", method="GET"):
         # force handler to use caplog
         logger = app.logger
         caplog.set_level(logging.INFO)
-        logger.info('hello')
+        logger.info("hello")
 
     # we should have at least one record
     assert caplog.records
@@ -24,6 +24,6 @@ def test_json_logging_format(monkeypatch, caplog):
         data = json.loads(record_msg)
     except json.JSONDecodeError:
         pytest.skip("Non-JSON formatter in use")
-    assert data['message'] == 'hello'
-    assert data['level'] == 'INFO'
-    assert data['path'] == '/api/test'
+    assert data["message"] == "hello"
+    assert data["level"] == "INFO"
+    assert data["path"] == "/api/test"

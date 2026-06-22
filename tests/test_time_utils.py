@@ -8,8 +8,8 @@ from app import app, init_db, compute_pricing, get_db
 
 @pytest.fixture(autouse=True)
 def app_context(tmp_path):
-    app.config['DATABASE'] = str(tmp_path / 'test.db')
-    app.config['TESTING'] = True
+    app.config["DATABASE"] = str(tmp_path / "test.db")
+    app.config["TESTING"] = True
     with app.app_context():
         init_db()
     yield
@@ -29,7 +29,7 @@ def test_parse_time_rejects_bad_formats():
 
 
 def test_normalize_time_range_over_midnight():
-    today = datetime.now(ZoneInfo('America/Chicago')).strftime('%Y-%m-%d')
+    today = datetime.now(ZoneInfo("America/Chicago")).strftime("%Y-%m-%d")
     start, end, start_min, end_min = normalize_time_range(today, "23:30", "01:00")
     assert start == "23:30"
     assert end == "25:00"
@@ -38,13 +38,15 @@ def test_normalize_time_range_over_midnight():
 
 
 def test_normalize_time_range_rejects_before_open():
-    today = datetime.now(ZoneInfo('America/Chicago')).strftime('%Y-%m-%d')
+    today = datetime.now(ZoneInfo("America/Chicago")).strftime("%Y-%m-%d")
     with pytest.raises(ValueError):
         normalize_time_range(today, "10:00", "12:00")
 
 
 def test_normalize_time_range_rejects_past_date():
-    yesterday = (datetime.now(ZoneInfo('America/Chicago')) - timedelta(days=1)).strftime('%Y-%m-%d')
+    yesterday = (
+        datetime.now(ZoneInfo("America/Chicago")) - timedelta(days=1)
+    ).strftime("%Y-%m-%d")
     with pytest.raises(ValueError):
         normalize_time_range(yesterday, "11:00", "12:00")
 
@@ -53,8 +55,8 @@ def test_compute_pricing_over_midnight():
     with app.app_context():
         conn = get_db()
         pricing = compute_pricing(conn, 1, "23:00", "25:00")
-        assert pricing['subtotal'] > 0
-        assert pricing['total'] >= pricing['subtotal']
+        assert pricing["subtotal"] > 0
+        assert pricing["total"] >= pricing["subtotal"]
 
 
 def test_compute_pricing_invalid_room():

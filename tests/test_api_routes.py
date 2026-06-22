@@ -8,10 +8,10 @@ from app import app, init_db
 @pytest.fixture(autouse=True)
 def app_context(tmp_path):
     # Use a temp DB per test run
-    app.config['DATABASE'] = str(tmp_path / 'test.db')
-    app.config['TESTING'] = True
-    app.config['ADMIN_USERNAME'] = 'admin'
-    app.config['ADMIN_PASSWORD'] = 'admin'
+    app.config["DATABASE"] = str(tmp_path / "test.db")
+    app.config["TESTING"] = True
+    app.config["ADMIN_USERNAME"] = "admin"
+    app.config["ADMIN_PASSWORD"] = "admin"
     with app.app_context():
         init_db()
     yield
@@ -23,15 +23,16 @@ def client():
 
 
 def login_admin(client):
-    return client.post("/login", data=json.dumps({
-        "username": "admin",
-        "password": "admin"
-    }), content_type="application/json")
+    return client.post(
+        "/login",
+        data=json.dumps({"username": "admin", "password": "admin"}),
+        content_type="application/json",
+    )
 
 
 def test_requires_auth_for_mutations(client):
     payload = {
-        "date": datetime.now(ZoneInfo('America/Chicago')).strftime('%Y-%m-%d'),
+        "date": datetime.now(ZoneInfo("America/Chicago")).strftime("%Y-%m-%d"),
         "start_time": "12:00",
         "end_time": "13:00",
         "num_people": 2,
@@ -41,14 +42,16 @@ def test_requires_auth_for_mutations(client):
         "room_id": 1,
         "language": "en",
     }
-    resp = client.post("/reservation", data=json.dumps(payload), content_type="application/json")
+    resp = client.post(
+        "/reservation", data=json.dumps(payload), content_type="application/json"
+    )
     assert resp.status_code == 401
 
 
 def test_create_reservation_success(client):
     login_admin(client)
     payload = {
-        "date": datetime.now(ZoneInfo('America/Chicago')).strftime('%Y-%m-%d'),
+        "date": datetime.now(ZoneInfo("America/Chicago")).strftime("%Y-%m-%d"),
         "start_time": "12:00",
         "end_time": "13:00",
         "num_people": 2,
@@ -58,7 +61,9 @@ def test_create_reservation_success(client):
         "room_id": 1,
         "language": "en",
     }
-    resp = client.post("/reservation", data=json.dumps(payload), content_type="application/json")
+    resp = client.post(
+        "/reservation", data=json.dumps(payload), content_type="application/json"
+    )
     assert resp.status_code == 200
     data = resp.get_json()
     assert data.get("message") == "Reservation created successfully"
@@ -67,7 +72,7 @@ def test_create_reservation_success(client):
 def test_create_reservation_accepts_form_post(client):
     login_admin(client)
     payload = {
-        "date": datetime.now(ZoneInfo('America/Chicago')).strftime('%Y-%m-%d'),
+        "date": datetime.now(ZoneInfo("America/Chicago")).strftime("%Y-%m-%d"),
         "start_time": "13:00",
         "end_time": "14:00",
         "num_people": 2,
@@ -86,7 +91,7 @@ def test_create_reservation_accepts_form_post(client):
 
 def test_conflict_detection(client):
     login_admin(client)
-    today = datetime.now(ZoneInfo('America/Chicago')).strftime('%Y-%m-%d')
+    today = datetime.now(ZoneInfo("America/Chicago")).strftime("%Y-%m-%d")
     base_payload = {
         "date": today,
         "start_time": "12:00",
@@ -99,13 +104,17 @@ def test_conflict_detection(client):
         "language": "en",
     }
     # create first
-    resp1 = client.post("/reservation", data=json.dumps(base_payload), content_type="application/json")
+    resp1 = client.post(
+        "/reservation", data=json.dumps(base_payload), content_type="application/json"
+    )
     assert resp1.status_code == 200
 
     # overlapping reservation should 409
     payload2 = base_payload.copy()
     payload2.update({"start_time": "12:30", "end_time": "13:30"})
-    resp2 = client.post("/reservation", data=json.dumps(payload2), content_type="application/json")
+    resp2 = client.post(
+        "/reservation", data=json.dumps(payload2), content_type="application/json"
+    )
     assert resp2.status_code == 409
     data2 = resp2.get_json()
     assert data2.get("error")
@@ -113,7 +122,7 @@ def test_conflict_detection(client):
 
 def test_move_to_idle_and_back(client):
     login_admin(client)
-    today = datetime.now(ZoneInfo('America/Chicago')).strftime('%Y-%m-%d')
+    today = datetime.now(ZoneInfo("America/Chicago")).strftime("%Y-%m-%d")
     payload = {
         "date": today,
         "start_time": "14:00",
@@ -125,7 +134,9 @@ def test_move_to_idle_and_back(client):
         "room_id": 1,
         "language": "en",
     }
-    create_resp = client.post("/reservation", data=json.dumps(payload), content_type="application/json")
+    create_resp = client.post(
+        "/reservation", data=json.dumps(payload), content_type="application/json"
+    )
     assert create_resp.status_code == 200
 
     # fetch the reservation id via daily reservations API
@@ -146,7 +157,11 @@ def test_move_to_idle_and_back(client):
         "start_time": "15:00",
         "date": today,
     }
-    move_resp = client.post("/move_reservation", data=json.dumps(move_payload), content_type="application/json")
+    move_resp = client.post(
+        "/move_reservation",
+        data=json.dumps(move_payload),
+        content_type="application/json",
+    )
     assert move_resp.status_code == 200
     moved = move_resp.get_json()["reservation"]
     assert moved["room_id"] == 2
@@ -155,7 +170,7 @@ def test_move_to_idle_and_back(client):
 
 def test_idle_persists_and_excludes_from_rooms(client):
     login_admin(client)
-    today = datetime.now(ZoneInfo('America/Chicago')).strftime('%Y-%m-%d')
+    today = datetime.now(ZoneInfo("America/Chicago")).strftime("%Y-%m-%d")
     payload = {
         "date": today,
         "start_time": "13:00",
@@ -169,7 +184,9 @@ def test_idle_persists_and_excludes_from_rooms(client):
     }
 
     # Create reservation and confirm it appears in room timeline
-    create_resp = client.post("/reservation", data=json.dumps(payload), content_type="application/json")
+    create_resp = client.post(
+        "/reservation", data=json.dumps(payload), content_type="application/json"
+    )
     assert create_resp.status_code == 200
 
     daily_before = client.get(f"/api/daily_reservations?date={today}").get_json()
@@ -190,7 +207,7 @@ def test_idle_persists_and_excludes_from_rooms(client):
 
 def test_move_from_idle_clears_idle_and_places_in_room(client):
     login_admin(client)
-    today = datetime.now(ZoneInfo('America/Chicago')).strftime('%Y-%m-%d')
+    today = datetime.now(ZoneInfo("America/Chicago")).strftime("%Y-%m-%d")
     payload = {
         "date": today,
         "start_time": "11:30",
@@ -203,10 +220,14 @@ def test_move_from_idle_clears_idle_and_places_in_room(client):
         "language": "en",
     }
 
-    create_resp = client.post("/reservation", data=json.dumps(payload), content_type="application/json")
+    create_resp = client.post(
+        "/reservation", data=json.dumps(payload), content_type="application/json"
+    )
     assert create_resp.status_code == 200
 
-    res_id = client.get(f"/api/daily_reservations?date={today}").get_json()["rooms"][0]["reservations"][0]["id"]
+    res_id = client.get(f"/api/daily_reservations?date={today}").get_json()["rooms"][0][
+        "reservations"
+    ][0]["id"]
 
     # Move to idle
     assert client.post(f"/move_to_idle/{res_id}").status_code == 200
@@ -218,7 +239,11 @@ def test_move_from_idle_clears_idle_and_places_in_room(client):
         "start_time": "12:30",
         "date": today,
     }
-    move_resp = client.post("/move_reservation", data=json.dumps(move_payload), content_type="application/json")
+    move_resp = client.post(
+        "/move_reservation",
+        data=json.dumps(move_payload),
+        content_type="application/json",
+    )
     assert move_resp.status_code == 200
 
     # After move: idle list empty, room 1 empty, room 2 has the reservation at 12:30
@@ -233,7 +258,7 @@ def test_move_from_idle_clears_idle_and_places_in_room(client):
 
 def test_calendar_availability_excludes_idle(client):
     login_admin(client)
-    today = datetime.now(ZoneInfo('America/Chicago')).strftime('%Y-%m-%d')
+    today = datetime.now(ZoneInfo("America/Chicago")).strftime("%Y-%m-%d")
     payload = {
         "date": today,
         "start_time": "12:00",
@@ -244,15 +269,19 @@ def test_calendar_availability_excludes_idle(client):
         "contact_email": "",
         "room_id": 1,
         "language": "en",
-        "notes": ""
+        "notes": "",
     }
 
     # Create reservation
-    create_resp = client.post("/reservation", data=json.dumps(payload), content_type="application/json")
+    create_resp = client.post(
+        "/reservation", data=json.dumps(payload), content_type="application/json"
+    )
     assert create_resp.status_code == 200
 
     # Move to idle
-    res_id = client.get(f"/api/daily_reservations?date={today}").get_json()["rooms"][0]["reservations"][0]["id"]
+    res_id = client.get(f"/api/daily_reservations?date={today}").get_json()["rooms"][0][
+        "reservations"
+    ][0]["id"]
     assert client.post(f"/move_to_idle/{res_id}").status_code == 200
 
     # Calendar availability should show zero reservations for that day
@@ -264,7 +293,7 @@ def test_calendar_availability_excludes_idle(client):
 
 def test_room_availability_excludes_idle(client):
     login_admin(client)
-    today = datetime.now(ZoneInfo('America/Chicago')).strftime('%Y-%m-%d')
+    today = datetime.now(ZoneInfo("America/Chicago")).strftime("%Y-%m-%d")
     payload = {
         "date": today,
         "start_time": "12:00",
@@ -275,12 +304,16 @@ def test_room_availability_excludes_idle(client):
         "contact_email": "",
         "room_id": 1,
         "language": "en",
-        "notes": ""
+        "notes": "",
     }
 
-    create_resp = client.post("/reservation", data=json.dumps(payload), content_type="application/json")
+    create_resp = client.post(
+        "/reservation", data=json.dumps(payload), content_type="application/json"
+    )
     assert create_resp.status_code == 200
-    res_id = client.get(f"/api/daily_reservations?date={today}").get_json()["rooms"][0]["reservations"][0]["id"]
+    res_id = client.get(f"/api/daily_reservations?date={today}").get_json()["rooms"][0][
+        "reservations"
+    ][0]["id"]
     assert client.post(f"/move_to_idle/{res_id}").status_code == 200
 
     availability = client.get(f"/api/room_availability?date={today}").get_json()
@@ -289,7 +322,9 @@ def test_room_availability_excludes_idle(client):
 
 
 def test_rendered_timeline_does_not_show_invalid_130_am_slot(client):
-    response = client.get(f"/{datetime.now(ZoneInfo('America/Chicago')).strftime('%m-%d-%Y')}")
+    response = client.get(
+        f"/{datetime.now(ZoneInfo('America/Chicago')).strftime('%m-%d-%Y')}"
+    )
     assert response.status_code == 200
     html = response.get_data(as_text=True)
     assert ">1:30 AM<" not in html
@@ -297,7 +332,7 @@ def test_rendered_timeline_does_not_show_invalid_130_am_slot(client):
 
 def test_idle_creation_bypasses_conflict(client):
     login_admin(client)
-    today = datetime.now(ZoneInfo('America/Chicago')).strftime('%Y-%m-%d')
+    today = datetime.now(ZoneInfo("America/Chicago")).strftime("%Y-%m-%d")
 
     payload = {
         "date": today,
@@ -311,12 +346,18 @@ def test_idle_creation_bypasses_conflict(client):
         "language": "en",
     }
 
-    first = client.post("/api/reservations", data=json.dumps(payload), content_type="application/json")
+    first = client.post(
+        "/api/reservations", data=json.dumps(payload), content_type="application/json"
+    )
     assert first.status_code == 201
 
     idle_payload = payload.copy()
     idle_payload["idle"] = True
-    second = client.post("/api/reservations", data=json.dumps(idle_payload), content_type="application/json")
+    second = client.post(
+        "/api/reservations",
+        data=json.dumps(idle_payload),
+        content_type="application/json",
+    )
     assert second.status_code == 201
 
     idle_res = second.get_json()["reservation"]
@@ -329,8 +370,9 @@ def test_idle_creation_bypasses_conflict(client):
 
 def test_audit_and_history_written(client):
     from services.db import get_db
+
     login_admin(client)
-    today = datetime.now(ZoneInfo('America/Chicago')).strftime('%Y-%m-%d')
+    today = datetime.now(ZoneInfo("America/Chicago")).strftime("%Y-%m-%d")
     payload = {
         "date": today,
         "start_time": "12:00",
@@ -341,23 +383,27 @@ def test_audit_and_history_written(client):
         "contact_email": "",
         "room_id": 1,
         "language": "en",
-        "notes": ""
+        "notes": "",
     }
 
-    create_resp = client.post("/reservation", data=json.dumps(payload), content_type="application/json")
+    create_resp = client.post(
+        "/reservation", data=json.dumps(payload), content_type="application/json"
+    )
     assert create_resp.status_code == 200
 
-    res_id = client.get(f"/api/daily_reservations?date={today}").get_json()["rooms"][0]["reservations"][0]["id"]
+    res_id = client.get(f"/api/daily_reservations?date={today}").get_json()["rooms"][0][
+        "reservations"
+    ][0]["id"]
 
     with app.app_context():
         conn = get_db()
         audit_count = conn.execute(
             "SELECT COUNT(*) as count FROM audit_log WHERE action = ?",
-            ("reservation.create.api",)
+            ("reservation.create.api",),
         ).fetchone()["count"]
         history_count = conn.execute(
             "SELECT COUNT(*) as count FROM reservation_history WHERE reservation_id = ?",
-            (res_id,)
+            (res_id,),
         ).fetchone()["count"]
 
     assert audit_count >= 1
@@ -366,7 +412,7 @@ def test_audit_and_history_written(client):
 
 def test_public_schedule_is_anonymized(client):
     login_admin(client)
-    today = datetime.now(ZoneInfo('America/Chicago')).strftime('%Y-%m-%d')
+    today = datetime.now(ZoneInfo("America/Chicago")).strftime("%Y-%m-%d")
     payload = {
         "date": today,
         "start_time": "12:00",
@@ -378,34 +424,36 @@ def test_public_schedule_is_anonymized(client):
         "room_id": 1,
         "language": "en",
     }
-    client.post("/reservation", data=json.dumps(payload), content_type="application/json")
+    client.post(
+        "/reservation", data=json.dumps(payload), content_type="application/json"
+    )
 
     public_resp = client.get(f"/api/public_schedule?date={today}")
     assert public_resp.status_code == 200
     data = public_resp.get_json()
-    assert 'rooms' in data
-    first_room = data['rooms'][0]
-    assert 'reservations' in first_room
-    slot = first_room['reservations'][0]
-    assert 'start_time' in slot and 'end_time' in slot
-    assert 'status' in slot
+    assert "rooms" in data
+    first_room = data["rooms"][0]
+    assert "reservations" in first_room
+    slot = first_room["reservations"][0]
+    assert "start_time" in slot and "end_time" in slot
+    assert "status" in slot
     # No contact details should be present
-    assert 'contact_name' not in slot
+    assert "contact_name" not in slot
 
 
 def test_login_me_logout_flow(client):
     # initially not admin
-    me = client.get('/api/me').get_json()
-    assert me['is_admin'] is False
+    me = client.get("/api/me").get_json()
+    assert me["is_admin"] is False
 
     resp = login_admin(client)
     assert resp.status_code == 200
 
-    me2 = client.get('/api/me').get_json()
-    assert me2['is_admin'] is True
+    me2 = client.get("/api/me").get_json()
+    assert me2["is_admin"] is True
 
-    logout_resp = client.post('/logout')
+    logout_resp = client.post("/logout")
     assert logout_resp.status_code == 200
 
-    me3 = client.get('/api/me').get_json()
-    assert me3['is_admin'] is False
+    me3 = client.get("/api/me").get_json()
+    assert me3["is_admin"] is False

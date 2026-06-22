@@ -9,10 +9,10 @@ from app import app, init_db
 
 @pytest.fixture(autouse=True)
 def app_context(tmp_path):
-    app.config['DATABASE'] = str(tmp_path / 'test.db')
-    app.config['TESTING'] = True
-    app.config['ADMIN_USERNAME'] = 'admin'
-    app.config['ADMIN_PASSWORD'] = 'admin'
+    app.config["DATABASE"] = str(tmp_path / "test.db")
+    app.config["TESTING"] = True
+    app.config["ADMIN_USERNAME"] = "admin"
+    app.config["ADMIN_PASSWORD"] = "admin"
     with app.app_context():
         init_db()
     yield
@@ -33,7 +33,7 @@ def login_admin(client):
 
 def sample_payload(**overrides):
     payload = {
-        "date": datetime.now(ZoneInfo('America/Chicago')).strftime('%Y-%m-%d'),
+        "date": datetime.now(ZoneInfo("America/Chicago")).strftime("%Y-%m-%d"),
         "start_time": "12:00",
         "end_time": "13:00",
         "num_people": 9,

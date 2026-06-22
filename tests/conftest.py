@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 
 # Set DATABASE_URL to empty so tests use SQLite by default
-os.environ['DATABASE_URL'] = ''
+os.environ["DATABASE_URL"] = ""
 
 # Ensure project root is on sys.path for imports like `import app` and `from services import ...`
 ROOT = Path(__file__).resolve().parents[1]

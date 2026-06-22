@@ -85,7 +85,7 @@ def test_normalize_time_range_rejects_outside_hours():
     "a,b,expected",
     [
         ((0, 60), (60, 120), False),  # touching edges
-        ((0, 60), (59, 120), True),   # overlap by one minute
+        ((0, 60), (59, 120), True),  # overlap by one minute
         ((120, 180), (0, 90), False),
         ((120, 180), (150, 200), True),
     ],
