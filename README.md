@@ -1,201 +1,157 @@
-# 🎤 Karaoke Reservation System
+# 🎤 Karaoke Reservation & Operations System
 
-A **powerful and user-friendly web application** designed to manage karaoke room reservations efficiently. Inspired by the real-life operations at **Nam's Noodle** in Madison, WI, this system enables **real-time room booking**, **dynamic pricing**, and **automated cost calculations**.
+A full-stack web application built to manage karaoke room reservations for a real family-owned restaurant in Madison, WI. This project replaces a manual sticky-note workflow with a centralized, real-time booking system that enforces scheduling rules, calculates pricing, and provides role-based staff controls.
 
-Built with **Python (Flask)** for the backend, **HTML/CSS/JavaScript** for the frontend, and **Bootstrap** for styling, this tool is ideal for small to medium-sized karaoke businesses looking to streamline their operations.
+**[🔴 Live Demo](https://karaoke-reservation-system.onrender.com/)** — Log in as a guest to view room availability, or use staff credentials to manage reservations.
 
----
-
-## 📋 Table of Contents
-
-- [🎤 Karaoke Reservation System](#-karaoke-reservation-system)
-  - [📋 Table of Contents](#-table-of-contents)
-  - [✨ Features](#-features)
-  - [🎥 Demo](#-demo)
-  - [⚙ Installation](#-installation)
-    - [Requirements](#requirements)
-    - [Setup Steps](#setup-steps)
-  - [🖥 Technologies Used](#-technologies-used)
-  - [💡 Inspiration](#-inspiration)
-  - [🌟 Future Enhancements](#-future-enhancements)
-  - [🔗 Connect with Me](#-connect-with-me)
+> **Demo credentials** — Username: `staff` · Password: `demo`
+>
+> *(Read-only guest view requires no login. Staff login enables full reservation management.)*
 
 ---
 
 ## ✨ Features
 
-- **Reservation Management** – Easily add, edit, or remove reservations for available rooms.
-- **Real-Time Availability** – Instantly see which rooms are booked and available.
-- **Dynamic Pricing System** – Automatically calculates cost based on time slots:
-   - 🕛 **Early Bird Special 2026**: $35/hour (11 AM - 6 PM)
-   - 🌆 **Evening / Late Night**: $50/hour (6 PM - 1 AM)
-- **Business Hours Enforcement** – Karaoke available daily starting at 11 AM; we stay open until 1:00 AM when same-day reservations are made before 9:00 PM.
-- **Fresh Song Catalog** – All songs are updated through 2024.
-- **Tax Calculation** – 5.5% tax is automatically applied to all reservations.
-- **Intuitive UI** – Simple and modern CSS styling, interactive modals, and error messages for an enhanced user experience.
-- **Validation & Conflict Handling** – Prevents double bookings and ensures valid time selections.
+- **Real-Time Availability Calendar** — Visual day/week view of all karaoke room bookings powered by FullCalendar.
+- **Role-Based Access Control** — Unauthenticated users can view the calendar; only authenticated staff can create, edit, or cancel reservations.
+- **Conflict & Capacity Validation** — Server-side checks reject overlapping timeslots, over-capacity bookings, and requests outside business hours before any record is written.
+- **Dynamic Pricing Engine** — Automatically computes reservation cost using early-bird and peak-hour rates, with configurable tax applied at checkout.
+- **Overnight Business Hours** — Custom time normalization handles the restaurant's 11 AM – 1 AM operating window, including after-midnight end times.
+- **Walk-In Queue (Idle Area)** — Reservations can be temporarily parked outside the room timeline and reassigned later without losing their data.
+- **Audit Log & Reservation History** — Every create, edit, and cancel action is recorded with a snapshot for full traceability.
+- **Dual Database Support** — SQLite for local development; PostgreSQL (Neon) for production, switched automatically via `DATABASE_URL`.
+- **Automated Migrations** — A lightweight Python migration runner applies schema changes on startup without third-party tooling.
 
 ---
 
-## 🎥 Demo
+## 🛠 Tech Stack
 
-Here’s a preview of how the system works:
-![Demo GIF](karaoke-reservation-system.gif)  
+| Layer | Technology |
+|---|---|
+| **Backend** | Python 3, Flask |
+| **Database** | PostgreSQL (Neon, production) · SQLite (local) |
+| **Frontend** | Vanilla JavaScript · Bootstrap 5 · FullCalendar |
+| **Deployment** | Render · Docker |
+| **Testing** | Pytest (60+ tests) |
+| **Tooling** | Black · Flake8 · rcssmin/rjsmin (asset minification) |
 
 ---
 
-## ⚙ Installation
+## 💡 Origin
 
-### Requirements
+While bartending at my family's restaurant, I was solely responsible for managing karaoke reservations through a fragmented workflow: customers submitted requests online, and I manually copied them onto sticky notes per room, then compared the notes to check availability — all while making drinks. Scheduling mistakes were easy to make.
 
-- Python 3.x
+This system replaces that process with a centralized schedule that enforces availability rules automatically, calculates pricing without manual math, and gives staff a clear overview of the day.
+
+---
+
+## ⚙️ Local Setup
+
+### Prerequisites
+- Python 3.11+
 - pip
 
-### Setup Steps
+### Steps
 
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/jimmyhe05/karaoke-reservation-system.git
-   ```
+```bash
+# 1. Clone the repository
+git clone https://github.com/jimmyhe05/karaoke-reservation-system.git
+cd karaoke-reservation-system
 
-2. **Navigate to the project folder**:
-   ```bash
-   cd karaoke-reservation-system
-   ```
+# 2. Create and activate a virtual environment
+python -m venv venv
+source venv/bin/activate       # Windows: venv\Scripts\activate
 
-3. **Create a virtual environment (optional but recommended)**:
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows use: venv\Scripts\activate
-   ```
+# 3. Install dependencies
+pip install -r requirements.txt
 
-4. **Install dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   ```
+# 4. Configure environment variables
+cp .env.example .env
+# Edit .env — set SECRET_KEY, ADMIN_PASSWORD, STAFF_PASSWORD at minimum
 
-5. **Create a `.env` file in the project root** (auto-loaded by Flask via `python-dotenv`):
-   ```bash
-   cp .env.example .env
+# 5. Initialize the database
+python -m flask init-db
 
-   # (Optional) generate a stronger secret key and replace the value
-   python3 - <<'PY'
-   import secrets
-   print(secrets.token_hex(32))
-   PY
-   ```
+# 6. (Optional) Seed sample reservations for today
+python -m flask seed-sample
 
-   Then edit `.env` to set at least:
+# 7. Run the development server
+python -m flask run
+```
 
-   ```bash
-   SECRET_KEY=<your-generated-value>
-   DATABASE=karaoke.db
-   TAX_RATE=0.055
-   FLASK_APP=app.py
-   ```
+Open **http://127.0.0.1:5000** in your browser.
 
-6. **Initialize the database (idempotent)**:
-   ```bash
-   python -m flask init-db
-   ```
-
-7. **(Optional) seed sample reservations for today**:
-   ```bash
-   python -m flask seed-sample
-   ```
-
-8. **Run the Flask application** (loads `.env` automatically):
-   ```bash
-   python -m flask run
-   ```
-
-## Docker
-
-Build and run with SQLite (data persisted in a volume):
+### Docker
 
 ```bash
 docker build -t karaoke-reservation .
-docker run -p 5000:5000 -v karaoke_data:/data --env DATABASE=/data/karaoke.db karaoke-reservation
+docker run -p 5000:5000 -v karaoke_data:/data \
+  --env DATABASE=/data/karaoke.db \
+  karaoke-reservation
 ```
 
-Environment variables you can override:
-- `DATABASE_URL` for production PostgreSQL (recommended)
-- `DATABASE` for local SQLite (default `/data/karaoke.db` in the container)
-- `SECRET_KEY`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`
-- `LOG_LEVEL`, `LOG_FORMAT` (`json` or `text`)
+---
 
-## Production Database
+## 🗄️ Production Database (PostgreSQL)
 
-SQLite is still supported for local development, but PostgreSQL is the recommended
-database for hosted customer use.
-
-Set `DATABASE_URL` to switch the app to PostgreSQL:
+Set `DATABASE_URL` to switch from SQLite to PostgreSQL:
 
 ```bash
-DATABASE_URL=postgresql://user:password@host:5432/database?sslmode=require
+DATABASE_URL=postgresql://user:password@host:5432/dbname?sslmode=require
 APP_ENV=production
 SESSION_COOKIE_SECURE=true
 ```
 
-Then initialize the production schema:
-
+Then run:
 ```bash
-python -m flask --app app.py init-db
+python -m flask init-db
 ```
 
-If `DATABASE_URL` is set, the app uses `schema_postgres.sql`. If it is not set,
-the app falls back to local SQLite using `schema.sql`.
-
-9. **Access the app in your browser**:
-   Open http://127.0.0.1:5000.
+The app detects `DATABASE_URL` automatically and applies the PostgreSQL schema. Migrations are tracked in a `schema_migrations` table and applied on each startup.
 
 ---
 
-## 🖥 Technologies Used
+## 🏗️ Project Structure
 
-| Technology   | Description                          |
-|--------------|--------------------------------------|
-| **Python** 🐍 | Backend logic & calculations         |
-| **Flask** 🔥  | Lightweight web framework            |
-| **HTML5** 🎨 | Page structure                       |
-| **CSS3** 🎭  | Styling & responsiveness             |
-| **JavaScript** ✨ | Interactive UI & modal popups     |
-| **Bootstrap** 🎨 | Enhanced UI components             |
-
----
-
-## 💡 Inspiration
-
-This project grew out of my experience bartending at **Nam's Noodle**, a family-owned restaurant in **Madison, Wisconsin** that is owned by my cousins. While they were away for several weeks, I was the only person responsible for both making drinks and managing the restaurant's karaoke reservations.
-
-### The original reservation workflow
-
-Customers submitted a form online or called the restaurant. Their reservation details were then passed to the restaurant through a separate app. I had to manually copy each booking onto sticky notes for the individual karaoke rooms and compare the requested date and time against the other notes to determine whether a room was available. If a request could not be accommodated, I had to call or text the customer to arrange another time.
-
-Handling that process while bartending made the limitations of the manual system clear. Availability was difficult to understand at a glance, checking for conflicts took extra time, and transferring information between the app and sticky notes created opportunities for scheduling mistakes.
-
-### What this project is designed to improve
-
-The Karaoke Reservation System brings the workflow into one visual schedule. Customers can check room availability for a particular date and time before choosing when to book. Restaurant staff can create, edit, assign, and review reservations without manually comparing sticky notes. The system also checks for scheduling conflicts and calculates karaoke pricing and tax automatically.
-
-The goal is to make karaoke reservations more convenient for customers while reducing the time and manual effort required from restaurant staff.
-
----
-
-## 🌟 Future Enhancements
-
-- **Customer Notifications** – Send confirmations and alternative-time suggestions by text or email.
-- **Payment Integration** – Add online payment support.
-- **Multi-language Support** – Localized UI for diverse users.
+```
+karaoke-reservation-system/
+├── app.py                   # Flask app, routes, auth
+├── config.py                # Central configuration
+├── schema.sql               # SQLite schema
+├── schema_postgres.sql      # PostgreSQL schema
+├── routes/
+│   └── api.py               # REST API blueprint
+├── services/
+│   ├── db.py                # Database adapter (SQLite ↔ PostgreSQL)
+│   ├── reservations.py      # Core reservation logic
+│   ├── validation.py        # Conflict, capacity, blackout checks
+│   ├── pricing.py           # Dynamic pricing engine
+│   └── blackout.py          # Blackout window rules
+├── migrations/
+│   └── runner.py            # Lightweight migration runner
+├── scripts/
+│   ├── backup_db.sh         # SQLite backup utility
+│   └── build_assets.py      # CSS/JS minification
+├── templates/               # Jinja2 HTML templates
+├── static/                  # CSS, JS, minified assets
+├── tests/                   # Pytest test suite (60+ tests)
+└── docs/
+    └── database.md          # Schema reference
+```
 
 ---
 
-## 🔗 Connect with Me
+## 🔒 Security Notes
 
-- **GitHub**: [jimmyhe05](https://github.com/jimmyhe05)
-- **Email**: jimmyhe05@gmail.com
-- **LinkedIn**: [jimmy-he-badger](https://www.linkedin.com/in/jimmy-he-badger/)
-
-Feel free to contribute, report issues, or suggest features! Enjoy your karaoke nights hassle-free! 🎶🎤
+- Staff credentials are environment-variable-only — never hardcoded.
+- Session cookies are `HttpOnly`, `SameSite=Lax`, and `Secure` in production.
+- All mutating operations require an authenticated staff or admin session.
+- Weak credentials (`"admin"`, `"password"`, etc.) are rejected at startup.
 
 ---
+
+## 🔗 Connect
+
+- **GitHub:** [jimmyhe05](https://github.com/jimmyhe05)
+- **LinkedIn:** [jimmy-he-badger](https://www.linkedin.com/in/jimmy-he-badger/)
+- **Email:** jimmyhe05@gmail.com
