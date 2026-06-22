@@ -1,16 +1,36 @@
 import os
 import logging
-from flask import current_app
-from services.db import is_postgres_connection, _split_sql_statements
 
 logger = logging.getLogger(__name__)
+
+
+def _is_postgres(db):
+    """Detect Postgres by checking the wrapper attribute set in services/db.py."""
+    return getattr(db, "is_postgres", False)
+
+
+def _split_statements(script):
+    """Split a SQL script into individual statements, ignoring comments."""
+    statements = []
+    current = []
+    for line in script.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("--") or not stripped:
+            continue
+        current.append(line)
+        if stripped.endswith(";"):
+            statements.append("\n".join(current))
+            current = []
+    if current:
+        statements.append("\n".join(current))
+    return [s for s in statements if s.strip()]
 
 
 def run_migrations(db):
     """Run all unapplied SQL migrations in the migrations/ directory."""
 
     # 1. Create schema_migrations table if it doesn't exist
-    if is_postgres_connection(db):
+    if _is_postgres(db):
         db.execute(
             """
             CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -30,9 +50,9 @@ def run_migrations(db):
         )
     db.commit()
 
-    # 2. Check if this is an existing database upgrading to the migration system
-    # If schema_migrations is empty, but reservations exists, we mark existing
-    # migrations as applied to prevent re-running manual migrations.
+    # 2. If schema_migrations is empty but reservations already exists,
+    #    this is an existing database being upgraded — mark all known
+    #    migrations as applied so we don't re-run them.
     migrations_dir = os.path.dirname(__file__)
     migration_files = sorted(
         [f for f in os.listdir(migrations_dir) if f.endswith(".sql")]
@@ -42,8 +62,7 @@ def run_migrations(db):
         "SELECT COUNT(*) as c FROM schema_migrations"
     ).fetchone()["c"]
     if applied_count == 0:
-        # Check if reservations table exists
-        if is_postgres_connection(db):
+        if _is_postgres(db):
             has_reservations = (
                 db.execute(
                     "SELECT 1 FROM information_schema.tables WHERE table_name = 'reservations'"
@@ -83,8 +102,8 @@ def run_migrations(db):
             sql = f.read()
 
         try:
-            if is_postgres_connection(db):
-                for statement in _split_sql_statements(sql):
+            if _is_postgres(db):
+                for statement in _split_statements(sql):
                     db.execute(statement)
             else:
                 db.cursor().executescript(sql)
