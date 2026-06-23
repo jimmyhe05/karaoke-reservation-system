@@ -554,12 +554,27 @@
             <!-- Floating Chat Widget -->
             <div id="customer-chat-widget" class="customer-chat-widget">
                 <button id="chat-toggle-btn" class="chat-toggle-btn" aria-label="Open support chat">
-                    <i class="fas fa-comments"></i>
+                    <span class="chat-toggle-icons">
+                        <i class="fas fa-comment-dots chat-icon-open"></i>
+                        <i class="fas fa-times chat-icon-close"></i>
+                    </span>
+                    <span class="btn-text">Support Chat</span>
                     <span id="chat-badge" class="chat-badge d-none">0</span>
                 </button>
-                <div id="chat-window" class="chat-window d-none">
+                <div id="chat-window" class="chat-window">
                     <div class="chat-header">
-                        <h5><i class="fas fa-comments me-2"></i>Live Chat Support</h5>
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="chat-header-avatar">
+                                <i class="fas fa-headset"></i>
+                            </div>
+                            <div>
+                                <h5 class="m-0 text-white" style="font-size: 0.95rem; font-weight: 600;">Live Chat Support</h5>
+                                <span class="chat-status-indicator d-flex align-items-center gap-1" style="font-size: 0.72rem; opacity: 0.9;">
+                                    <span class="status-dot pulsing" style="width: 6px; height: 6px; border-radius: 50%; background-color: #5ee6b3; display: inline-block;"></span>
+                                    Typically replies instantly
+                                </span>
+                            </div>
+                        </div>
                         <button id="chat-close-btn" class="btn-close btn-close-white" aria-label="Close chat"></button>
                     </div>
                     <div id="chat-setup-form" class="chat-setup-form d-none p-3">

@@ -2622,21 +2622,25 @@ function initCustomerChat() {
   const startBtn = document.getElementById("chat-start-btn");
   const inputForm = document.getElementById("chat-input-form");
   const msgInput = document.getElementById("chat-message-input");
+  const widgetContainer = document.getElementById("customer-chat-widget");
 
   if (!toggleBtn) return;
 
   // Toggle chat window open/closed
   toggleBtn.addEventListener("click", () => {
-    chatWindow.classList.toggle("d-none");
-    if (!chatWindow.classList.contains("d-none")) {
+    chatWindow.classList.toggle("open");
+    if (chatWindow.classList.contains("open")) {
+      if (widgetContainer) widgetContainer.classList.add("chat-open");
       openChatWindow();
     } else {
+      if (widgetContainer) widgetContainer.classList.remove("chat-open");
       closeChatWindow();
     }
   });
 
   closeBtn.addEventListener("click", () => {
-    chatWindow.classList.add("d-none");
+    chatWindow.classList.remove("open");
+    if (widgetContainer) widgetContainer.classList.remove("chat-open");
     closeChatWindow();
   });
 
