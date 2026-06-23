@@ -2263,3 +2263,28 @@ textarea.form-control {
   background-color: #fff;
 }
 
+/* Scrollable Pending Requests Panel */
+#pendingRequestsCollapse .card-body {
+  max-height: 380px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(91, 53, 181, 0.16) transparent;
+}
+
+#pendingRequestsCollapse .card-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+#pendingRequestsCollapse .card-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+#pendingRequestsCollapse .card-body::-webkit-scrollbar-thumb {
+  background-color: rgba(91, 53, 181, 0.16);
+  border-radius: 10px;
+}
+
+#pendingRequestsCollapse .card-body::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(91, 53, 181, 0.3);
+}
+

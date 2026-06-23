@@ -2676,7 +2676,7 @@ function initCustomerChat() {
     const name = document.getElementById("chat-guest-name").value.trim();
     const email = document.getElementById("chat-guest-email").value.trim();
     if (!name) {
-      showToast("Name is required to start chatting", "error");
+      showToast("Name is required to send messages", "error");
       return;
     }
     localStorage.setItem("chat_guest_name", name);
