@@ -440,13 +440,15 @@ function initTimeSlotClickHandlers() {
 }
 
 function handleTimeSlotClick(event) {
+  const slot = event.target.closest(".time-slot");
+  if (!slot) return;
+
   if (!window.canManageReservations) {
+    if (window.currentRole === "customer") return;
     if (window.showToast) window.showToast("Worker login required", "error");
     return;
   }
-  const slot = event.target.closest(".time-slot");
   if (
-    !slot ||
     slot.classList.contains("occupied") ||
     event.target.closest(".reservation-card")
   )
@@ -461,12 +463,19 @@ function handleTimeSlotClick(event) {
     window.calendarSelectedDate ||
     document.getElementById("date")?.value ||
     new Date().toISOString().split("T")[0];
+
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  if (selectedDate < todayStr) {
+    if (window.showToast) window.showToast("Cannot book a reservation in the past", "error");
+    return;
+  }
+
   if (!roomId || isNaN(hour)) return;
   showNewReservationModal(hour, minute, roomId, selectedDate);
 }
 
 function handleReservationCardClick(event) {
-  if (!window.canManageReservations) return;
   const card = event.target.closest(".reservation-card");
   if (!card) return;
   event.stopPropagation();
@@ -479,7 +488,7 @@ function handleReservationCardClick(event) {
 function handleReservationCardKeydown(event) {
   if (event.key !== "Enter" && event.key !== " ") return;
   const card = event.target.closest(".reservation-card");
-  if (!card || !window.canManageReservations) return;
+  if (!card) return;
 
   event.preventDefault();
   const reservationId = card.dataset.reservationId;

@@ -1,12 +1,13 @@
 from services.validation import time_to_minutes
+from config import Config
 
 
-def calculate_cost(conn, room_id, start_time_str, end_time_str, tax_rate):
+def calculate_cost(conn, room_id, start_time_str, end_time_str, tax_rate=None):
     pricing = compute_pricing(conn, room_id, start_time_str, end_time_str, tax_rate)
     return pricing["total"]
 
 
-def compute_pricing(conn, room_id, start_time_str, end_time_str, tax_rate):
+def compute_pricing(conn, room_id, start_time_str, end_time_str, tax_rate=None):
     """
     Compute subtotal, tax, and total for a reservation using room rates.
 
@@ -15,6 +16,9 @@ def compute_pricing(conn, room_id, start_time_str, end_time_str, tax_rate):
     - Supports minute-level durations and overnight via 24+ hour end times.
     Returns dict with subtotal, tax, total, and period_charges breakdown.
     """
+    if tax_rate is None:
+        tax_rate = Config.TAX_RATE
+
     room = conn.execute(
         "SELECT hourly_rate, peak_hour_rate FROM rooms WHERE id = ?", (room_id,)
     ).fetchone()

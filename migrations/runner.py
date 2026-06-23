@@ -54,8 +54,13 @@ def run_migrations(db):
     #    this is an existing database being upgraded — mark all known
     #    migrations as applied so we don't re-run them.
     migrations_dir = os.path.dirname(__file__)
+    is_pg = _is_postgres(db)
     migration_files = sorted(
-        [f for f in os.listdir(migrations_dir) if f.endswith(".sql")]
+        [
+            f for f in os.listdir(migrations_dir)
+            if f.endswith(".sql")
+            and (not f.endswith("_postgres.sql") if not is_pg else not f.endswith("_sqlite.sql"))
+        ]
     )
 
     applied_count = db.execute(

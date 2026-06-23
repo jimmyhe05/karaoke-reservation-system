@@ -593,6 +593,7 @@ function updateRoomTimelines(date) {
               room_id: roomId,
               start_time: reservation.start_time,
               end_time: reservation.end_time,
+              status: reservation.status,
             };
             createReservationCard(formattedReservation, roomTimeline);
           });
@@ -631,7 +632,6 @@ function initTimeSlots() {
   });
 }
 
-// Time slot click handler function
 function timeSlotClickHandler(e) {
   const timeSlot = e.target.closest(".time-slot");
   if (!timeSlot) return;
@@ -639,8 +639,14 @@ function timeSlotClickHandler(e) {
   // The timeline owns slot activation. Stop the content-level fallback from
   // opening a second modal for the same click.
   e.stopPropagation();
-  if (!window.canManageReservations) {
-    showToast("Worker login required to create a reservation", "info");
+  
+  if (!window.canManageReservations && window.currentRole !== "customer") {
+    showToast && showToast("Please sign in as a customer to request a reservation", "info");
+    const custAuthModalEl = document.getElementById("customerAuthModal");
+    if (custAuthModalEl) {
+      const custAuthModal = bootstrap.Modal.getInstance(custAuthModalEl) || new bootstrap.Modal(custAuthModalEl);
+      custAuthModal.show();
+    }
     return;
   }
 
@@ -653,6 +659,25 @@ function timeSlotClickHandler(e) {
       window.calendarEl?.selectedDates?.[0] ||
       document.getElementById("date")?.value ||
       new Date();
+
+    let dateStr = "";
+    if (selectedDate instanceof Date) {
+      dateStr = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, "0")}-${String(selectedDate.getDate()).padStart(2, "0")}`;
+    } else if (typeof selectedDate === "string") {
+      if (/\d{2}-\d{2}-\d{4}/.test(selectedDate)) {
+        const [mm, dd, yyyy] = selectedDate.split("-");
+        dateStr = `${yyyy}-${mm}-${dd}`;
+      } else {
+        dateStr = selectedDate;
+      }
+    }
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    if (dateStr && dateStr < todayStr) {
+      showToast && showToast("Cannot book a reservation in the past", "error");
+      return;
+    }
+
     if (roomId && !isNaN(hour)) {
       console.log("Time slot clicked:", { hour, minute, roomId, selectedDate });
       showNewReservationModal(hour, minute, roomId, selectedDate);
@@ -728,6 +753,7 @@ function updateIdleArea(preloadedData = null) {
           room_id: reservation.room_id,
           start_time: reservation.start_time,
           end_time: reservation.end_time,
+          status: reservation.status,
         };
         if (!idleArea.querySelector(`[data-reservation-id="${reservation.id}"]`)) {
           createIdleReservationCard(formattedReservation, idleArea);
@@ -833,6 +859,9 @@ function createReservationCard(reservation, roomTimeline) {
   // Create the reservation card
   const card = document.createElement("div");
   card.className = "reservation-card";
+  if (reservation.status === "pending") {
+    card.classList.add("status-pending");
+  }
 
   // Set all the data attributes to maintain the reservation's identity
   card.dataset.id = reservation.id;
@@ -879,6 +908,9 @@ function createIdleReservationCard(reservation, idleArea) {
   // Create the reservation card
   const card = document.createElement("div");
   card.className = "reservation-card";
+  if (reservation.status === "pending") {
+    card.classList.add("status-pending");
+  }
 
   // Set all the data attributes to maintain the reservation's identity
   card.dataset.id = reservation.id;
@@ -1437,6 +1469,17 @@ function initCurrentTimeIndicator() {
 
 // Function to show new reservation modal
 function showNewReservationModal(hour, minute, roomId, selectedDate) {
+  // Guest guard
+  if (!window.currentRole || window.currentRole === "guest") {
+    showToast && showToast("Please sign in as a customer to request a reservation", "info");
+    const custAuthModalEl = document.getElementById("customerAuthModal");
+    if (custAuthModalEl) {
+      const custAuthModal = bootstrap.Modal.getInstance(custAuthModalEl) || new bootstrap.Modal(custAuthModalEl);
+      custAuthModal.show();
+    }
+    return;
+  }
+
   // Clear any existing reservation ID
   window.currentReservationId = null;
 
@@ -1450,8 +1493,12 @@ function showNewReservationModal(hour, minute, roomId, selectedDate) {
   if (typeof clearFormValidation === "function") {
     clearFormValidation(reservationForm);
   }
+  
+  const isWorker = window.currentRole === "admin" || window.currentRole === "staff";
   const modalTitle = document.querySelector("#reservationModalTitle .en");
-  if (modalTitle) modalTitle.textContent = "New reservation";
+  if (modalTitle) {
+    modalTitle.textContent = isWorker ? "New reservation" : "Request reservation";
+  }
 
   // Set the date, room, and start time
   // selectedDate may already be a YYYY-MM-DD string; normalize
@@ -1478,11 +1525,31 @@ function showNewReservationModal(hour, minute, roomId, selectedDate) {
   // Initialize time pickers with default 2-hour duration including minute precision
   initializeTimePickers(displayHour, 2, minute || 0);
 
+  // Enable fields in case they were left disabled by a previous read-only view
+  reservationForm.querySelectorAll("input, select, textarea").forEach(field => {
+    field.disabled = false;
+  });
+
   // Hide the delete button for new reservations
   document.getElementById("delete-reservation-btn").style.display = "none";
 
+  // Customize submit button
+  const saveBtn = reservationForm.querySelector("button[type='submit']");
+  if (saveBtn) {
+    saveBtn.style.display = "block";
+    saveBtn.textContent = isWorker ? "Save reservation" : "Submit Booking Request";
+  }
+
+  // Pre-fill user profile info if logged in as customer
+  if (window.currentRole === "customer" && window.currentUserDetails) {
+    const nameField = document.getElementById("contact_name");
+    const emailField = document.getElementById("contact_email");
+    if (nameField) nameField.value = window.currentUserDetails.name || "";
+    if (emailField) emailField.value = window.currentUserDetails.email || "";
+  }
+
   // Show the modal
-  const modal = new bootstrap.Modal(
+  const modal = bootstrap.Modal.getInstance(document.getElementById("reservationModal")) || new bootstrap.Modal(
     document.getElementById("reservationModal")
   );
   modal.show();
@@ -1519,6 +1586,8 @@ function openModalForEditing(reservationId) {
       return response.json();
     })
     .then((data) => {
+      const reservationForm = document.getElementById("reservationForm");
+      
       // Populate the modal with the reservation data
       document.getElementById("reservation_id").value = data.id;
       document.getElementById("date").value = data.date;
@@ -1555,10 +1624,76 @@ function openModalForEditing(reservationId) {
         modalEl.dataset.inIdle = inIdle ? "true" : "false";
       }
       const modalTitle = document.querySelector("#reservationModalTitle .en");
-      if (modalTitle) modalTitle.textContent = "Edit reservation";
 
-      // Show the delete button
-      document.getElementById("delete-reservation-btn").style.display = "block";
+      // Check if logged in user is a worker (staff or admin)
+      const isWorker = window.currentRole === "admin" || window.currentRole === "staff";
+      const isOwner = data.is_owner === true;
+      
+      const durationContainer = reservationForm.querySelector(".quick-duration-buttons");
+      if (durationContainer) {
+        durationContainer.style.display = isWorker ? "flex" : "none";
+      }
+
+      if (isWorker) {
+        // Staff view - enable edits on everything
+        reservationForm.querySelectorAll("input, select, textarea").forEach(field => {
+          field.disabled = false;
+        });
+        if (window.startTimePicker) window.startTimePicker.set("clickOpens", true);
+        if (window.endTimePicker) window.endTimePicker.set("clickOpens", true);
+        if (window.startTimePicker && window.startTimePicker.altInput) window.startTimePicker.altInput.disabled = false;
+        if (window.endTimePicker && window.endTimePicker.altInput) window.endTimePicker.altInput.disabled = false;
+        
+        // Show delete and save buttons
+        document.getElementById("delete-reservation-btn").style.display = "block";
+        const saveBtn = reservationForm.querySelector("button[type='submit']");
+        if (saveBtn) {
+          saveBtn.style.display = "block";
+          saveBtn.textContent = "Save reservation";
+        }
+        
+        if (modalTitle) modalTitle.textContent = "Edit reservation";
+      } else if (isOwner) {
+        // Customer owner view - enable edits on contact info / guest details, but disable date, times, room
+        reservationForm.querySelectorAll("input, select, textarea").forEach(field => {
+          const restricted = ["date", "room_id", "start_time", "end_time"];
+          if (restricted.includes(field.id) || field.name === "date" || field.name === "room_id" || field.name === "start_time" || field.name === "end_time") {
+            field.disabled = true;
+          } else {
+            field.disabled = false;
+          }
+        });
+        if (window.startTimePicker) window.startTimePicker.set("clickOpens", false);
+        if (window.endTimePicker) window.endTimePicker.set("clickOpens", false);
+        if (window.startTimePicker && window.startTimePicker.altInput) window.startTimePicker.altInput.disabled = true;
+        if (window.endTimePicker && window.endTimePicker.altInput) window.endTimePicker.altInput.disabled = true;
+        
+        // Hide delete, show save button
+        document.getElementById("delete-reservation-btn").style.display = "none";
+        const saveBtn = reservationForm.querySelector("button[type='submit']");
+        if (saveBtn) {
+          saveBtn.style.display = "block";
+          saveBtn.textContent = "Save changes";
+        }
+        
+        if (modalTitle) modalTitle.textContent = "Edit reservation details";
+      } else {
+        // Read-only view!
+        reservationForm.querySelectorAll("input, select, textarea").forEach(field => {
+          field.disabled = true;
+        });
+        if (window.startTimePicker) window.startTimePicker.set("clickOpens", false);
+        if (window.endTimePicker) window.endTimePicker.set("clickOpens", false);
+        if (window.startTimePicker && window.startTimePicker.altInput) window.startTimePicker.altInput.disabled = true;
+        if (window.endTimePicker && window.endTimePicker.altInput) window.endTimePicker.altInput.disabled = true;
+        
+        // Hide delete and save buttons
+        document.getElementById("delete-reservation-btn").style.display = "none";
+        const saveBtn = reservationForm.querySelector("button[type='submit']");
+        if (saveBtn) saveBtn.style.display = "none";
+        
+        if (modalTitle) modalTitle.textContent = "View reservation (Read Only)";
+      }
 
       // Open the modal
       const modalElement = document.getElementById("reservationModal");
@@ -1794,6 +1929,11 @@ document.addEventListener("DOMContentLoaded", function () {
   const passwordToggle = document.getElementById("password-toggle");
   const passwordInput = document.getElementById("login-password");
 
+  // Customer auth UI wiring
+  const customerLoginBtn = document.getElementById("customer-login-btn");
+  const customerAuthModalEl = document.getElementById("customerAuthModal");
+  const customerAuthModal = customerAuthModalEl ? new bootstrap.Modal(customerAuthModalEl) : null;
+
   // Prevent stuck backdrops when closing any modal
   const cleanupBackdrops = () => {
     document.body.classList.remove("modal-open");
@@ -1801,13 +1941,17 @@ document.addEventListener("DOMContentLoaded", function () {
     document.querySelectorAll(".modal-backdrop").forEach((el) => el.remove());
   };
 
-  [loginModalEl, reservationModalEl].forEach((modalEl) => {
+  [loginModalEl, reservationModalEl, customerAuthModalEl].forEach((modalEl) => {
     if (!modalEl) return;
     modalEl.addEventListener("hidden.bs.modal", cleanupBackdrops);
   });
 
   if (loginBtn && loginModal) {
     loginBtn.addEventListener("click", () => loginModal.show());
+  }
+
+  if (customerLoginBtn && customerAuthModal) {
+    customerLoginBtn.addEventListener("click", () => customerAuthModal.show());
   }
 
   if (passwordToggle && passwordInput) {
@@ -1837,9 +1981,12 @@ document.addEventListener("DOMContentLoaded", function () {
       try {
         const loginResult = await submitLogin(username, password);
         const role = loginResult.role || "guest";
-        setAuthUI(role);
+        setAuthUI(loginResult);
         showToast(`Logged in as ${role}`, "success");
         loginModal && loginModal.hide();
+        
+        const today = window.calendarEl?.dataset?.selectedDate || new Date().toISOString().split("T")[0];
+        updateRoomTimelines(today);
       } catch (err) {
         showToast(err.message, "error");
       } finally {
@@ -1851,12 +1998,16 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
+
+
   if (logoutBtn) {
     logoutBtn.addEventListener("click", async () => {
       try {
         await submitLogout();
         setAuthUI("guest");
         showToast("Logged out", "info");
+        const today = window.calendarEl?.dataset?.selectedDate || new Date().toISOString().split("T")[0];
+        updateRoomTimelines(today);
       } catch (err) {
         showToast(err.message, "error");
       }
@@ -1872,13 +2023,16 @@ document.addEventListener("DOMContentLoaded", function () {
       }
       setAuthUI("guest");
       showToast("Guest view: read-only schedule", "info");
+      const today = window.calendarEl?.dataset?.selectedDate || new Date().toISOString().split("T")[0];
+      updateRoomTimelines(today);
     });
   }
 
   if (newReservationBtn) {
     newReservationBtn.addEventListener("click", () => {
-      if (!window.canManageReservations) {
-        showToast("Worker login required", "error");
+      if (!window.currentRole || window.currentRole === "guest") {
+        showToast && showToast("Please sign in as a customer to request a reservation", "info");
+        customerAuthModal && customerAuthModal.show();
         return;
       }
       const selectedDate =
@@ -1894,9 +2048,56 @@ document.addEventListener("DOMContentLoaded", function () {
       showNewReservationModal(11, 0, roomId, selectedDate);
     });
   }
+  // Wire notification toggle and bell click
+  const notificationBellBtn = document.getElementById("notification-bell-btn");
+  const notificationDropdown = document.getElementById("notification-dropdown");
+  const markAllReadBtn = document.getElementById("mark-all-read-btn");
+  const emailNotificationsToggle = document.getElementById("email-notifications-toggle");
+
+  if (notificationBellBtn && notificationDropdown) {
+    notificationBellBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      notificationDropdown.classList.toggle("show");
+    });
+    
+    document.addEventListener("click", (e) => {
+      if (!notificationDropdown.contains(e.target) && e.target !== notificationBellBtn) {
+        notificationDropdown.classList.remove("show");
+      }
+    });
+  }
+
+  if (markAllReadBtn) {
+    markAllReadBtn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      try {
+        const res = await fetch("/api/notifications/read", { method: "POST" });
+        if (res.ok) {
+          loadNotifications();
+        }
+      } catch (err) {
+        console.error("Failed to mark notifications read", err);
+      }
+    });
+  }
+
+  if (emailNotificationsToggle) {
+    emailNotificationsToggle.addEventListener("change", async () => {
+      const email_notifications = emailNotificationsToggle.checked;
+      try {
+        await fetch("/api/me/preferences", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email_notifications }),
+        });
+      } catch (err) {
+        console.error("Failed to update notification preferences", err);
+      }
+    });
+  }
 
   fetchAuthStatus().then((me) =>
-    setAuthUI(me.role || (me.is_admin ? "admin" : "guest"))
+    setAuthUI(me)
   );
 
   // Wire duration shortcuts once on load
@@ -1940,7 +2141,9 @@ async function fetchAuthStatus() {
   try {
     const res = await fetch("/api/me");
     if (!res.ok) return { is_admin: false, role: "guest" };
-    return res.json();
+    const me = await res.json();
+    window.currentUserDetails = me;
+    return me;
   } catch (e) {
     console.error("/api/me failed", e);
     return { is_admin: false, role: "guest" };
@@ -1950,42 +2153,97 @@ async function fetchAuthStatus() {
 function setAuthUI(authState) {
   const statusEl = document.getElementById("admin-status");
   const loginBtn = document.getElementById("login-btn");
+  const customerLoginBtn = document.getElementById("customer-login-btn");
   const logoutBtn = document.getElementById("logout-btn");
-  const role =
-    typeof authState === "string"
-      ? authState
-      : authState
-        ? "admin"
-        : "guest";
-  const isSignedIn = role === "admin" || role === "staff";
+  const newReservationBtn = document.getElementById("new-reservation-btn");
+  
+  const userObj = (authState && typeof authState === "object") ? authState : null;
+  const role = userObj ? userObj.role : authState;
+  
+  const isWorker = role === "admin" || role === "staff";
+  const isCustomer = role === "customer";
+  const isAnyUser = isWorker || isCustomer;
+  
   window.currentRole = role;
   window.isAdmin = role === "admin";
-  window.canManageReservations = isSignedIn;
+  window.canManageReservations = isWorker;
+  
   if (statusEl) {
-    const statusText =
-      role === "admin"
-        ? "Admin signed in"
-        : role === "staff"
-          ? "Staff signed in"
-          : "Not signed in";
+    let statusText = "Not signed in";
+    if (role === "admin") statusText = "Admin signed in";
+    else if (role === "staff") statusText = "Staff signed in";
+    else if (role === "customer") statusText = `Hello, ${userObj?.name || 'Customer'}`;
+    
     const statusLabel = statusEl.querySelector(".status-label");
     if (statusLabel) {
       statusLabel.textContent = statusText;
     } else {
       statusEl.textContent = statusText;
     }
-    statusEl.classList.toggle("bg-success", isSignedIn);
-    statusEl.classList.toggle("bg-secondary", !isSignedIn);
+    statusEl.classList.toggle("bg-success", isAnyUser);
+    statusEl.classList.toggle("bg-secondary", !isAnyUser);
   }
-  if (loginBtn) loginBtn.classList.toggle("d-none", isSignedIn);
-  if (logoutBtn) logoutBtn.classList.toggle("d-none", !isSignedIn);
+  
+  if (loginBtn) loginBtn.classList.toggle("d-none", isAnyUser);
+  if (customerLoginBtn) customerLoginBtn.classList.toggle("d-none", isAnyUser);
+  if (logoutBtn) logoutBtn.classList.toggle("d-none", !isAnyUser);
+  
+  if (newReservationBtn) {
+    if (isCustomer) {
+      newReservationBtn.classList.remove("d-none");
+      newReservationBtn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14"/></svg> Request reservation';
+    } else if (isWorker) {
+      newReservationBtn.classList.remove("d-none");
+      newReservationBtn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14"/></svg> New reservation';
+    } else {
+      newReservationBtn.classList.remove("d-none");
+      newReservationBtn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14"/></svg> Request reservation';
+    }
+  }
+  
   if (typeof window.refreshDragAuth === "function") {
     window.refreshDragAuth(window.canManageReservations);
   }
+  
   document.querySelectorAll(".reservation-card").forEach((card) => {
     updateReservationCardAccessibility(card, window.canManageReservations);
   });
   updateIdleEmptyStateCopy();
+
+  const pendingPanel = document.getElementById("pending-requests-panel");
+  if (pendingPanel) {
+    if (isWorker) {
+      pendingPanel.classList.remove("d-none");
+      loadPendingRequests();
+    } else {
+      pendingPanel.classList.add("d-none");
+    }
+  }
+
+  const notificationContainer = document.getElementById("notification-container");
+  const customerBookingsPanel = document.getElementById("customer-bookings-panel");
+  
+  if (isCustomer) {
+    if (notificationContainer) {
+      notificationContainer.classList.remove("d-none");
+      const toggle = document.getElementById("email-notifications-toggle");
+      if (toggle) {
+        toggle.checked = userObj && userObj.email_notifications !== undefined ? !!userObj.email_notifications : true;
+      }
+      loadNotifications();
+    }
+    if (customerBookingsPanel) {
+      customerBookingsPanel.classList.remove("d-none");
+      loadCustomerBookings();
+    }
+  } else {
+    if (notificationContainer) notificationContainer.classList.add("d-none");
+    if (customerBookingsPanel) customerBookingsPanel.classList.add("d-none");
+  }
+  
+  // Update chat widgets based on new role
+  if (typeof initStaffChat === "function") initStaffChat();
+  if (typeof fetchCustomerMessages === "function") fetchCustomerMessages();
 }
 
 window.updateReservationCardAccessibility = updateReservationCardAccessibility;
@@ -1996,6 +2254,113 @@ function requireWorker() {
     return false;
   }
   return true;
+}
+
+// Pending Requests Inbox panel helpers
+async function loadPendingRequests() {
+  const pendingListEl = document.getElementById("pending-requests-list");
+  const pendingCountEl = document.getElementById("pending-count");
+  if (!pendingListEl) return;
+  
+  try {
+    const res = await fetch("/api/requests/pending");
+    if (!res.ok) return;
+    const data = await res.json();
+    const requests = data.requests || [];
+    
+    if (pendingCountEl) pendingCountEl.textContent = requests.length;
+    
+    if (requests.length === 0) {
+      pendingListEl.innerHTML = '<div class="col-12 text-center text-muted py-3">No pending requests.</div>';
+      return;
+    }
+    
+    pendingListEl.innerHTML = requests.map(req => `
+      <div class="col" id="pending-card-${req.id}">
+        <div class="card shadow-sm border-warning h-100">
+          <div class="card-body p-3">
+            <h6 class="card-title d-flex justify-content-between">
+              <strong>${escapeHtml(req.contact_name)}</strong>
+              <span class="badge bg-warning text-dark" style="font-size: 0.75em;">Pending</span>
+            </h6>
+            <div class="mb-2" style="font-size: 0.85rem; line-height: 1.4;">
+              <div><i class="far fa-calendar me-1"></i> ${req.date}</div>
+              <div><i class="far fa-clock me-1"></i> ${req.start_time} - ${req.end_time}</div>
+              <div><i class="fas fa-door-open me-1"></i> Room ${req.room_id}</div>
+              <div><i class="fas fa-users me-1"></i> ${req.num_people} guests</div>
+              <div><i class="fas fa-dollar-sign me-1"></i> Est. $${parseFloat(req.total_cost).toFixed(2)}</div>
+              <div><i class="fas fa-phone me-1"></i> ${escapeHtml(req.contact_phone)}</div>
+              ${req.contact_email ? `<div><i class="far fa-envelope me-1"></i> ${escapeHtml(req.contact_email)}</div>` : ''}
+              ${req.notes ? `<div class="mt-1 text-muted italic" style="font-size: 0.8rem;">Note: "${escapeHtml(req.notes)}"</div>` : ''}
+            </div>
+            <div class="d-flex gap-2 justify-content-end mt-3">
+              <button class="btn btn-sm btn-danger decline-req-btn" data-id="${req.id}">Decline</button>
+              <button class="btn btn-sm btn-success approve-req-btn" data-id="${req.id}">Approve</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `).join('');
+    
+    // Add event listeners
+    pendingListEl.querySelectorAll(".approve-req-btn").forEach(btn => {
+      btn.addEventListener("click", () => handleApproveRequest(btn.dataset.id));
+    });
+    
+    pendingListEl.querySelectorAll(".decline-req-btn").forEach(btn => {
+      btn.addEventListener("click", () => handleDeclineRequest(btn.dataset.id));
+    });
+  } catch (err) {
+    console.error("Failed to load pending requests", err);
+  }
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+}
+
+async function handleApproveRequest(id) {
+  if (!confirm("Are you sure you want to approve this request?")) return;
+  try {
+    const res = await fetch(`/api/requests/${id}/approve`, { method: "POST" });
+    const data = await res.json();
+    if (!res.ok) {
+      showToast(data.error?.message || "Failed to approve request", "error");
+      return;
+    }
+    showToast("Request approved successfully!", "success");
+    loadPendingRequests();
+    const today = window.calendarEl?.dataset?.selectedDate || new Date().toISOString().split("T")[0];
+    updateRoomTimelines(today);
+    refreshCalendarAvailability();
+  } catch (err) {
+    showToast(err.message, "error");
+  }
+}
+
+async function handleDeclineRequest(id) {
+  const reason = prompt("Enter a reason for declining this request (optional, sent to customer):");
+  if (reason === null) return;
+  try {
+    const res = await fetch(`/api/requests/${id}/decline`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showToast(data.error?.message || "Failed to decline request", "error");
+      return;
+    }
+    showToast("Request declined", "info");
+    loadPendingRequests();
+    const today = window.calendarEl?.dataset?.selectedDate || new Date().toISOString().split("T")[0];
+    updateRoomTimelines(today);
+    refreshCalendarAvailability();
+  } catch (err) {
+    showToast(err.message, "error");
+  }
 }
 
 async function submitLogin(username, password) {
@@ -2038,3 +2403,524 @@ document
       alert("Error in delete function: " + error.message);
     }
   });
+
+
+async function loadNotifications() {
+  const listEl = document.getElementById("notification-list");
+  const badgeEl = document.getElementById("notification-badge");
+  if (!listEl) return;
+
+  try {
+    const res = await fetch("/api/notifications");
+    if (!res.ok) return;
+    const data = await res.json();
+    const notifications = data.notifications || [];
+    
+    // Count unread
+    const unreadCount = notifications.filter(n => !n.read).length;
+    if (badgeEl) {
+      if (unreadCount > 0) {
+        badgeEl.textContent = unreadCount;
+        badgeEl.classList.remove("d-none");
+      } else {
+        badgeEl.classList.add("d-none");
+      }
+    }
+
+    if (notifications.length === 0) {
+      listEl.innerHTML = '<div class="notification-empty">No notifications</div>';
+      return;
+    }
+
+    listEl.innerHTML = "";
+    notifications.forEach(item => {
+      const itemEl = document.createElement("div");
+      itemEl.className = `notification-item ${item.read ? "" : "unread"}`;
+      itemEl.dataset.id = item.id;
+      
+      const textEl = document.createElement("span");
+      textEl.textContent = item.message;
+      itemEl.appendChild(textEl);
+      
+      const timeEl = document.createElement("span");
+      timeEl.className = "time";
+      const dateStr = item.created_at ? new Date(item.created_at + "Z").toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : "";
+      timeEl.textContent = dateStr;
+      itemEl.appendChild(timeEl);
+
+      itemEl.addEventListener("click", async () => {
+        if (!item.read) {
+          try {
+            await fetch(`/api/notifications/${item.id}/read`, { method: "POST" });
+            loadNotifications();
+          } catch (err) {
+            console.error("Failed to mark notification read", err);
+          }
+        }
+      });
+
+      listEl.appendChild(itemEl);
+    });
+  } catch (err) {
+    console.error("Failed to load notifications", err);
+  }
+}
+
+
+async function loadCustomerBookings() {
+  const listEl = document.getElementById("customer-bookings-list");
+  if (!listEl) return;
+
+  try {
+    const res = await fetch("/api/me/bookings");
+    if (!res.ok) return;
+    const data = await res.json();
+    const bookings = data.bookings || [];
+
+    if (bookings.length === 0) {
+      listEl.innerHTML = '<div class="col w-100 text-center text-muted py-3">No active bookings or requests.</div>';
+      return;
+    }
+
+    listEl.innerHTML = "";
+    bookings.forEach(booking => {
+      const col = document.createElement("div");
+      col.className = "col";
+      
+      let statusClass = "bg-secondary";
+      let statusText = booking.status;
+      if (booking.status === "pending") {
+        statusClass = "bg-warning text-dark";
+      } else if (booking.status === "confirmed") {
+        statusClass = "bg-success";
+      } else if (booking.status === "rejected") {
+        statusClass = "bg-danger";
+      } else if (booking.status === "cancelled") {
+        statusClass = "bg-secondary";
+      }
+
+      let cancelBtnHtml = "";
+      if (booking.status === "pending" || booking.status === "confirmed") {
+        cancelBtnHtml = `
+          <button class="btn btn-sm btn-outline-danger w-100 mt-2 cancel-booking-btn" data-id="${booking.id}">
+            Cancel request
+          </button>
+        `;
+      }
+
+      col.innerHTML = `
+        <div class="card h-100 shadow-sm border-0 bg-light">
+          <div class="card-body p-3 d-flex flex-column justify-content-between">
+            <div>
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="badge bg-primary">Room ${booking.room_id}</span>
+                <span class="badge ${statusClass}">${statusText}</span>
+              </div>
+              <p class="mb-1 small"><strong>Date:</strong> ${booking.date}</p>
+              <p class="mb-1 small"><strong>Time:</strong> ${booking.start_time} - ${booking.end_time}</p>
+              <p class="mb-1 small"><strong>Guests:</strong> ${booking.num_people}</p>
+              <p class="mb-1 small"><strong>Cost:</strong> $${booking.total_cost.toFixed(2)}</p>
+              ${booking.notes ? `<p class="mb-0 mt-2 small text-muted text-truncate" title="${booking.notes}"><strong>Notes:</strong> ${booking.notes}</p>` : ""}
+            </div>
+            ${cancelBtnHtml}
+          </div>
+        </div>
+      `;
+
+      const cancelBtn = col.querySelector(".cancel-booking-btn");
+      if (cancelBtn) {
+        cancelBtn.addEventListener("click", async () => {
+          if (!confirm("Are you sure you want to cancel this booking?")) return;
+          cancelBtn.disabled = true;
+          cancelBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Cancelling...';
+          try {
+            const cancelRes = await fetch(`/api/me/bookings/${booking.id}/cancel`, { method: "POST" });
+            const cancelData = await cancelRes.json();
+            if (cancelRes.ok) {
+              showToast(cancelData.message || "Booking cancelled", "success");
+              loadCustomerBookings();
+              const today = window.calendarEl?.dataset?.selectedDate || new Date().toISOString().split("T")[0];
+              updateRoomTimelines(today);
+            } else {
+              showToast(cancelData.error || "Failed to cancel booking", "error");
+              cancelBtn.disabled = false;
+              cancelBtn.textContent = "Cancel request";
+            }
+          } catch (err) {
+            console.error("Cancel failed", err);
+            showToast("Failed to cancel booking", "error");
+            cancelBtn.disabled = false;
+            cancelBtn.textContent = "Cancel request";
+          }
+        });
+      }
+
+      listEl.appendChild(col);
+    });
+  } catch (err) {
+    console.error("Failed to load customer bookings", err);
+  }
+}
+
+window.loadNotifications = loadNotifications;
+window.loadCustomerBookings = loadCustomerBookings;
+
+// Set up Server-Sent Events for real-time timeline updates
+function setupSSE() {
+  const eventSource = new EventSource("/api/live_updates");
+  
+  eventSource.onmessage = function(event) {
+    try {
+      const data = JSON.parse(event.data);
+      if (data.type === "refresh") {
+        console.log("SSE update received: refreshing timelines...");
+        const selectedDate = window.calendarEl?.dataset?.selectedDate || new Date().toISOString().split("T")[0];
+        if (typeof updateRoomTimelines === "function") {
+          updateRoomTimelines(selectedDate);
+        }
+        if (typeof updateIdleArea === "function") {
+          updateIdleArea();
+        }
+        if (typeof window.refreshCalendarAvailability === "function") {
+          window.refreshCalendarAvailability();
+        }
+        // Refresh chats on SSE updates
+        if (typeof window.refreshChat === "function") {
+          window.refreshChat();
+        }
+        if (typeof window.refreshStaffChat === "function") {
+          window.refreshStaffChat();
+        }
+      }
+    } catch (e) {
+      console.error("Error handling SSE message:", e);
+    }
+  };
+  
+  eventSource.onerror = function(err) {
+    console.warn("SSE connection error. Reconnecting...");
+  };
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  setupSSE();
+  initCustomerChat();
+  initStaffChat();
+});
+
+
+// ---- Customer Chat Widget Controller ----
+let chatPollingInterval = null;
+let activeSessionId = null;
+
+function initCustomerChat() {
+  const toggleBtn = document.getElementById("chat-toggle-btn");
+  const closeBtn = document.getElementById("chat-close-btn");
+  const chatWindow = document.getElementById("chat-window");
+  const setupForm = document.getElementById("chat-setup-form");
+  const messagesContainer = document.getElementById("chat-messages-container");
+  const startBtn = document.getElementById("chat-start-btn");
+  const inputForm = document.getElementById("chat-input-form");
+  const msgInput = document.getElementById("chat-message-input");
+
+  if (!toggleBtn) return;
+
+  // Toggle chat window open/closed
+  toggleBtn.addEventListener("click", () => {
+    chatWindow.classList.toggle("d-none");
+    if (!chatWindow.classList.contains("d-none")) {
+      openChatWindow();
+    } else {
+      closeChatWindow();
+    }
+  });
+
+  closeBtn.addEventListener("click", () => {
+    chatWindow.classList.add("d-none");
+    closeChatWindow();
+  });
+
+  // Start chat for guest users after providing name/email
+  startBtn.addEventListener("click", async () => {
+    const name = document.getElementById("chat-guest-name").value.trim();
+    const email = document.getElementById("chat-guest-email").value.trim();
+    if (!name) {
+      showToast("Name is required to start chatting", "error");
+      return;
+    }
+    localStorage.setItem("chat_guest_name", name);
+    localStorage.setItem("chat_guest_email", email);
+    
+    setupForm.classList.add("d-none");
+    messagesContainer.classList.remove("d-none");
+    
+    await fetchCustomerMessages();
+  });
+
+  inputForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const text = msgInput.value.trim();
+    if (!text) return;
+
+    msgInput.value = "";
+    
+    const guestName = localStorage.getItem("chat_guest_name") || "";
+    const guestEmail = localStorage.getItem("chat_guest_email") || "";
+
+    try {
+      const res = await fetch("/api/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: text,
+          guest_name: guestName,
+          guest_email: guestEmail
+        })
+      });
+      if (res.ok) {
+        await fetchCustomerMessages();
+      } else {
+        showToast("Failed to send message", "error");
+      }
+    } catch (err) {
+      console.error("Send message error", err);
+    }
+  });
+
+  startChatStatusPolling();
+}
+
+async function openChatWindow() {
+  const setupForm = document.getElementById("chat-setup-form");
+  const messagesContainer = document.getElementById("chat-messages-container");
+
+  const isLoggedIn = window.currentRole === "customer";
+  
+  if (isLoggedIn) {
+    setupForm.classList.add("d-none");
+    messagesContainer.classList.remove("d-none");
+    await fetchCustomerMessages();
+  } else {
+    const savedName = localStorage.getItem("chat_guest_name");
+    if (savedName) {
+      setupForm.classList.add("d-none");
+      messagesContainer.classList.remove("d-none");
+      await fetchCustomerMessages();
+    } else {
+      setupForm.classList.remove("d-none");
+      messagesContainer.classList.add("d-none");
+    }
+  }
+
+  if (chatPollingInterval) clearInterval(chatPollingInterval);
+  chatPollingInterval = setInterval(fetchCustomerMessages, 5000);
+}
+
+function closeChatWindow() {
+  if (chatPollingInterval) {
+    clearInterval(chatPollingInterval);
+    chatPollingInterval = null;
+  }
+  startChatStatusPolling();
+}
+
+function startChatStatusPolling() {
+  if (chatPollingInterval) clearInterval(chatPollingInterval);
+  chatPollingInterval = setInterval(fetchCustomerMessages, 30000);
+  fetchCustomerMessages();
+}
+
+async function fetchCustomerMessages() {
+  try {
+    const res = await fetch("/api/messages");
+    if (!res.ok) return;
+    const data = await res.json();
+    
+    activeSessionId = data.session_id;
+    const messages = data.messages || [];
+
+    const messagesDiv = document.getElementById("chat-messages");
+    if (messagesDiv) {
+      const scrollAtBottom = messagesDiv.scrollHeight - messagesDiv.clientHeight <= messagesDiv.scrollTop + 20;
+      
+      messagesDiv.innerHTML = messages.map(msg => {
+        const timeStr = msg.created_at ? new Date(msg.created_at + "Z").toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "";
+        const roleClass = msg.sender_role;
+        return `
+          <div class="chat-message ${roleClass}">
+            <div>${escapeHtml(msg.message)}</div>
+            <div class="meta">${timeStr}</div>
+          </div>
+        `;
+      }).join("");
+
+      if (scrollAtBottom || messagesDiv.scrollTop === 0) {
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+      }
+    }
+
+    const unreadCount = messages.filter(m => m.sender_role === "staff" && m.read_by_user === 0).length;
+    const badge = document.getElementById("chat-badge");
+    if (badge) {
+      if (unreadCount > 0) {
+        badge.textContent = unreadCount;
+        badge.classList.remove("d-none");
+      } else {
+        badge.classList.add("d-none");
+      }
+    }
+  } catch (err) {
+    console.error("Fetch customer messages failed", err);
+  }
+}
+
+window.refreshChat = fetchCustomerMessages;
+
+
+// ---- Staff Messaging Dashboard Controller ----
+let staffPollingInterval = null;
+let activeStaffSessionId = null;
+let staffChatInitialized = false;
+
+function initStaffChat() {
+  const panel = document.getElementById("staff-messages-panel");
+  if (!panel) return;
+
+  const role = window.currentRole;
+  const isWorker = role === "admin" || role === "staff";
+  
+  if (isWorker) {
+    panel.classList.remove("d-none");
+    loadStaffConversations();
+    
+    if (staffPollingInterval) clearInterval(staffPollingInterval);
+    staffPollingInterval = setInterval(loadStaffConversations, 10000);
+
+    if (!staffChatInitialized) {
+      staffChatInitialized = true;
+      const replyForm = document.getElementById("staff-chat-form");
+      const replyInput = document.getElementById("staff-chat-input");
+
+      replyForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const text = replyInput.value.trim();
+        if (!text || !activeStaffSessionId) return;
+
+        replyInput.value = "";
+
+        try {
+          const res = await fetch(`/api/staff/messages/${activeStaffSessionId}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ message: text })
+          });
+          if (res.ok) {
+            await loadActiveConversation(activeStaffSessionId);
+          } else {
+            showToast("Failed to send reply", "error");
+          }
+        } catch (err) {
+          console.error("Send staff reply error", err);
+        }
+      });
+    }
+  } else {
+    panel.classList.add("d-none");
+    if (staffPollingInterval) {
+      clearInterval(staffPollingInterval);
+      staffPollingInterval = null;
+    }
+  }
+}
+
+async function loadStaffConversations() {
+  try {
+    const res = await fetch("/api/staff/messages");
+    if (!res.ok) return;
+    const data = await res.json();
+    const conversations = data.conversations || [];
+    
+    const listDiv = document.getElementById("staff-conversations-items");
+    if (!listDiv) return;
+
+    if (conversations.length === 0) {
+      listDiv.innerHTML = '<div class="text-center text-muted p-3 small">No active chats</div>';
+      return;
+    }
+
+    listDiv.innerHTML = conversations.map(c => {
+      const activeClass = c.session_id === activeStaffSessionId ? "active" : "";
+      const unreadBadge = c.unread_count > 0 ? `<span class="badge-unread">${c.unread_count}</span>` : "";
+      const timeStr = c.last_message_time ? new Date(c.last_message_time + "Z").toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "";
+      return `
+        <button class="conversation-item-btn ${activeClass}" data-session-id="${c.session_id}">
+          <div class="item-header">
+            <span class="name">${escapeHtml(c.name)}</span>
+            <span class="time">${timeStr}</span>
+          </div>
+          <div class="d-flex justify-content-between align-items-center gap-2">
+            <span class="preview text-truncate">${escapeHtml(c.last_message)}</span>
+            ${unreadBadge}
+          </div>
+        </button>
+      `;
+    }).join("");
+
+    listDiv.querySelectorAll(".conversation-item-btn").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const sid = btn.dataset.sessionId;
+        activeStaffSessionId = sid;
+        
+        listDiv.querySelectorAll(".conversation-item-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        
+        await loadActiveConversation(sid);
+      });
+    });
+  } catch (err) {
+    console.error("Load staff conversations failed", err);
+  }
+}
+
+async function loadActiveConversation(sessionId) {
+  try {
+    const res = await fetch(`/api/staff/messages/${sessionId}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    const messages = data.messages || [];
+    
+    document.getElementById("staff-chat-header").classList.remove("d-none");
+    document.getElementById("staff-chat-input-area").classList.remove("d-none");
+    
+    document.getElementById("active-chat-title").textContent = data.name || "Guest";
+    document.getElementById("active-chat-email").textContent = data.email || "";
+
+    const messagesDiv = document.getElementById("staff-chat-messages");
+    if (messagesDiv) {
+      messagesDiv.innerHTML = messages.map(msg => {
+        const timeStr = msg.created_at ? new Date(msg.created_at + "Z").toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "";
+        const roleClass = msg.sender_role;
+        const label = roleClass === "staff" ? "Support" : (data.name || "Guest");
+        return `
+          <div class="chat-message ${roleClass === 'staff' ? 'staff' : 'customer'}">
+            <div style="font-size: 0.72rem; font-weight: bold; opacity: 0.8; margin-bottom: 2px;">${label}</div>
+            <div>${escapeHtml(msg.message)}</div>
+            <div class="meta">${timeStr}</div>
+          </div>
+        `;
+      }).join("");
+      
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+  } catch (err) {
+    console.error("Load active conversation failed", err);
+  }
+}
+
+window.refreshStaffChat = async () => {
+  await loadStaffConversations();
+  if (activeStaffSessionId) {
+    await loadActiveConversation(activeStaffSessionId);
+  }
+};
+

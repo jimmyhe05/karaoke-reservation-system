@@ -457,3 +457,78 @@ def test_login_me_logout_flow(client):
 
     me3 = client.get("/api/me").get_json()
     assert me3["is_admin"] is False
+
+
+def test_calendar_availability_role_filtering(client):
+    chicago_tz = ZoneInfo("America/Chicago")
+    today = datetime.now(chicago_tz).strftime("%Y-%m-%d")
+    
+    from services.db import get_db
+    from services.auth import create_user
+
+    # Create users
+    conn = get_db()
+    try:
+        user_a = create_user("usera@example.com", "pass123", "User A")
+        user_b = create_user("userb@example.com", "pass123", "User B")
+        conn.commit()
+    finally:
+        conn.close()
+
+    # Create reservations directly
+    conn = get_db()
+    try:
+        # 1. Confirmed
+        conn.execute(
+            "INSERT INTO reservations (room_id, date, start_time, end_time, num_people, contact_name, contact_phone, contact_email, status, user_id, total_cost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (1, today, "12:00", "13:00", 2, "Confirmed User", "555-0001", "confirmed@example.com", "confirmed", user_a["id"], 50.0)
+        )
+        # 2. Pending User A
+        conn.execute(
+            "INSERT INTO reservations (room_id, date, start_time, end_time, num_people, contact_name, contact_phone, contact_email, status, user_id, total_cost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (1, today, "13:00", "14:00", 2, "Pending User A", "555-0002", "usera@example.com", "pending", user_a["id"], 50.0)
+        )
+        # 3. Pending User B
+        conn.execute(
+            "INSERT INTO reservations (room_id, date, start_time, end_time, num_people, contact_name, contact_phone, contact_email, status, user_id, total_cost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (1, today, "14:00", "15:00", 2, "Pending User B", "555-0003", "userb@example.com", "pending", user_b["id"], 50.0)
+        )
+        # 4. Rejected
+        conn.execute(
+            "INSERT INTO reservations (room_id, date, start_time, end_time, num_people, contact_name, contact_phone, contact_email, status, user_id, total_cost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (1, today, "15:00", "16:00", 2, "Rejected User", "555-0004", "rejected@example.com", "rejected", user_a["id"], 50.0)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    # Test as User A (sees Confirmed + Pending User A + Pending User B = 3)
+    with client.session_transaction() as sess:
+        sess["role"] = "customer"
+        sess["user_id"] = user_a["id"]
+        sess["user_email"] = user_a["email"]
+    
+    res_a = client.get(f"/api/calendar_availability?start={today}&end={today}").get_json()
+    assert res_a[0]["reservationCount"] == 3
+
+    # Test as User B (sees Confirmed + Pending User A + Pending User B = 3)
+    with client.session_transaction() as sess:
+        sess["role"] = "customer"
+        sess["user_id"] = user_b["id"]
+        sess["user_email"] = user_b["email"]
+
+    res_b = client.get(f"/api/calendar_availability?start={today}&end={today}").get_json()
+    assert res_b[0]["reservationCount"] == 3
+
+    # Test as Guest/Anonymous (sees Confirmed + Pending User A + Pending User B = 3)
+    with client.session_transaction() as sess:
+        sess.clear()
+
+    res_guest = client.get(f"/api/calendar_availability?start={today}&end={today}").get_json()
+    assert res_guest[0]["reservationCount"] == 3
+
+    # Test as Admin/Worker (sees Confirmed + Pending A + Pending B = 3)
+    login_admin(client)
+    res_admin = client.get(f"/api/calendar_availability?start={today}&end={today}").get_json()
+    assert res_admin[0]["reservationCount"] == 3
+

@@ -1,34 +1,134 @@
 import os
 import sys
-import sqlite3
-from flask import g, current_app
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, Session
 
-# Ensure the project root is on sys.path so `migrations` is always importable,
-# regardless of how gunicorn sets the working directory.
+# Ensure the project root is on sys.path
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
+database_url = os.getenv("DATABASE_URL")
+if database_url and database_url.startswith(("postgres://", "postgresql://")):
+    if database_url.startswith("postgres://"):
+        database_url = database_url.replace("postgres://", "postgresql+psycopg://", 1)
+    else:
+        database_url = database_url.replace("postgresql://", "postgresql+psycopg://", 1)
+    engine = create_engine(database_url, pool_pre_ping=True)
+else:
+    db_path = os.getenv("DATABASE", "karaoke.db")
+    engine = create_engine(
+        f"sqlite:///{db_path}",
+        connect_args={"check_same_thread": False}
+    )
 
-class PostgresConnection:
-    """Small compatibility wrapper for the app's sqlite-style query calls."""
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-    is_postgres = True
 
-    def __init__(self, conn):
-        self._conn = conn
+class DictRowWrapper:
+    def __init__(self, row_tuple, description):
+        self._row = row_tuple
+        self._keys = [col[0] for col in description]
+        self._dict = {col[0]: val for col, val in zip(description, row_tuple)}
 
-    def execute(self, query, params=()):
-        return self._conn.execute(_postgres_placeholders(query), params)
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            return self._row[key]
+        return self._dict[key]
+
+    def __contains__(self, key):
+        return key in self._dict
+
+    def get(self, key, default=None):
+        return self._dict.get(key, default)
+
+    def keys(self):
+        return self._keys
+
+    def values(self):
+        return self._dict.values()
+
+    def items(self):
+        return self._dict.items()
+
+    def __iter__(self):
+        return iter(self._dict)
+
+    def __repr__(self):
+        return repr(self._dict)
+
+
+class CompatibleCursor:
+    def __init__(self, cursor):
+        self.cursor = cursor
+
+    def fetchone(self):
+        row = self.cursor.fetchone()
+        if row is None:
+            return None
+        if hasattr(row, "keys") or isinstance(row, dict):
+            return row
+        # Convert sqlite row or tuple to DictRowWrapper
+        if type(row).__name__ == "Row" or isinstance(row, tuple):
+            return DictRowWrapper(tuple(row), self.cursor.description)
+        return row
+
+    def fetchall(self):
+        rows = self.cursor.fetchall()
+        if not rows:
+            return []
+        first = rows[0]
+        if hasattr(first, "keys") or isinstance(first, dict):
+            return rows
+        if type(first).__name__ == "Row" or isinstance(first, tuple):
+            return [DictRowWrapper(tuple(r), self.cursor.description) for r in rows]
+        return rows
+
+    @property
+    def lastrowid(self):
+        return getattr(self.cursor, "lastrowid", None)
+
+
+class SqlAlchemyConnectionAdapter:
+    """Wrapper to make SQLAlchemy session match Flask SQLite/Postgres connection interface."""
+    
+    def __init__(self, session: Session):
+        self.session = session
+        self.is_postgres = (session.bind.dialect.name == "postgresql")
+
+    def execute(self, query, params=None):
+        if params is None:
+            params = ()
+        
+        if isinstance(query, str):
+            # Check if using postgres placeholders
+            dbapi_conn = self.session.connection().connection
+            cursor = dbapi_conn.cursor()
+
+            
+            if self.is_postgres:
+                # Translate '?' to '%s'
+                query_processed = query.replace("?", "%s")
+                cursor.execute(query_processed, params)
+            else:
+                cursor.execute(query, params)
+            return CompatibleCursor(cursor)
+        else:
+            return self.session.execute(query, params)
 
     def commit(self):
-        return self._conn.commit()
+        self.session.commit()
 
     def rollback(self):
-        return self._conn.rollback()
+        self.session.rollback()
 
     def close(self):
-        return self._conn.close()
+        self.session.close()
+
+
+def get_db() -> SqlAlchemyConnectionAdapter:
+    """Legacy helper returning connection wrapper."""
+    return SqlAlchemyConnectionAdapter(SessionLocal())
 
 
 def _postgres_placeholders(query):
@@ -37,59 +137,43 @@ def _postgres_placeholders(query):
 
 
 def is_postgres_connection(conn):
+
     return getattr(conn, "is_postgres", False)
 
 
-def _connect_postgres(database_url):
-    try:
-        import psycopg
-        from psycopg.rows import dict_row
-    except ImportError as exc:
-        raise RuntimeError(
-            "PostgreSQL requires psycopg. Run `pip install -r requirements.txt`."
-        ) from exc
-
-    return PostgresConnection(psycopg.connect(database_url, row_factory=dict_row))
-
-
-def get_db():
-    """Get a database connection bound to the Flask app context."""
-    if "db" not in g:
-        database_url = current_app.config.get("DATABASE_URL")
-        if database_url and database_url.startswith(("postgres://", "postgresql://")):
-            g.db = _connect_postgres(database_url)
-        else:
-            db_path = current_app.config.get("DATABASE")
-            g.db = sqlite3.connect(db_path)
-            g.db.row_factory = sqlite3.Row
-            g.db.execute("PRAGMA foreign_keys = ON;")
-            g.db.execute("PRAGMA journal_mode = WAL;")
-    return g.db
-
-
 def close_db(error=None):
-    """Close the database connection if present."""
-    db = g.pop("db", None)
-    if db is not None:
-        db.close()
+    pass
 
 
 def init_db():
-    """Initialize the database schema and indexes (idempotent)."""
-    db = get_db()
-    schema_file = "schema_postgres.sql" if is_postgres_connection(db) else "schema.sql"
-    with current_app.open_resource(schema_file, mode="r") as f:
+    """Initialize schema using raw engine connection to execute scripts."""
+    is_pg = engine.dialect.name == "postgresql"
+    schema_file = "schema_postgres.sql" if is_pg else "schema.sql"
+    schema_path = os.path.join(_ROOT, schema_file)
+    
+    with open(schema_path, "r") as f:
         schema = f.read()
-    if is_postgres_connection(db):
-        for statement in _split_sql_statements(schema):
-            db.execute(statement)
-    else:
-        db.cursor().executescript(schema)
-    db.commit()
 
-    from migrations.runner import run_migrations
+    dbapi_conn = engine.raw_connection()
+    try:
+        cursor = dbapi_conn.cursor()
+        if is_pg:
+            for statement in _split_sql_statements(schema):
+                if statement.strip():
+                    cursor.execute(statement)
+        else:
+            cursor.executescript(schema)
+        dbapi_conn.commit()
+    finally:
+        dbapi_conn.close()
 
-    run_migrations(db)
+    # Run migrations
+    conn = get_db()
+    try:
+        from migrations.runner import run_migrations
+        run_migrations(conn)
+    finally:
+        conn.close()
 
 
 def _split_sql_statements(script):

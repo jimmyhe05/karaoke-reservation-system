@@ -1,0 +1,12 @@
+ALTER TABLE users ADD COLUMN email_notifications INTEGER DEFAULT 1;
+
+CREATE TABLE IF NOT EXISTS notifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    reservation_id INTEGER,
+    message TEXT NOT NULL,
+    read INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (reservation_id) REFERENCES reservations(id) ON DELETE SET NULL
+);

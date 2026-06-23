@@ -104,7 +104,7 @@ def find_conflict(conn, room_id, date, start_time_str, end_time_str, exclude_id=
         """
         SELECT id, start_time, end_time, status
         FROM reservations
-        WHERE room_id = ? AND date = ? AND status != 'cancelled'
+        WHERE room_id = ? AND date = ? AND status NOT IN ('cancelled', 'pending', 'rejected')
         ORDER BY start_time, id
     """,
         (room_id, date),

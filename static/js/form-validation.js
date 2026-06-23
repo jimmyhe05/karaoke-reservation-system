@@ -220,7 +220,16 @@ function handleReservationSubmit(event) {
   }
 
   // If validation passes, prepare the data for submission
+  const disabledFields = [];
+  form.querySelectorAll(":disabled").forEach((field) => {
+    disabledFields.push(field);
+    field.disabled = false;
+  });
   const formData = new FormData(form);
+  disabledFields.forEach((field) => {
+    field.disabled = true;
+  });
+  
   const jsonData = {};
   formData.forEach((value, key) => {
     jsonData[key] = value;
@@ -233,10 +242,15 @@ function handleReservationSubmit(event) {
 
   // Determine API endpoint (create or update)
   const reservationId = jsonData["reservation_id"];
-  const apiUrl = reservationId
+  let apiUrl = reservationId
     ? `/api/reservations/${reservationId}`
     : "/api/reservations";
-  const method = reservationId ? "PATCH" : "POST";
+  let method = reservationId ? "PATCH" : "POST";
+
+  if (window.currentRole === "customer" && !reservationId) {
+    apiUrl = "/api/requests";
+    method = "POST";
+  }
 
   // Handle idle selection by mapping to a valid room id and deferring idle state
   const roomSelect = form.querySelector("#room_id");
@@ -315,6 +329,9 @@ function handleReservationSubmit(event) {
         if (typeof window.updateIdleArea === "function") window.updateIdleArea();
         if (typeof window.refreshCalendarAvailability === "function")
           window.refreshCalendarAvailability();
+        if (typeof window.loadCustomerBookings === "function" && window.currentRole === "customer") {
+          window.loadCustomerBookings();
+        }
       };
 
       if (idleSelected) {

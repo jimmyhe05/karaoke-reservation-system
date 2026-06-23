@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cancel Reservation - Nam's Noodle Karaoke</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f5f7fb;
+            color: #212529;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+        .cancel-card {
+            max-width: 550px;
+            margin: 80px auto;
+            background: #ffffff;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(15, 23, 42, 0.08);
+            border: 1px solid #e5e7eb;
+            overflow: hidden;
+        }
+        .cancel-header {
+            background: linear-gradient(135deg, #dc3545, #ff6b6b);
+            color: white;
+            padding: 24px;
+            text-align: center;
+        }
+        .cancel-body {
+            padding: 30px;
+        }
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid #f1f3f5;
+        }
+        .detail-row:last-child {
+            border-bottom: none;
+        }
+        .detail-label {
+            font-weight: 600;
+            color: #4b5563;
+        }
+        .detail-value {
+            color: #1f2937;
+        }
+        .alert-cutoff {
+            background-color: #fff3cd;
+            border-color: #ffeeba;
+            color: #856404;
+            border-radius: 8px;
+            padding: 15px;
+            font-size: 0.9em;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="cancel-card">
+            {% if error %}
+            <div class="cancel-header bg-danger">
+                <h3 class="mb-0">Error</h3>
+            </div>
+            <div class="cancel-body text-center">
+                <div class="alert alert-danger mb-4">{{ error }}</div>
+                <a href="/" class="btn btn-primary">Go to Home</a>
+            </div>
+            {% else %}
+            <div class="cancel-header">
+                <h3 class="mb-1">Cancel Reservation</h3>
+                <p class="mb-0 text-white-50">Please review your booking details below</p>
+            </div>
+            <div class="cancel-body">
+                <div class="mb-4">
+                    <div class="detail-row">
+                        <span class="detail-label">Name</span>
+                        <span class="detail-value">{{ reservation.contact_name }}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Room</span>
+                        <span class="detail-value">Room {{ reservation.room_id }}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Date</span>
+                        <span class="detail-value">{{ reservation.date }}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Time</span>
+                        <span class="detail-value">{{ reservation.start_time }} - {{ reservation.end_time }}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Guests</span>
+                        <span class="detail-value">{{ reservation.num_people }}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Total Cost</span>
+                        <span class="detail-value">${{ "%.2f"|format(reservation.total_cost) }}</span>
+                    </div>
+                </div>
+
+                {% if can_cancel %}
+                <div class="alert alert-warning mb-4" role="alert">
+                    Are you sure you want to cancel this reservation? This action cannot be undone.
+                </div>
+                <form method="POST" action="/cancel/{{ reservation.cancellation_token }}">
+                    <button type="submit" class="btn btn-danger w-100 py-2" style="font-weight: 600;">
+                        Confirm Cancellation
+                    </button>
+                </form>
+                <div class="text-center mt-3">
+                    <a href="/" class="text-decoration-none text-muted" style="font-size: 0.9em;">Keep Reservation and Go Home</a>
+                </div>
+                {% else %}
+                <div class="alert-cutoff" role="alert">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <strong>Cannot cancel online:</strong> This reservation starts in less than {{ cutoff_hours }} hours. Online cancellations are not permitted within this window. Please call the venue directly to make changes.
+                </div>
+                <a href="/" class="btn btn-secondary w-100">Back to Website</a>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>

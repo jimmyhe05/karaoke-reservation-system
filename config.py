@@ -54,3 +54,20 @@ class Config:
         ).lower()
         == "true"
     )
+
+    # Google OAuth 2.0 configuration
+    GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+    GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
+
+    # SMTP Mail configuration
+    MAIL_SMTP_HOST = os.getenv("MAIL_SMTP_HOST", "smtp.gmail.com")
+    MAIL_SMTP_PORT = int(os.getenv("MAIL_SMTP_PORT", "587"))
+    MAIL_SMTP_USER = os.getenv("MAIL_SMTP_USER", "")
+    MAIL_SMTP_PASS = os.getenv("MAIL_SMTP_PASS", "")
+    MAIL_FROM = os.getenv("MAIL_FROM", "")
+
+    # Reservation Operations config
+    STAFF_NOTIFY_EMAIL = os.getenv("STAFF_NOTIFY_EMAIL", "")
+    CANCEL_CUTOFF_HOURS = int(os.getenv("CANCEL_CUTOFF_HOURS", "2"))
+    BASE_URL = os.getenv("BASE_URL", "http://localhost:5000")
+

@@ -39,10 +39,6 @@ function initEnhancedCalendar() {
     headerToolbar: false, // use our external controls
     height: "auto",
     selectable: true,
-    selectConstraint: {
-      start: new Date().setHours(0, 0, 0, 0),
-      end: "2025-12-31",
-    },
     // Add event rendering for availability
     events: function (info, successCallback) {
       // Format dates as YYYY-MM-DD
@@ -80,13 +76,17 @@ function initEnhancedCalendar() {
     },
     // Enhanced day cell rendering
     dayCellDidMount: function (info) {
+      const getLocalTodayStr = () => {
+        const today = new Date();
+        return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+      };
       // Add custom styling for past dates
-      if (info.date < new Date().setHours(0, 0, 0, 0)) {
+      if (info.dateStr < getLocalTodayStr()) {
         info.el.classList.add("fc-day-past");
       }
 
       // Highlight the selected date
-      if (info.date.toISOString().split("T")[0] === selectedDate) {
+      if (info.dateStr === selectedDate) {
         info.el.classList.add("selected-date");
       }
     },
@@ -131,8 +131,12 @@ function initEnhancedCalendar() {
     },
     // Handle date selection
     dateClick: function (info) {
+      const getLocalTodayStr = () => {
+        const today = new Date();
+        return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+      };
       // Don't allow selecting past dates
-      if (info.date < new Date().setHours(0, 0, 0, 0)) {
+      if (info.dateStr < getLocalTodayStr()) {
         return;
       }
 
@@ -143,10 +147,6 @@ function initEnhancedCalendar() {
       left: "",
       center: "title",
       right: "",
-    },
-    // Only allow dates from today onwards
-    validRange: {
-      start: new Date(),
     },
     // Date formatting
     titleFormat: { year: "numeric", month: "long" },
@@ -202,7 +202,9 @@ function applySelectedDate(dateStr, skipCalendarSet) {
   );
   if (cell) cell.classList.add("selected-date");
   updateSelectedDateLabel(dateStr);
-  updateRoomTimelines(dateStr);
+  if (typeof window.updateRoomTimelines === "function") {
+    window.updateRoomTimelines(dateStr);
+  }
   // Update URL path
   try {
     const d = new Date(dateStr + "T00:00:00");

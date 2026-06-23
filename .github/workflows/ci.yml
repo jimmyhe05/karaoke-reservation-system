@@ -32,5 +32,6 @@ jobs:
           SECRET_KEY: test
           ADMIN_USERNAME: admin
           ADMIN_PASSWORD: admin
+          DATABASE_URL: ""
         run: |
           python -m pytest -q
