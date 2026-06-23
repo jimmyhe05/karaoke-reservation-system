@@ -695,9 +695,6 @@ function updateIdleArea(preloadedData = null) {
 
   console.log("Updating idle area");
 
-  // Clear the existing idle reservations
-  idleArea.innerHTML = "";
-
   // Get the current date
   const currentDate =
     document.getElementById("date")?.value ||
@@ -708,6 +705,9 @@ function updateIdleArea(preloadedData = null) {
 
   const populate = (data) => {
     console.log("Received data for idle area:", data);
+    
+    // Clear the existing idle reservations here inside populate to prevent duplicates
+    idleArea.innerHTML = "";
 
     const roomReservationIds = new Set();
     if (data.rooms) {
@@ -1530,6 +1530,16 @@ function showNewReservationModal(hour, minute, roomId, selectedDate) {
     field.disabled = false;
   });
 
+  // Configure status field
+  const statusRow = document.getElementById("status-group-row");
+  const statusSelect = document.getElementById("status");
+  if (statusSelect) {
+    statusSelect.value = isWorker ? "confirmed" : "pending";
+  }
+  if (statusRow) {
+    statusRow.style.display = isWorker ? "block" : "none";
+  }
+
   // Hide the delete button for new reservations
   document.getElementById("delete-reservation-btn").style.display = "none";
 
@@ -1619,6 +1629,12 @@ function openModalForEditing(reservationId) {
       const notesField = document.getElementById("notes");
       if (notesField) notesField.value = data.notes || "";
 
+      // Populate status
+      const statusSelect = document.getElementById("status");
+      if (statusSelect) {
+        statusSelect.value = data.status || "confirmed";
+      }
+
       const modalEl = document.getElementById("reservationModal");
       if (modalEl) {
         modalEl.dataset.inIdle = inIdle ? "true" : "false";
@@ -1634,6 +1650,8 @@ function openModalForEditing(reservationId) {
         durationContainer.style.display = isWorker ? "flex" : "none";
       }
 
+      const statusRow = document.getElementById("status-group-row");
+
       if (isWorker) {
         // Staff view - enable edits on everything
         reservationForm.querySelectorAll("input, select, textarea").forEach(field => {
@@ -1644,6 +1662,9 @@ function openModalForEditing(reservationId) {
         if (window.startTimePicker && window.startTimePicker.altInput) window.startTimePicker.altInput.disabled = false;
         if (window.endTimePicker && window.endTimePicker.altInput) window.endTimePicker.altInput.disabled = false;
         
+        // Show status selection row for staff
+        if (statusRow) statusRow.style.display = "block";
+
         // Show delete and save buttons
         document.getElementById("delete-reservation-btn").style.display = "block";
         const saveBtn = reservationForm.querySelector("button[type='submit']");
@@ -1654,10 +1675,10 @@ function openModalForEditing(reservationId) {
         
         if (modalTitle) modalTitle.textContent = "Edit reservation";
       } else if (isOwner) {
-        // Customer owner view - enable edits on contact info / guest details, but disable date, times, room
+        // Customer owner view - enable edits on contact info / guest details, but disable date, times, room, status
         reservationForm.querySelectorAll("input, select, textarea").forEach(field => {
-          const restricted = ["date", "room_id", "start_time", "end_time"];
-          if (restricted.includes(field.id) || field.name === "date" || field.name === "room_id" || field.name === "start_time" || field.name === "end_time") {
+          const restricted = ["date", "room_id", "start_time", "end_time", "status"];
+          if (restricted.includes(field.id) || field.name === "date" || field.name === "room_id" || field.name === "start_time" || field.name === "end_time" || field.name === "status") {
             field.disabled = true;
           } else {
             field.disabled = false;
@@ -1668,6 +1689,9 @@ function openModalForEditing(reservationId) {
         if (window.startTimePicker && window.startTimePicker.altInput) window.startTimePicker.altInput.disabled = true;
         if (window.endTimePicker && window.endTimePicker.altInput) window.endTimePicker.altInput.disabled = true;
         
+        // Hide status selection row for customer
+        if (statusRow) statusRow.style.display = "none";
+
         // Hide delete, show save button
         document.getElementById("delete-reservation-btn").style.display = "none";
         const saveBtn = reservationForm.querySelector("button[type='submit']");
@@ -1687,6 +1711,9 @@ function openModalForEditing(reservationId) {
         if (window.startTimePicker && window.startTimePicker.altInput) window.startTimePicker.altInput.disabled = true;
         if (window.endTimePicker && window.endTimePicker.altInput) window.endTimePicker.altInput.disabled = true;
         
+        // Hide status selection row
+        if (statusRow) statusRow.style.display = "none";
+
         // Hide delete and save buttons
         document.getElementById("delete-reservation-btn").style.display = "none";
         const saveBtn = reservationForm.querySelector("button[type='submit']");
@@ -2668,8 +2695,12 @@ function initCustomerChat() {
 
     msgInput.value = "";
     
-    const guestName = localStorage.getItem("chat_guest_name") || "";
-    const guestEmail = localStorage.getItem("chat_guest_email") || "";
+    let guestName = localStorage.getItem("chat_guest_name") || "";
+    let guestEmail = localStorage.getItem("chat_guest_email") || "";
+    if (window.currentRole === "customer" && window.currentUserDetails) {
+      guestName = window.currentUserDetails.name || guestName;
+      guestEmail = window.currentUserDetails.email || guestEmail;
+    }
 
     try {
       const res = await fetch("/api/messages", {

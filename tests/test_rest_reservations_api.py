@@ -176,3 +176,25 @@ def test_delete_reservation(client):
 
     missing = client.get(f"/api/reservations/{reservation_id}")
     assert missing.status_code == 404
+
+
+def test_patch_updates_status(client):
+    login_admin(client)
+    created = client.post(
+        "/api/reservations",
+        data=json.dumps(sample_payload(start_time="19:00", end_time="20:00")),
+        content_type="application/json",
+    )
+    res_data = created.get_json()["reservation"]
+    reservation_id = res_data["id"]
+    assert res_data["status"] == "confirmed"
+
+    patch_body = {"status": "pending"}
+    patched = client.patch(
+        f"/api/reservations/{reservation_id}",
+        data=json.dumps(patch_body),
+        content_type="application/json",
+    )
+    assert patched.status_code == 200
+    patched_res = patched.get_json()["reservation"]
+    assert patched_res["status"] == "pending"

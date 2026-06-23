@@ -252,11 +252,12 @@ def create_reservation_api_payload(
             conn, room_id, normalized_start, normalized_end, getattr(Config, "TAX_RATE", 0.055)
         )
 
+        status = data.get("status", "confirmed")
         insert_sql = """INSERT INTO reservations
            (date, start_time, end_time, num_people,
             contact_name, contact_phone, contact_email, room_id,
-            total_cost, language, notes)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+            total_cost, language, notes, status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
         insert_params = (
             data.get("date"),
             normalized_start,
@@ -269,6 +270,7 @@ def create_reservation_api_payload(
             total_cost,
             data.get("language", "en"),
             data.get("notes", ""),
+            status,
         )
         if is_postgres_connection(conn):
             cursor = conn.execute(insert_sql.replace("?", "%s") + " RETURNING id", insert_params)

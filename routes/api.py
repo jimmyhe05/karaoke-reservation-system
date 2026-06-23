@@ -55,6 +55,17 @@ templates.env.globals["url_for"] = custom_url_for
 
 # ---- Response helpers ----
 
+def serialize_dates(obj):
+    from datetime import date, time
+    if isinstance(obj, dict):
+        return {k: serialize_dates(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [serialize_dates(x) for x in obj]
+    elif isinstance(obj, (datetime, date, time)):
+        return obj.isoformat()
+    return obj
+
+
 def api_error(message: str, status_code: int = 400, code=None, fields=None, details=None, status: int = None):
     final_status = status if status is not None else status_code
     payload = {"error": {"message": message}}
@@ -64,7 +75,7 @@ def api_error(message: str, status_code: int = 400, code=None, fields=None, deta
         payload["error"]["fields"] = fields
     if details:
         payload["error"]["details"] = details
-    return JSONResponse(content=payload, status_code=final_status)
+    return JSONResponse(content=serialize_dates(payload), status_code=final_status)
 
 
 def api_ok(data=None, message=None, status_code: int = 200, status: int = None):
@@ -74,7 +85,7 @@ def api_ok(data=None, message=None, status_code: int = 200, status: int = None):
         payload["message"] = message
     if data is not None:
         payload.update(data)
-    return JSONResponse(content=payload, status_code=final_status)
+    return JSONResponse(content=serialize_dates(payload), status_code=final_status)
 
 
 async def get_request_payload(request: Request) -> dict:
