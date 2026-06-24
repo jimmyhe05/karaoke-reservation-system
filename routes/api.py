@@ -23,6 +23,7 @@ from services.reservations import (
     log_action,
     sse_broker,
     is_blackout,
+    publish_sse_event,
 )
 import services.auth as auth_service
 import services.oauth as oauth_service
@@ -830,7 +831,7 @@ def api_approve_request(request: Request, reservation_id: int, background_tasks:
         log_action("reservation.approve", reservation_id=reservation_id, description=f"Approved request {reservation_id}")
         
         # Publish change for SSE
-        sse_broker.publish("refresh")
+        publish_sse_event("reservation_approved", f"Reservation request {reservation_id} for Room {updated_row['room_id']} on {updated_row['date']} has been approved.")
 
         # Asynchronously send email confirmation if user allowed it
         should_send_email = True
@@ -901,7 +902,7 @@ async def api_decline_request(request: Request, reservation_id: int, background_
         log_action("reservation.decline", reservation_id=reservation_id, reason=reason, description=f"Declined request {reservation_id}")
         
         # Publish change for SSE
-        sse_broker.publish("refresh")
+        publish_sse_event("reservation_declined", f"Reservation request {reservation_id} for Room {updated_row['room_id']} on {updated_row['date']} has been declined.")
 
         # Asynchronously send email rejection if user allowed it
         should_send_email = True
@@ -1012,7 +1013,7 @@ def execute_cancel(request: Request, token: str, background_tasks: BackgroundTas
         log_action("reservation.cancel_by_customer", reservation_id=row["id"], description=f"Cancelled reservation {row['id']}")
         
         # Publish change for SSE
-        sse_broker.publish("refresh")
+        publish_sse_event("reservation_cancelled", f"Reservation {row['id']} for Room {row['room_id']} on {row['date']} has been cancelled by Customer.")
 
         # Asynchronously send email cancellation notice to staff
         background_tasks.add_task(email_service.send_cancellation_notice, res_dict)
@@ -1089,7 +1090,7 @@ def api_mark_notification_read(request: Request, notification_id: int):
 # ---- Direct Messaging API Endpoints ----
 
 @router.get("/api/messages")
-def api_get_messages(request: Request):
+def api_get_messages(request: Request, mark_read: bool = False):
     session_id = request.session.get("guest_session_id")
     if not session_id:
         session_id = str(uuid.uuid4())
@@ -1102,23 +1103,25 @@ def api_get_messages(request: Request):
     conn = get_db()
     try:
         if is_customer:
-            # Mark staff replies as read by user
-            conn.execute(
-                "UPDATE direct_messages SET read_by_user = 1 WHERE sender_role = 'staff' AND read_by_user = 0 AND (user_id = ? OR session_id = ?)",
-                (user_id, session_id),
-            )
-            conn.commit()
+            if mark_read:
+                # Mark staff replies as read by user
+                conn.execute(
+                    "UPDATE direct_messages SET read_by_user = 1 WHERE sender_role = 'staff' AND read_by_user = 0 AND (user_id = ? OR session_id = ?)",
+                    (user_id, session_id),
+                )
+                conn.commit()
             rows = conn.execute(
                 "SELECT * FROM direct_messages WHERE user_id = ? OR session_id = ? ORDER BY created_at ASC, id ASC",
                 (user_id, session_id),
             ).fetchall()
         else:
-            # Mark staff replies as read by user
-            conn.execute(
-                "UPDATE direct_messages SET read_by_user = 1 WHERE sender_role = 'staff' AND read_by_user = 0 AND user_id IS NULL AND session_id = ?",
-                (session_id,),
-            )
-            conn.commit()
+            if mark_read:
+                # Mark staff replies as read by user
+                conn.execute(
+                    "UPDATE direct_messages SET read_by_user = 1 WHERE sender_role = 'staff' AND read_by_user = 0 AND user_id IS NULL AND session_id = ?",
+                    (session_id,),
+                )
+                conn.commit()
             rows = conn.execute(
                 "SELECT * FROM direct_messages WHERE user_id IS NULL AND session_id = ? ORDER BY created_at ASC, id ASC",
                 (session_id,),
@@ -1175,7 +1178,13 @@ async def api_post_message(request: Request):
         conn.commit()
         
         # Publish change for SSE
-        sse_broker.publish("refresh")
+        publish_sse_event(
+            "new_message",
+            f"New message from {guest_name or 'Guest'}",
+            user_id=user_id if is_customer else None,
+            session_id=session_id,
+            sender_role=sender_role
+        )
         
         return api_ok(message="Message sent successfully")
     except Exception as e:
@@ -1331,7 +1340,13 @@ async def api_post_staff_reply(request: Request, session_id: str):
         conn.commit()
         
         # Publish change for SSE
-        sse_broker.publish("refresh")
+        publish_sse_event(
+            "new_message",
+            "New support message",
+            user_id=user_id,
+            session_id=session_id,
+            sender_role="staff"
+        )
         
         return api_ok(message="Reply sent successfully")
     except Exception as e:
@@ -1488,7 +1503,7 @@ def api_customer_cancel_booking(request: Request, reservation_id: int, backgroun
         log_action("reservation.cancel_by_customer", reservation_id=reservation_id, description=f"Cancelled booking {reservation_id}")
         
         # Publish change for SSE
-        sse_broker.publish("refresh")
+        publish_sse_event("reservation_cancelled", f"Reservation {reservation_id} for Room {row['room_id']} on {row['date']} has been cancelled by Customer.")
 
         if row["status"] == "confirmed":
             background_tasks.add_task(email_service.send_cancellation_notice, res_dict)
@@ -1634,7 +1649,7 @@ def legacy_delete_reservation(request: Request, reservation_id: int):
         )
         
         # Publish change for SSE
-        sse_broker.publish("refresh")
+        publish_sse_event("reservation_deleted", f"Reservation {reservation_id} for Room {reservation['room_id']} on {reservation['date']} has been deleted by Staff.")
 
         return JSONResponse(content={"message": "Reservation deleted successfully", "id": reservation_id}, status_code=200)
     except Exception as e:
@@ -1747,7 +1762,9 @@ async def legacy_update_reservation(request: Request, reservation_id: int):
         )
         
         # Publish change for SSE
-        sse_broker.publish("refresh")
+        role = request.session.get("role", "guest")
+        updated_by = "Staff" if role in ("admin", "staff") else "Customer"
+        publish_sse_event("reservation_updated", f"Reservation {reservation_id} updated by {updated_by}.")
 
         return JSONResponse(content={"message": "Reservation updated successfully", "reservation": serialize_reservation_row(updated)}, status_code=200)
     except Exception as e:
@@ -1788,7 +1805,7 @@ def move_to_idle(request: Request, reservation_id: int):
         conn.commit()
         
         # Publish change for SSE
-        sse_broker.publish("refresh")
+        publish_sse_event("reservation_moved_to_idle", f"Reservation {reservation_id} moved to idle queue by Staff.")
 
         return JSONResponse(content={"success": True})
     except Exception as e:
@@ -1822,7 +1839,7 @@ def remove_from_idle(request: Request, reservation_id: int):
         conn.commit()
         
         # Publish change for SSE
-        sse_broker.publish("refresh")
+        publish_sse_event("reservation_removed_from_idle", f"Reservation {reservation_id} removed from idle queue by Staff.")
 
         return JSONResponse(content={"success": True})
     except Exception as e:
@@ -1943,7 +1960,9 @@ async def move_reservation(request: Request):
         conn.commit()
         
         # Publish change for SSE
-        sse_broker.publish("refresh")
+        role = request.session.get("role", "guest")
+        assigned_by = "Staff" if role in ("admin", "staff") else "Customer"
+        publish_sse_event("reservation_assigned", f"Reservation {reservation_id} rescheduled/assigned to Room {room_id} on {date} by {assigned_by}.")
 
         return JSONResponse(
             content={

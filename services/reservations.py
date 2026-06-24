@@ -32,7 +32,7 @@ class SSEBroker:
         if q in self.listeners:
             self.listeners.remove(q)
 
-    def publish(self, data: str):
+    def publish(self, data):
         for q in self.listeners:
             try:
                 loop = asyncio.get_running_loop()
@@ -41,6 +41,20 @@ class SSEBroker:
                 pass
 
 sse_broker = SSEBroker()
+
+def publish_sse_event(action: str, message: str, user_id=None, session_id=None, sender_role=None):
+    meta = request_meta.get() or {}
+    if not sender_role:
+        sender_role = meta.get("role", "guest")
+    payload = {
+        "type": "refresh",
+        "action": action,
+        "message": message,
+        "sender_role": sender_role,
+        "user_id": user_id,
+        "session_id": session_id
+    }
+    sse_broker.publish(payload)
 
 
 # ---- Serialization helpers ----
@@ -342,7 +356,10 @@ def create_reservation_api_payload(
         )
         
         # Publish change for SSE subscribers
-        sse_broker.publish("refresh")
+        role = request_meta.get().get("role", "guest")
+        created_by = "Staff" if role in ("admin", "staff") else "Customer"
+        msg = f"New reservation request {reservation_id} created by {created_by} for Room {room_id} on {data.get('date')}"
+        publish_sse_event("reservation_created", msg)
         
         payload = {"reservation": serialize_reservation_row(new_row, in_idle=idle_selected)}
         if include_success:
@@ -509,7 +526,10 @@ def update_reservation_api_payload(reservation_id, data, api_error, api_ok):
         )
         
         # Publish change for SSE subscribers
-        sse_broker.publish("refresh")
+        role = request_meta.get().get("role", "guest")
+        updated_by = "Staff" if role in ("admin", "staff") else "Customer"
+        msg = f"Reservation {reservation_id} updated by {updated_by}"
+        publish_sse_event("reservation_updated", msg)
         
         return api_ok(
             {"reservation": serialize_reservation_row(updated)},
@@ -554,7 +574,10 @@ def delete_reservation_api_payload(reservation_id, api_error, api_ok):
         )
         
         # Publish change for SSE subscribers
-        sse_broker.publish("refresh")
+        role = request_meta.get().get("role", "guest")
+        deleted_by = "Staff" if role in ("admin", "staff") else "Customer"
+        msg = f"Reservation {reservation_id} deleted by {deleted_by}"
+        publish_sse_event("reservation_deleted", msg)
         
         return api_ok({"id": reservation_id}, message="Reservation deleted", status=200)
     except Exception as e:
@@ -730,7 +753,10 @@ def create_pending_request_api(data, user_id, api_error, api_ok):
         )
         
         # Publish change for SSE subscribers
-        sse_broker.publish("refresh")
+        publish_sse_event(
+            "request_submitted",
+            f"New request submitted by {data.get('contact_name')} for Room {room_id} on {data.get('date')}"
+        )
         
         # NOTE: Email calls (send_request_received, send_staff_notification) are triggered 
         # asynchronously inside background tasks at the router level.

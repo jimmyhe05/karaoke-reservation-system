@@ -2213,6 +2213,13 @@ function setAuthUI(authState) {
   window.isAdmin = role === "admin";
   window.canManageReservations = isWorker;
   
+  if (!isCustomer) {
+    window.currentUserDetails = null;
+    if (typeof resetCustomerChat === "function") {
+      resetCustomerChat();
+    }
+  }
+  
   if (statusEl) {
     let statusText = "Not signed in";
     if (role === "admin") statusText = "Admin signed in";
@@ -2857,6 +2864,54 @@ function setupSSE() {
         if (typeof window.refreshStaffChat === "function") {
           window.refreshStaffChat();
         }
+
+        // Show toast notification for updates
+        const isWorker = window.currentRole === "admin" || window.currentRole === "staff";
+        const isCustomer = window.currentRole === "customer";
+        
+        if (data.message) {
+          const chatWindow = document.getElementById("chat-window");
+          const isOpen = chatWindow && chatWindow.classList.contains("open");
+
+          // If staff/worker, show notification when customer/guest makes updates or sends message
+          if (isWorker) {
+            const byCustomer = data.sender_role === "customer" || data.sender_role === "guest";
+            if (byCustomer) {
+              if (typeof showToast === "function") {
+                showToast(data.message, "info");
+              }
+            }
+          }
+          // If customer, show notification when staff/system makes updates (excluding their own actions)
+          else if (isCustomer) {
+            const byStaff = data.sender_role === "admin" || data.sender_role === "staff";
+            if (byStaff) {
+              // If it's a chat message, only show toast if chat window is closed
+              if (data.action === "new_message") {
+                if (!isOpen) {
+                  if (typeof showToast === "function") {
+                    showToast(data.message, "info");
+                  }
+                }
+              } else {
+                if (typeof showToast === "function") {
+                  showToast(data.message, "info");
+                }
+              }
+            }
+          }
+          // If guest, show notification when staff sends message to their session
+          else {
+            const byStaff = data.sender_role === "admin" || data.sender_role === "staff";
+            if (byStaff && data.action === "new_message" && activeSessionId && data.session_id === activeSessionId) {
+              if (!isOpen) {
+                if (typeof showToast === "function") {
+                  showToast(data.message, "info");
+                }
+              }
+            }
+          }
+        }
       }
     } catch (e) {
       console.error("Error handling SSE message:", e);
@@ -3006,7 +3061,9 @@ function startChatStatusPolling() {
 
 async function fetchCustomerMessages() {
   try {
-    const res = await fetch("/api/messages");
+    const chatWindow = document.getElementById("chat-window");
+    const isOpen = chatWindow && chatWindow.classList.contains("open");
+    const res = await fetch(`/api/messages?mark_read=${isOpen ? 'true' : 'false'}`);
     if (!res.ok) return;
     const data = await res.json();
     
@@ -3049,6 +3106,39 @@ async function fetchCustomerMessages() {
 }
 
 window.refreshChat = fetchCustomerMessages;
+
+function resetCustomerChat() {
+  localStorage.removeItem("chat_guest_name");
+  localStorage.removeItem("chat_guest_email");
+  
+  const setupForm = document.getElementById("chat-setup-form");
+  const messagesContainer = document.getElementById("chat-messages-container");
+  const messagesDiv = document.getElementById("chat-messages");
+  const chatWindow = document.getElementById("chat-window");
+  const widgetContainer = document.getElementById("customer-chat-widget");
+  const badge = document.getElementById("chat-badge");
+  
+  const guestNameInput = document.getElementById("chat-guest-name");
+  const guestEmailInput = document.getElementById("chat-guest-email");
+  if (guestNameInput) guestNameInput.value = "";
+  if (guestEmailInput) guestEmailInput.value = "";
+  
+  if (messagesDiv) messagesDiv.innerHTML = "";
+  if (badge) badge.classList.add("d-none");
+  
+  if (setupForm) setupForm.classList.remove("d-none");
+  if (messagesContainer) messagesContainer.classList.add("d-none");
+  
+  if (chatWindow) chatWindow.classList.remove("open");
+  if (widgetContainer) widgetContainer.classList.remove("chat-open");
+  
+  if (chatPollingInterval) {
+    clearInterval(chatPollingInterval);
+    chatPollingInterval = null;
+  }
+}
+
+window.resetCustomerChat = resetCustomerChat;
 
 
 // ---- Staff Messaging Dashboard Controller ----
