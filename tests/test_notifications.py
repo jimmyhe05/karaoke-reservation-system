@@ -35,15 +35,11 @@ def login_staff(client):
 def mock_login_customer(client, email, name):
     with client.session_transaction() as sess:
         from services.auth import create_user, get_user_by_email
+
         with app.app_context():
             user = get_user_by_email(email)
             if not user:
-                user = create_user(
-                    email=email,
-                    password=None,
-                    name=name,
-                    google_id=f"google-{email}"
-                )
+                user = create_user(email=email, password=None, name=name, google_id=f"google-{email}")
 
         sess["role"] = "customer"
         sess["user_id"] = user["id"]
@@ -59,17 +55,19 @@ def test_notification_creation_and_retrieval(client):
     # Create request
     req_resp = client.post(
         "/api/requests",
-        data=json.dumps({
-            "date": "2026-06-25",
-            "start_time": "12:00",
-            "end_time": "14:00",
-            "num_people": 4,
-            "contact_name": "Notif User",
-            "contact_phone": "12345678",
-            "contact_email": "test_notif@example.com",
-            "room_id": 1
-        }),
-        content_type="application/json"
+        data=json.dumps(
+            {
+                "date": "2026-06-25",
+                "start_time": "12:00",
+                "end_time": "14:00",
+                "num_people": 4,
+                "contact_name": "Notif User",
+                "contact_phone": "12345678",
+                "contact_email": "test_notif@example.com",
+                "room_id": 1,
+            }
+        ),
+        content_type="application/json",
     )
     assert req_resp.status_code == 201
     res_id = req_resp.get_json()["reservation"]["id"]
@@ -114,9 +112,7 @@ def test_preferences_endpoint(client):
 
     # Toggle pref
     pref_resp = client.patch(
-        "/api/me/preferences",
-        data=json.dumps({"email_notifications": False}),
-        content_type="application/json"
+        "/api/me/preferences", data=json.dumps({"email_notifications": False}), content_type="application/json"
     )
     assert pref_resp.status_code == 200
 
@@ -132,25 +128,25 @@ def test_email_preferences_check(mock_send_confirmation, client):
 
     # Toggle preference off
     client.patch(
-        "/api/me/preferences",
-        data=json.dumps({"email_notifications": False}),
-        content_type="application/json"
+        "/api/me/preferences", data=json.dumps({"email_notifications": False}), content_type="application/json"
     )
 
     # Submit booking request
     req_resp = client.post(
         "/api/requests",
-        data=json.dumps({
-            "date": "2026-06-25",
-            "start_time": "14:00",
-            "end_time": "16:00",
-            "num_people": 4,
-            "contact_name": "No Email User",
-            "contact_phone": "12345678",
-            "contact_email": "no_email@example.com",
-            "room_id": 1
-        }),
-        content_type="application/json"
+        data=json.dumps(
+            {
+                "date": "2026-06-25",
+                "start_time": "14:00",
+                "end_time": "16:00",
+                "num_people": 4,
+                "contact_name": "No Email User",
+                "contact_phone": "12345678",
+                "contact_email": "no_email@example.com",
+                "room_id": 1,
+            }
+        ),
+        content_type="application/json",
     )
     res_id = req_resp.get_json()["reservation"]["id"]
 
@@ -171,17 +167,19 @@ def test_customer_bookings_and_cancel(client):
     # Create request
     req_resp = client.post(
         "/api/requests",
-        data=json.dumps({
-            "date": "2026-06-25",
-            "start_time": "16:00",
-            "end_time": "18:00",
-            "num_people": 4,
-            "contact_name": "Booking User",
-            "contact_phone": "12345678",
-            "contact_email": "bookings@example.com",
-            "room_id": 1
-        }),
-        content_type="application/json"
+        data=json.dumps(
+            {
+                "date": "2026-06-25",
+                "start_time": "16:00",
+                "end_time": "18:00",
+                "num_people": 4,
+                "contact_name": "Booking User",
+                "contact_phone": "12345678",
+                "contact_email": "bookings@example.com",
+                "room_id": 1,
+            }
+        ),
+        content_type="application/json",
     )
     res_id = req_resp.get_json()["reservation"]["id"]
 

@@ -70,9 +70,9 @@ def test_legacy_update_rejects_party_over_room_capacity(client):
     )
     assert create.status_code == 200
 
-    reservation_id = client.get(
-        f"/api/daily_reservations?date={sample_payload()['date']}"
-    ).get_json()["rooms"][0]["reservations"][0]["id"]
+    reservation_id = client.get(f"/api/daily_reservations?date={sample_payload()['date']}").get_json()["rooms"][0][
+        "reservations"
+    ][0]["id"]
 
     update = client.post(
         f"/update_reservation/{reservation_id}",

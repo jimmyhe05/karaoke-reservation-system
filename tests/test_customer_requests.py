@@ -1,7 +1,6 @@
 import json
 import pytest
-import uuid
-from datetime import datetime, timedelta
+from datetime import datetime as real_datetime, timedelta
 from zoneinfo import ZoneInfo
 from unittest.mock import patch
 
@@ -45,11 +44,12 @@ def mock_login_customer(client, email, name, google_id=None):
         google_id = f"google-{email}"
     with client.session_transaction() as sess:
         from services.auth import create_user, get_user_by_email
+
         with app.app_context():
             user = get_user_by_email(email)
             if not user:
                 user = create_user(email=email, password=None, name=name, google_id=google_id)
-        
+
         sess["role"] = "customer"
         sess["user_id"] = user["id"]
         sess["user_name"] = user["name"]
@@ -58,16 +58,13 @@ def mock_login_customer(client, email, name, google_id=None):
 
 # --- Test Google OAuth Callback Flow ---
 
+
 @patch("services.oauth.exchange_google_code")
 @patch("services.oauth.get_google_user_info")
 def test_google_oauth_callback_flow(mock_user_info, mock_exchange, client):
     # Setup mock returns
     mock_exchange.return_value = {"access_token": "mock-access-token"}
-    mock_user_info.return_value = {
-        "sub": "google-12345",
-        "email": "oauth@example.com",
-        "name": "Oauth User"
-    }
+    mock_user_info.return_value = {"sub": "google-12345", "email": "oauth@example.com", "name": "Oauth User"}
 
     # First get the /login/google to set up state
     resp = client.get("/login/google")
@@ -93,6 +90,7 @@ def test_google_oauth_callback_flow(mock_user_info, mock_exchange, client):
 
 # --- Test Request Creation and Overlaps ---
 
+
 def test_pending_request_creation_and_overlapping(client):
     # Guest cannot create request
     request_payload = {
@@ -104,14 +102,14 @@ def test_pending_request_creation_and_overlapping(client):
         "contact_phone": "555-1234",
         "contact_email": "bob@example.com",
         "room_id": 1,
-        "notes": "Testing overlap"
+        "notes": "Testing overlap",
     }
     guest_resp = client.post("/api/requests", data=json.dumps(request_payload), content_type="application/json")
     assert guest_resp.status_code == 401
 
     # Login customer 1 via mock
     mock_login_customer(client, "bob@example.com", "Bob")
-    
+
     # Make request
     resp1 = client.post("/api/requests", data=json.dumps(request_payload), content_type="application/json")
     assert resp1.status_code == 201
@@ -126,7 +124,7 @@ def test_pending_request_creation_and_overlapping(client):
     request_payload_2 = request_payload.copy()
     request_payload_2["contact_name"] = "Charlie"
     request_payload_2["contact_email"] = "charlie@example.com"
-    
+
     resp2 = client.post("/api/requests", data=json.dumps(request_payload_2), content_type="application/json")
     # Overlapping pending requests should NOT conflict!
     assert resp2.status_code == 201
@@ -135,6 +133,7 @@ def test_pending_request_creation_and_overlapping(client):
 
 
 # --- Test Staff Pending Inbox, Approving, and Declining ---
+
 
 def test_staff_approval_and_rejection_conflict_handling(client):
     # Setup two overlapping requests
@@ -147,7 +146,7 @@ def test_staff_approval_and_rejection_conflict_handling(client):
         "contact_name": "Bob",
         "contact_phone": "555-1234",
         "contact_email": "bob@example.com",
-        "room_id": 1
+        "room_id": 1,
     }
     resp1 = client.post("/api/requests", data=json.dumps(req_payload), content_type="application/json")
     id1 = resp1.get_json()["reservation"]["id"]
@@ -191,7 +190,11 @@ def test_staff_approval_and_rejection_conflict_handling(client):
     assert approve2_resp.get_json()["error"]["code"] == "conflict"
 
     # Staff declines Charlie's request instead
-    decline_resp = client.post(f"/api/requests/{id2}/decline", data=json.dumps({"reason": "Room already booked"}), content_type="application/json")
+    decline_resp = client.post(
+        f"/api/requests/{id2}/decline",
+        data=json.dumps({"reason": "Room already booked"}),
+        content_type="application/json",
+    )
     assert decline_resp.status_code == 200
 
     # Verify status is rejected
@@ -203,7 +206,6 @@ def test_staff_approval_and_rejection_conflict_handling(client):
 
 # --- Test Cancellation cutoff and flow ---
 
-from datetime import datetime as real_datetime
 
 class MockDatetime(real_datetime):
     @classmethod
@@ -212,7 +214,7 @@ class MockDatetime(real_datetime):
         if tz is not None:
             return dt.replace(tzinfo=tz)
         return dt
-    
+
     @classmethod
     def utcnow(cls):
         return real_datetime(2026, 6, 22, 12, 0, 0)
@@ -223,15 +225,16 @@ class MockDatetime(real_datetime):
 @patch("services.reservations.datetime", MockDatetime)
 def test_cancellation_flow_and_cutoff(client):
     mock_login_customer(client, "bob@example.com", "Bob")
-    
+
     # 1. Create a reservation that starts in 4 hours relative to our mock now (12:00) -> 16:00
     chicago_tz = ZoneInfo("America/Chicago")
     from datetime import datetime as real_datetime
+
     dt_outside = real_datetime(2026, 6, 22, 16, 0, 0, tzinfo=chicago_tz)
     date_str_outside = dt_outside.strftime("%Y-%m-%d")
     start_str_outside = dt_outside.strftime("%H:%M")
     end_str_outside = (dt_outside + timedelta(hours=1)).strftime("%H:%M")
-    
+
     req_outside = {
         "date": date_str_outside,
         "start_time": start_str_outside,
@@ -240,17 +243,17 @@ def test_cancellation_flow_and_cutoff(client):
         "contact_name": "Bob",
         "contact_phone": "555-1234",
         "contact_email": "bob@example.com",
-        "room_id": 1
+        "room_id": 1,
     }
     resp_outside = client.post("/api/requests", data=json.dumps(req_outside), content_type="application/json")
     id_outside = resp_outside.get_json()["reservation"]["id"]
-    
+
     # 2. Create a reservation that starts in 1 hour relative to our mock now (12:00) -> 13:00
     dt_inside = real_datetime(2026, 6, 22, 13, 0, 0, tzinfo=chicago_tz)
     date_str_inside = dt_inside.strftime("%Y-%m-%d")
     start_str_inside = dt_inside.strftime("%H:%M")
     end_str_inside = (dt_inside + timedelta(hours=1)).strftime("%H:%M")
-    
+
     req_inside = {
         "date": date_str_inside,
         "start_time": start_str_inside,
@@ -259,7 +262,7 @@ def test_cancellation_flow_and_cutoff(client):
         "contact_name": "Bob",
         "contact_phone": "555-1234",
         "contact_email": "bob@example.com",
-        "room_id": 1
+        "room_id": 1,
     }
     resp_inside = client.post("/api/requests", data=json.dumps(req_inside), content_type="application/json")
     id_inside = resp_inside.get_json()["reservation"]["id"]
@@ -268,17 +271,21 @@ def test_cancellation_flow_and_cutoff(client):
     login_staff(client)
     client.post(f"/api/requests/{id_outside}/approve")
     client.post(f"/api/requests/{id_inside}/approve")
-    
+
     with app.app_context():
         conn = get_db()
-        token_outside = conn.execute("SELECT cancellation_token FROM reservations WHERE id = ?", (id_outside,)).fetchone()["cancellation_token"]
-        token_inside = conn.execute("SELECT cancellation_token FROM reservations WHERE id = ?", (id_inside,)).fetchone()["cancellation_token"]
+        token_outside = conn.execute(
+            "SELECT cancellation_token FROM reservations WHERE id = ?", (id_outside,)
+        ).fetchone()["cancellation_token"]
+        token_inside = conn.execute(
+            "SELECT cancellation_token FROM reservations WHERE id = ?", (id_inside,)
+        ).fetchone()["cancellation_token"]
 
     # Test GET cancel confirm endpoints
     get_cancel_outside = client.get(f"/cancel/{token_outside}")
     assert get_cancel_outside.status_code == 200
     assert b"confirm cancellation" in get_cancel_outside.data.lower()
-    
+
     get_cancel_inside = client.get(f"/cancel/{token_inside}")
     assert get_cancel_inside.status_code == 200
     assert b"cannot cancel" in get_cancel_inside.data.lower()
@@ -287,7 +294,7 @@ def test_cancellation_flow_and_cutoff(client):
     # Outside cutoff (success)
     post_cancel_outside = client.post(f"/cancel/{token_outside}")
     assert post_cancel_outside.status_code == 200
-    
+
     with app.app_context():
         conn = get_db()
         res_outside = conn.execute("SELECT * FROM reservations WHERE id = ?", (id_outside,)).fetchone()
@@ -297,7 +304,7 @@ def test_cancellation_flow_and_cutoff(client):
     post_cancel_inside = client.post(f"/cancel/{token_inside}")
     assert post_cancel_inside.status_code == 409
     assert post_cancel_inside.get_json()["error"]["code"] == "cutoff_exceeded"
-    
+
     with app.app_context():
         conn = get_db()
         res_inside = conn.execute("SELECT * FROM reservations WHERE id = ?", (id_inside,)).fetchone()

@@ -40,7 +40,9 @@ class SSEBroker:
             except RuntimeError:
                 pass
 
+
 sse_broker = SSEBroker()
+
 
 def publish_sse_event(action: str, message: str, user_id=None, session_id=None, sender_role=None):
     meta = request_meta.get() or {}
@@ -52,18 +54,17 @@ def publish_sse_event(action: str, message: str, user_id=None, session_id=None, 
         "message": message,
         "sender_role": sender_role,
         "user_id": user_id,
-        "session_id": session_id
+        "session_id": session_id,
     }
     sse_broker.publish(payload)
 
 
 # ---- Serialization helpers ----
 
+
 def fetch_idle_set(conn, date=None):
     if date:
-        rows = conn.execute(
-            "SELECT reservation_id FROM idle_reservations WHERE date = ?", (date,)
-        ).fetchall()
+        rows = conn.execute("SELECT reservation_id FROM idle_reservations WHERE date = ?", (date,)).fetchall()
     else:
         rows = conn.execute("SELECT reservation_id FROM idle_reservations").fetchall()
     return {row["reservation_id"] for row in rows}
@@ -123,8 +124,8 @@ def serialize_reservation_row(row, in_idle=False):
     return res
 
 
-
 # ---- Helpers ----
+
 
 def _blackout_windows():
     windows = getattr(Config, "BLACKOUT_WINDOWS", [])
@@ -137,9 +138,7 @@ def is_blackout(date_str, start_time_str, end_time_str, room_id):
 
 
 def validate_room_capacity(conn, room_id, num_people):
-    room = conn.execute(
-        "SELECT capacity FROM rooms WHERE id = ?", (room_id,)
-    ).fetchone()
+    room = conn.execute("SELECT capacity FROM rooms WHERE id = ?", (room_id,)).fetchone()
     if not room:
         return False, f"Invalid room id {room_id}", room
     if num_people <= 0:
@@ -192,12 +191,11 @@ def record_reservation_history(conn, reservation_id: int, action: str, snapshot:
         )
         conn.commit()
     except Exception as exc:
-        logger.warning(
-            {"action": "reservation_history.failed", "error": str(exc)}
-        )
+        logger.warning({"action": "reservation_history.failed", "error": str(exc)})
 
 
 # ---- API payload helpers ----
+
 
 def create_reservation_api_payload(
     data,
@@ -222,16 +220,12 @@ def create_reservation_api_payload(
     ]
     missing = [f for f in required_fields if data.get(f) in (None, "", [])]
     if missing:
-        return api_error(
-            "Missing required fields", 400, code="validation_error", fields=missing
-        )
+        return api_error("Missing required fields", 400, code="validation_error", fields=missing)
 
     try:
         room_id = int(data.get("room_id"))
     except Exception:
-        return api_error(
-            "Invalid room id", 400, code="validation_error", fields=["room_id"]
-        )
+        return api_error("Invalid room id", 400, code="validation_error", fields=["room_id"])
 
     idle_selected = str(data.get("idle", "")).lower() in ("true", "1", "yes")
 
@@ -267,13 +261,9 @@ def create_reservation_api_payload(
 
         ok, msg, room = validate_room_capacity(conn, room_id, num_people)
         if not ok:
-            return api_error(
-                msg, 400, code="validation_error", fields=["room_id", "num_people"]
-            )
+            return api_error(msg, 400, code="validation_error", fields=["room_id", "num_people"])
 
-        blocked, win = is_blackout(
-            data.get("date"), normalized_start, normalized_end, room_id
-        )
+        blocked, win = is_blackout(data.get("date"), normalized_start, normalized_end, room_id)
         if blocked:
             return api_error(
                 "Requested time is unavailable (maintenance/blackout)",
@@ -284,9 +274,7 @@ def create_reservation_api_payload(
             )
 
         if not idle_selected:
-            conflict = find_conflict(
-                conn, room_id, data.get("date"), normalized_start, normalized_end
-            )
+            conflict = find_conflict(conn, room_id, data.get("date"), normalized_start, normalized_end)
             if conflict:
                 return api_error(
                     "Room is not available for the selected time",
@@ -296,9 +284,7 @@ def create_reservation_api_payload(
                     details={"conflict_with": conflict["id"]},
                 )
 
-        total_cost = calculate_cost(
-            conn, room_id, normalized_start, normalized_end, getattr(Config, "TAX_RATE", 0.055)
-        )
+        total_cost = calculate_cost(conn, room_id, normalized_start, normalized_end, getattr(Config, "TAX_RATE", 0.055))
 
         status = data.get("status", "confirmed")
         insert_sql = """INSERT INTO reservations
@@ -336,9 +322,7 @@ def create_reservation_api_payload(
 
         conn.commit()
 
-        new_row = conn.execute(
-            "SELECT * FROM reservations WHERE id = ?", (reservation_id,)
-        ).fetchone()
+        new_row = conn.execute("SELECT * FROM reservations WHERE id = ?", (reservation_id,)).fetchone()
         record_reservation_history(
             conn,
             reservation_id,
@@ -354,13 +338,15 @@ def create_reservation_api_payload(
             end_time=normalized_end,
             num_people=num_people,
         )
-        
+
         # Publish change for SSE subscribers
         role = request_meta.get().get("role", "guest")
         created_by = "Staff" if role in ("admin", "staff") else "Customer"
-        msg = f"New reservation request {reservation_id} created by {created_by} for Room {room_id} on {data.get('date')}"
+        msg = (
+            f"New reservation request {reservation_id} created by {created_by} for Room {room_id} on {data.get('date')}"
+        )
         publish_sse_event("reservation_created", msg)
-        
+
         payload = {"reservation": serialize_reservation_row(new_row, in_idle=idle_selected)}
         if include_success:
             payload["success"] = True
@@ -378,18 +364,14 @@ def update_reservation_api_payload(reservation_id, data, api_error, api_ok):
 
     conn = get_db()
     try:
-        existing = conn.execute(
-            "SELECT * FROM reservations WHERE id = ?", (reservation_id,)
-        ).fetchone()
+        existing = conn.execute("SELECT * FROM reservations WHERE id = ?", (reservation_id,)).fetchone()
         if not existing:
             return api_error("Reservation not found", 404, code="not_found")
 
         try:
             room_id = int(data.get("room_id", existing["room_id"]))
         except Exception:
-            return api_error(
-                "Invalid room id", 400, code="validation_error", fields=["room_id"]
-            )
+            return api_error("Invalid room id", 400, code="validation_error", fields=["room_id"])
 
         # CONCURRENCY LOCK
         if is_postgres_connection(conn):
@@ -398,9 +380,7 @@ def update_reservation_api_payload(reservation_id, data, api_error, api_ok):
             conn.execute("BEGIN IMMEDIATE")
 
         # Refetch existing inside the locked transaction just in case
-        existing = conn.execute(
-            "SELECT * FROM reservations WHERE id = ?", (reservation_id,)
-        ).fetchone()
+        existing = conn.execute("SELECT * FROM reservations WHERE id = ?", (reservation_id,)).fetchone()
         if not existing:
             return api_error("Reservation not found", 404, code="not_found")
 
@@ -409,9 +389,7 @@ def update_reservation_api_payload(reservation_id, data, api_error, api_ok):
         end_time_raw = data.get("end_time", existing["end_time"])
 
         try:
-            normalized_start, normalized_end, _, _ = normalize_time_range(
-                date, start_time_raw, end_time_raw
-            )
+            normalized_start, normalized_end, _, _ = normalize_time_range(date, start_time_raw, end_time_raw)
         except ValueError as e:
             return api_error(
                 str(e),
@@ -430,9 +408,7 @@ def update_reservation_api_payload(reservation_id, data, api_error, api_ok):
                 details={"blackout": win},
             )
 
-        conflict = find_conflict(
-            conn, room_id, date, normalized_start, normalized_end, exclude_id=reservation_id
-        )
+        conflict = find_conflict(conn, room_id, date, normalized_start, normalized_end, exclude_id=reservation_id)
         if conflict:
             return api_error(
                 "The selected time slot is already occupied by another reservation",
@@ -453,9 +429,7 @@ def update_reservation_api_payload(reservation_id, data, api_error, api_ok):
 
         ok, msg, room = validate_room_capacity(conn, room_id, num_people)
         if not ok:
-            return api_error(
-                msg, 400, code="validation_error", fields=["room_id", "num_people"]
-            )
+            return api_error(msg, 400, code="validation_error", fields=["room_id", "num_people"])
 
         time_or_room_changed = (
             normalized_start != existing["start_time"]
@@ -505,9 +479,7 @@ def update_reservation_api_payload(reservation_id, data, api_error, api_ok):
         )
         conn.commit()
 
-        updated = conn.execute(
-            "SELECT * FROM reservations WHERE id = ?", (reservation_id,)
-        ).fetchone()
+        updated = conn.execute("SELECT * FROM reservations WHERE id = ?", (reservation_id,)).fetchone()
         record_reservation_history(
             conn,
             reservation_id,
@@ -524,13 +496,13 @@ def update_reservation_api_payload(reservation_id, data, api_error, api_ok):
             num_people=num_people,
             status=status,
         )
-        
+
         # Publish change for SSE subscribers
         role = request_meta.get().get("role", "guest")
         updated_by = "Staff" if role in ("admin", "staff") else "Customer"
         msg = f"Reservation {reservation_id} updated by {updated_by}"
         publish_sse_event("reservation_updated", msg)
-        
+
         return api_ok(
             {"reservation": serialize_reservation_row(updated)},
             message="Reservation updated",
@@ -545,9 +517,7 @@ def update_reservation_api_payload(reservation_id, data, api_error, api_ok):
 def delete_reservation_api_payload(reservation_id, api_error, api_ok):
     conn = get_db()
     try:
-        reservation = conn.execute(
-            "SELECT * FROM reservations WHERE id = ?", (reservation_id,)
-        ).fetchone()
+        reservation = conn.execute("SELECT * FROM reservations WHERE id = ?", (reservation_id,)).fetchone()
         if not reservation:
             return api_error("Reservation not found", 404, code="not_found")
 
@@ -557,12 +527,8 @@ def delete_reservation_api_payload(reservation_id, api_error, api_ok):
         else:
             conn.execute("BEGIN IMMEDIATE")
 
-        conn.execute(
-            "DELETE FROM reservation_history WHERE reservation_id = ?", (reservation_id,)
-        )
-        conn.execute(
-            "DELETE FROM idle_reservations WHERE reservation_id = ?", (reservation_id,)
-        )
+        conn.execute("DELETE FROM reservation_history WHERE reservation_id = ?", (reservation_id,))
+        conn.execute("DELETE FROM idle_reservations WHERE reservation_id = ?", (reservation_id,))
         conn.execute("DELETE FROM reservations WHERE id = ?", (reservation_id,))
         conn.commit()
 
@@ -572,13 +538,13 @@ def delete_reservation_api_payload(reservation_id, api_error, api_ok):
             room_id=reservation["room_id"],
             date=reservation["date"],
         )
-        
+
         # Publish change for SSE subscribers
         role = request_meta.get().get("role", "guest")
         deleted_by = "Staff" if role in ("admin", "staff") else "Customer"
         msg = f"Reservation {reservation_id} deleted by {deleted_by}"
         publish_sse_event("reservation_deleted", msg)
-        
+
         return api_ok({"id": reservation_id}, message="Reservation deleted", status=200)
     except Exception as e:
         conn.rollback()
@@ -588,6 +554,7 @@ def delete_reservation_api_payload(reservation_id, api_error, api_ok):
 
 
 # ---- Misc helpers ----
+
 
 def get_today_stats(conn, today=None):
     if today is None:
@@ -602,9 +569,7 @@ def get_today_stats(conn, today=None):
         (today,),
     ).fetchone()["count"]
 
-    total_rooms = conn.execute(
-        "SELECT COUNT(*) as count FROM rooms WHERE id > 0"
-    ).fetchone()["count"]
+    total_rooms = conn.execute("SELECT COUNT(*) as count FROM rooms WHERE id > 0").fetchone()["count"]
     total_hours = 14  # 11 AM to 1 AM = 14 hours
     total_room_hours = total_rooms * total_hours
 
@@ -615,8 +580,7 @@ def get_today_stats(conn, today=None):
         (today,),
     ).fetchall()
     occupied_hours = sum(
-        (time_to_minutes(row["end_time"]) - time_to_minutes(row["start_time"])) / 60
-        for row in reservations
+        (time_to_minutes(row["end_time"]) - time_to_minutes(row["start_time"])) / 60 for row in reservations
     )
 
     occupancy_rate = round((occupied_hours / total_room_hours) * 100, 1)
@@ -640,16 +604,12 @@ def create_pending_request_api(data, user_id, api_error, api_ok):
     ]
     missing = [f for f in required_fields if data.get(f) in (None, "", [])]
     if missing:
-        return api_error(
-            "Missing required fields", 400, code="validation_error", fields=missing
-        )
+        return api_error("Missing required fields", 400, code="validation_error", fields=missing)
 
     try:
         room_id = int(data.get("room_id"))
     except Exception:
-        return api_error(
-            "Invalid room id", 400, code="validation_error", fields=["room_id"]
-        )
+        return api_error("Invalid room id", 400, code="validation_error", fields=["room_id"])
 
     try:
         num_people = int(data.get("num_people"))
@@ -683,13 +643,9 @@ def create_pending_request_api(data, user_id, api_error, api_ok):
 
         ok, msg, room = validate_room_capacity(conn, room_id, num_people)
         if not ok:
-            return api_error(
-                msg, 400, code="validation_error", fields=["room_id", "num_people"]
-            )
+            return api_error(msg, 400, code="validation_error", fields=["room_id", "num_people"])
 
-        blocked, win = is_blackout(
-            data.get("date"), normalized_start, normalized_end, room_id
-        )
+        blocked, win = is_blackout(data.get("date"), normalized_start, normalized_end, room_id)
         if blocked:
             return api_error(
                 "Requested time is unavailable (maintenance/blackout)",
@@ -699,9 +655,7 @@ def create_pending_request_api(data, user_id, api_error, api_ok):
                 details={"blackout": win},
             )
 
-        total_cost = calculate_cost(
-            conn, room_id, normalized_start, normalized_end, getattr(Config, "TAX_RATE", 0.055)
-        )
+        total_cost = calculate_cost(conn, room_id, normalized_start, normalized_end, getattr(Config, "TAX_RATE", 0.055))
 
         insert_sql = """INSERT INTO reservations
            (date, start_time, end_time, num_people,
@@ -723,9 +677,9 @@ def create_pending_request_api(data, user_id, api_error, api_ok):
             data.get("language", "en"),
             data.get("notes", ""),
             user_id,
-            requested_at
+            requested_at,
         )
-        
+
         if is_postgres_connection(conn):
             cursor = conn.execute(insert_sql.replace("?", "%s") + " RETURNING id", insert_params)
             reservation_id = cursor.fetchone()["id"]
@@ -735,11 +689,8 @@ def create_pending_request_api(data, user_id, api_error, api_ok):
 
         conn.commit()
 
-        new_row = conn.execute(
-            "SELECT * FROM reservations WHERE id = ?", (reservation_id,)
-        ).fetchone()
-        res_dict = dict(new_row)
-        
+        new_row = conn.execute("SELECT * FROM reservations WHERE id = ?", (reservation_id,)).fetchone()
+
         record_reservation_history(
             conn,
             reservation_id,
@@ -749,22 +700,22 @@ def create_pending_request_api(data, user_id, api_error, api_ok):
         log_action(
             "reservation.request.api",
             reservation_id=reservation_id,
-            description=f"Created pending request {reservation_id}"
+            description=f"Created pending request {reservation_id}",
         )
-        
+
         # Publish change for SSE subscribers
         publish_sse_event(
             "request_submitted",
-            f"New request submitted by {data.get('contact_name')} for Room {room_id} on {data.get('date')}"
+            f"New request submitted by {data.get('contact_name')} for Room {room_id} on {data.get('date')}",
         )
-        
-        # NOTE: Email calls (send_request_received, send_staff_notification) are triggered 
+
+        # NOTE: Email calls (send_request_received, send_staff_notification) are triggered
         # asynchronously inside background tasks at the router level.
-        
+
         return api_ok(
             {"reservation": serialize_reservation_row(new_row, False)},
             message="Reservation request submitted",
-            status=201
+            status=201,
         )
     except Exception as e:
         conn.rollback()

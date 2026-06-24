@@ -3,7 +3,9 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from services.validation import parse_time_safe, normalize_time_range, time_to_minutes
-from app import app, init_db, compute_pricing, get_db
+from app import app, init_db
+from services.pricing import compute_pricing
+from services.db import get_db
 
 
 @pytest.fixture(autouse=True)
@@ -44,9 +46,7 @@ def test_normalize_time_range_rejects_before_open():
 
 
 def test_normalize_time_range_rejects_past_date():
-    yesterday = (
-        datetime.now(ZoneInfo("America/Chicago")) - timedelta(days=1)
-    ).strftime("%Y-%m-%d")
+    yesterday = (datetime.now(ZoneInfo("America/Chicago")) - timedelta(days=1)).strftime("%Y-%m-%d")
     with pytest.raises(ValueError):
         normalize_time_range(yesterday, "11:00", "12:00")
 

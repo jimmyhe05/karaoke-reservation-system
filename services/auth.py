@@ -1,24 +1,25 @@
 from werkzeug.security import generate_password_hash, check_password_hash
 from services.db import get_db, is_postgres_connection
 
+
 def create_user(email, password, name, google_id=None, conn=None):
     """Create a new customer user. password can be None for Google OAuth users."""
     passed_conn = conn is not None
     if not passed_conn:
         conn = get_db()
-        
+
     password_hash = None
     if password:
         password_hash = generate_password_hash(password)
-        
+
     email_lower = email.strip().lower()
-    
+
     insert_sql = """
         INSERT INTO users (email, password_hash, name, google_id)
         VALUES (?, ?, ?, ?)
     """
     params = (email_lower, password_hash, name.strip(), google_id)
-    
+
     try:
         if is_postgres_connection(conn):
             cursor = conn.execute(insert_sql.replace("?", "%s") + " RETURNING id", params)
@@ -35,6 +36,7 @@ def create_user(email, password, name, google_id=None, conn=None):
         if not passed_conn:
             conn.close()
 
+
 def get_user_by_id(user_id, conn=None):
     passed_conn = conn is not None
     if not passed_conn:
@@ -45,6 +47,7 @@ def get_user_by_id(user_id, conn=None):
     finally:
         if not passed_conn:
             conn.close()
+
 
 def get_user_by_email(email, conn=None):
     passed_conn = conn is not None
@@ -58,6 +61,7 @@ def get_user_by_email(email, conn=None):
         if not passed_conn:
             conn.close()
 
+
 def get_user_by_google_id(google_id, conn=None):
     passed_conn = conn is not None
     if not passed_conn:
@@ -68,6 +72,7 @@ def get_user_by_google_id(google_id, conn=None):
     finally:
         if not passed_conn:
             conn.close()
+
 
 def verify_user(email, password, conn=None):
     """Verify email & password credentials. Returns user dict if valid, else None."""

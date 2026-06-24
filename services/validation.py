@@ -71,9 +71,7 @@ def normalize_time_range(date_str, start_str, end_str):
     end_minutes = time_to_minutes(normalized_end)
 
     if start_minutes < 11 * 60 or end_minutes > 25 * 60 or end_minutes <= start_minutes:
-        raise ValueError(
-            "Reservation must be between 11:00 and 01:00 next day, and end after start."
-        )
+        raise ValueError("Reservation must be between 11:00 and 01:00 next day, and end after start.")
 
     if date_obj < datetime.now(ZoneInfo("America/Chicago")).date():
         raise ValueError("Date cannot be in the past.")
@@ -95,9 +93,7 @@ def find_conflict(conn, room_id, date, start_time_str, end_time_str, exclude_id=
     - Deterministic ordering by start_time, id.
     """
 
-    idle_ids = conn.execute(
-        "SELECT reservation_id FROM idle_reservations WHERE date = ?", (date,)
-    ).fetchall()
+    idle_ids = conn.execute("SELECT reservation_id FROM idle_reservations WHERE date = ?", (date,)).fetchall()
     idle_set = {row["reservation_id"] for row in idle_ids}
 
     existing = conn.execute(

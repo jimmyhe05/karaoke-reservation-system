@@ -12,9 +12,10 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 # Now import the FastAPI app, Config, and TestClient
-from app import app
-from config import Config
-from fastapi.testclient import TestClient
+from app import app  # noqa: E402
+from config import Config  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
+
 
 class AppConfigDict(dict):
     def __init__(self, *args, **kwargs):
@@ -27,7 +28,7 @@ class AppConfigDict(dict):
             import services.db
             from sqlalchemy import create_engine
             from sqlalchemy.orm import sessionmaker
-            
+
             database_url = getattr(Config, "DATABASE_URL", None)
             if database_url and database_url.startswith(("postgres://", "postgresql://")):
                 if database_url.startswith("postgres://"):
@@ -37,13 +38,8 @@ class AppConfigDict(dict):
                 services.db.engine = create_engine(database_url, pool_pre_ping=True)
             else:
                 db_path = getattr(Config, "DATABASE", "karaoke.db")
-                services.db.engine = create_engine(
-                    f"sqlite:///{db_path}",
-                    connect_args={"check_same_thread": False}
-                )
-            services.db.SessionLocal = sessionmaker(
-                autocommit=False, autoflush=False, bind=services.db.engine
-            )
+                services.db.engine = create_engine(f"sqlite:///{db_path}", connect_args={"check_same_thread": False})
+            services.db.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=services.db.engine)
 
     def update(self, *args, **kwargs):
         for k, v in dict(*args, **kwargs).items():
@@ -138,9 +134,9 @@ class CompatibleTestClient:
             session_dict = resp.json() if resp.status_code == 200 else {}
         except Exception:
             session_dict = {}
-            
+
         yield session_dict
-        
+
         self._client.post("/api/test/set_session", json=session_dict)
 
 
@@ -155,24 +151,31 @@ def mock_test_client():
 # Attach mock helpers to app object
 app.test_client = mock_test_client
 
+
 @contextmanager
 def dummy_app_context():
     yield
 
+
 app.app_context = dummy_app_context
+
 
 @contextmanager
 def compatible_test_request_context(path="/", method="GET", **kwargs):
     from services.reservations import request_meta
-    token = request_meta.set({
-        "path": path.split("?")[0] if path else "/",
-        "method": method,
-        "request_id": "test-request-id",
-        "role": "guest"
-    })
+
+    token = request_meta.set(
+        {
+            "path": path.split("?")[0] if path else "/",
+            "method": method,
+            "request_id": "test-request-id",
+            "role": "guest",
+        }
+    )
     try:
         yield
     finally:
         request_meta.reset(token)
+
 
 app.test_request_context = compatible_test_request_context

@@ -17,10 +17,7 @@ if database_url and database_url.startswith(("postgres://", "postgresql://")):
     engine = create_engine(database_url, pool_pre_ping=True)
 else:
     db_path = os.getenv("DATABASE", "karaoke.db")
-    engine = create_engine(
-        f"sqlite:///{db_path}",
-        connect_args={"check_same_thread": False}
-    )
+    engine = create_engine(f"sqlite:///{db_path}", connect_args={"check_same_thread": False})
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
@@ -91,21 +88,20 @@ class CompatibleCursor:
 
 class SqlAlchemyConnectionAdapter:
     """Wrapper to make SQLAlchemy session match Flask SQLite/Postgres connection interface."""
-    
+
     def __init__(self, session: Session):
         self.session = session
-        self.is_postgres = (session.bind.dialect.name == "postgresql")
+        self.is_postgres = session.bind.dialect.name == "postgresql"
 
     def execute(self, query, params=None):
         if params is None:
             params = ()
-        
+
         if isinstance(query, str):
             # Check if using postgres placeholders
             dbapi_conn = self.session.connection().connection
             cursor = dbapi_conn.cursor()
 
-            
             if self.is_postgres:
                 # Translate '?' to '%s'
                 query_processed = query.replace("?", "%s")
@@ -137,7 +133,6 @@ def _postgres_placeholders(query):
 
 
 def is_postgres_connection(conn):
-
     return getattr(conn, "is_postgres", False)
 
 
@@ -150,7 +145,7 @@ def init_db():
     is_pg = engine.dialect.name == "postgresql"
     schema_file = "schema_postgres.sql" if is_pg else "schema.sql"
     schema_path = os.path.join(_ROOT, schema_file)
-    
+
     with open(schema_path, "r") as f:
         schema = f.read()
 
@@ -171,6 +166,7 @@ def init_db():
     conn = get_db()
     try:
         from migrations.runner import run_migrations
+
         run_migrations(conn)
     finally:
         conn.close()

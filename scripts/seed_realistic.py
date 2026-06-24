@@ -4,17 +4,18 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 # Add project root to path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from app import app
-from services.db import get_db
-from services.pricing import calculate_cost as calculate_cost_service
-from services.auth import create_user, get_user_by_email
+from app import app  # noqa: E402
+from services.db import get_db  # noqa: E402
+from services.pricing import calculate_cost as calculate_cost_service  # noqa: E402
+from services.auth import create_user, get_user_by_email  # noqa: E402
+
 
 def seed_realistic_data():
     print("Starting realistic database seed...")
     conn = get_db()
-    
+
     # 1. Ensure test users exist
     users_data = [
         {"email": "alice@gmail.com", "name": "Alice Johnson", "pwd": "password123"},
@@ -23,7 +24,7 @@ def seed_realistic_data():
         {"email": "johndoe@example.com", "name": "John Doe", "pwd": "password123"},
         {"email": "lisa.anniversary@outlook.com", "name": "Lisa Wang", "pwd": "password123"},
     ]
-    
+
     users = {}
     for ud in users_data:
         existing = get_user_by_email(ud["email"])
@@ -33,7 +34,7 @@ def seed_realistic_data():
             users[ud["email"]] = u
         else:
             users[ud["email"]] = existing
-            
+
     # Clean up existing reservations to make a fresh demo look
     conn.execute("DELETE FROM reservation_history")
     conn.execute("DELETE FROM idle_reservations")
@@ -44,16 +45,16 @@ def seed_realistic_data():
     # 2. Setup dates
     chicago_tz = ZoneInfo("America/Chicago")
     today_dt = datetime.now(chicago_tz)
-    
+
     yesterday = (today_dt - timedelta(days=1)).strftime("%Y-%m-%d")
     today = today_dt.strftime("%Y-%m-%d")
     tomorrow = (today_dt + timedelta(days=1)).strftime("%Y-%m-%d")
-    friday = (today_dt + timedelta(days=(4 - today_dt.weekday()) % 7)).strftime("%Y-%m-%d") # Next Friday
-    saturday = (today_dt + timedelta(days=(5 - today_dt.weekday()) % 7)).strftime("%Y-%m-%d") # Next Saturday
-    
+    friday = (today_dt + timedelta(days=(4 - today_dt.weekday()) % 7)).strftime("%Y-%m-%d")  # Next Friday
+    saturday = (today_dt + timedelta(days=(5 - today_dt.weekday()) % 7)).strftime("%Y-%m-%d")  # Next Saturday
+
     # Tax rate
     tax_rate = app.config.get("TAX_RATE", 0.055)
-    
+
     # Realistic reservations config
     reservations_to_seed = [
         # --- YESTERDAY (Historical, completed) ---
@@ -83,7 +84,6 @@ def seed_realistic_data():
             "status": "completed",
             "notes": "Sarah's birthday party! Bringing a cake, requested birthday decorations.",
         },
-        
         # --- TODAY ---
         {
             "user_email": "david.dev@company.com",
@@ -124,7 +124,6 @@ def seed_realistic_data():
             "status": "pending",
             "notes": "Wants to test out the Chinese pop song catalog. Bringing family.",
         },
-        
         # --- TOMORROW ---
         {
             "user_email": "alice@gmail.com",
@@ -152,7 +151,6 @@ def seed_realistic_data():
             "status": "confirmed",
             "notes": "Post-graduation dinner reservation followed by karaoke.",
         },
-        
         # --- NEXT FRIDAY (High Volume) ---
         {
             "user_email": "david.dev@company.com",
@@ -193,7 +191,6 @@ def seed_realistic_data():
             "status": "rejected",
             "notes": "Wanted outside hard liquor. Rejected due to venue alcohol license regulations.",
         },
-        
         # --- NEXT SATURDAY ---
         {
             "user_email": "lisa.anniversary@outlook.com",
@@ -220,15 +217,13 @@ def seed_realistic_data():
             "language": "en",
             "status": "cancelled",
             "notes": "Cancelled by customer - change of weekend plans.",
-        }
+        },
     ]
-    
+
     for r in reservations_to_seed:
-        total_cost = calculate_cost_service(
-            conn, r["room_id"], r["start_time"], r["end_time"], tax_rate
-        )
+        total_cost = calculate_cost_service(conn, r["room_id"], r["start_time"], r["end_time"], tax_rate)
         user_id = users[r["user_email"]]["id"]
-        
+
         # Insert
         conn.execute(
             """INSERT INTO reservations
@@ -253,6 +248,7 @@ def seed_realistic_data():
         )
     conn.commit()
     print(f"Successfully seeded {len(reservations_to_seed)} realistic reservations across multiple dates!")
+
 
 if __name__ == "__main__":
     with app.app_context():

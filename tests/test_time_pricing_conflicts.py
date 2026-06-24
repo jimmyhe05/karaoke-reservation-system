@@ -1,12 +1,8 @@
 import sqlite3
 import pytest
 
-from app import (
-    normalize_time_range,
-    slots_overlap,
-    compute_pricing,
-    find_conflict,
-)
+from services.validation import normalize_time_range, slots_overlap, find_conflict
+from services.pricing import compute_pricing
 
 
 FUTURE_DATE = "2099-01-01"

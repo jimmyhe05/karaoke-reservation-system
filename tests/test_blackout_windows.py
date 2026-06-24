@@ -64,15 +64,11 @@ def test_full_day_blackout_blocks_creation(client):
 def test_partial_blackout_blocks_overlap(client):
     login_admin(client)
     today = datetime.now(ZoneInfo("America/Chicago")).strftime("%Y-%m-%d")
-    app.config["BLACKOUT_WINDOWS"] = [
-        {"date": today, "room_id": 1, "start_time": "12:30", "end_time": "14:00"}
-    ]
+    app.config["BLACKOUT_WINDOWS"] = [{"date": today, "room_id": 1, "start_time": "12:30", "end_time": "14:00"}]
 
     resp = client.post(
         "/api/reservations",
-        data=json.dumps(
-            sample_payload(date=today, start_time="12:00", end_time="13:00")
-        ),
+        data=json.dumps(sample_payload(date=today, start_time="12:00", end_time="13:00")),
         content_type="application/json",
     )
     assert resp.status_code == 409
@@ -100,9 +96,7 @@ def test_move_respects_blackout(client):
 
     created = client.post(
         "/api/reservations",
-        data=json.dumps(
-            sample_payload(date=today, room_id=1, start_time="15:00", end_time="16:00")
-        ),
+        data=json.dumps(sample_payload(date=today, room_id=1, start_time="15:00", end_time="16:00")),
         content_type="application/json",
     )
     rid = created.get_json()["reservation"]["id"]

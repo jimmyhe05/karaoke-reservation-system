@@ -19,9 +19,7 @@ def compute_pricing(conn, room_id, start_time_str, end_time_str, tax_rate=None):
     if tax_rate is None:
         tax_rate = Config.TAX_RATE
 
-    room = conn.execute(
-        "SELECT hourly_rate, peak_hour_rate FROM rooms WHERE id = ?", (room_id,)
-    ).fetchone()
+    room = conn.execute("SELECT hourly_rate, peak_hour_rate FROM rooms WHERE id = ?", (room_id,)).fetchone()
     if not room:
         raise ValueError("Invalid room id for pricing")
 

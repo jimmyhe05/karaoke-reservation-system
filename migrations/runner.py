@@ -57,47 +57,35 @@ def run_migrations(db):
     is_pg = _is_postgres(db)
     migration_files = sorted(
         [
-            f for f in os.listdir(migrations_dir)
-            if f.endswith(".sql")
-            and (not f.endswith("_postgres.sql") if not is_pg else not f.endswith("_sqlite.sql"))
+            f
+            for f in os.listdir(migrations_dir)
+            if f.endswith(".sql") and (not f.endswith("_postgres.sql") if not is_pg else not f.endswith("_sqlite.sql"))
         ]
     )
 
-    applied_count = db.execute(
-        "SELECT COUNT(*) as c FROM schema_migrations"
-    ).fetchone()["c"]
+    applied_count = db.execute("SELECT COUNT(*) as c FROM schema_migrations").fetchone()["c"]
     if applied_count == 0:
         if _is_postgres(db):
             has_reservations = (
-                db.execute(
-                    "SELECT 1 FROM information_schema.tables WHERE table_name = 'reservations'"
-                ).fetchone()
+                db.execute("SELECT 1 FROM information_schema.tables WHERE table_name = 'reservations'").fetchone()
                 is not None
             )
         else:
             has_reservations = (
-                db.execute(
-                    "SELECT name FROM sqlite_master WHERE type='table' AND name='reservations'"
-                ).fetchone()
+                db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='reservations'").fetchone()
                 is not None
             )
 
         if has_reservations:
-            logger.info(
-                "Existing database detected. Marking existing migrations as applied."
-            )
+            logger.info("Existing database detected. Marking existing migrations as applied.")
             for filename in migration_files:
-                db.execute(
-                    "INSERT INTO schema_migrations (filename) VALUES (?)", (filename,)
-                )
+                db.execute("INSERT INTO schema_migrations (filename) VALUES (?)", (filename,))
             db.commit()
             return
 
     # 3. Apply new migrations
     for filename in migration_files:
-        row = db.execute(
-            "SELECT filename FROM schema_migrations WHERE filename = ?", (filename,)
-        ).fetchone()
+        row = db.execute("SELECT filename FROM schema_migrations WHERE filename = ?", (filename,)).fetchone()
         if row:
             continue
 
@@ -113,9 +101,7 @@ def run_migrations(db):
             else:
                 db.cursor().executescript(sql)
 
-            db.execute(
-                "INSERT INTO schema_migrations (filename) VALUES (?)", (filename,)
-            )
+            db.execute("INSERT INTO schema_migrations (filename) VALUES (?)", (filename,))
             db.commit()
             logger.info(f"Successfully applied {filename}")
         except Exception as e:

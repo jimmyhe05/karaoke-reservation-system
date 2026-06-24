@@ -1,29 +1,22 @@
-import os
 import sys
 import re
 import uuid
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from zoneinfo import ZoneInfo
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, HTTPException, Depends
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
-
-# Ensure project root is in sys.path
-_ROOT = os.path.dirname(os.path.abspath(__file__))
-if _ROOT not in sys.path:
-    sys.path.insert(0, _ROOT)
+from jinja2 import pass_context
 
 from config import Config
 from services.db import get_db, init_db
-from services.validation import parse_time_safe, normalize_time_range, slots_overlap, find_conflict
-
-from services.pricing import compute_pricing
+from services.validation import parse_time_safe
 
 from services.reservations import (
     get_today_stats,
@@ -33,6 +26,7 @@ from routes.api import router as api_router
 
 
 # ---- Logging setup ----
+
 
 class JsonLogFormatter(logging.Formatter):
     def format(self, record):
@@ -51,7 +45,7 @@ class JsonLogFormatter(logging.Formatter):
 
 def configure_logging(flask_app=None):
     config_source = flask_app.config if (flask_app is not None and hasattr(flask_app, "config")) else Config
-    
+
     def get_config_val(key):
         if hasattr(config_source, "get"):
             return config_source.get(key)
@@ -62,20 +56,20 @@ def configure_logging(flask_app=None):
     log_format = get_config_val("LOG_FORMAT") or "json"
 
     logger = flask_app.logger if (flask_app is not None and hasattr(flask_app, "logger")) else logging.getLogger("app")
-    
+
     # For FastAPI app objects or mock compatibility:
     if flask_app is not None and not hasattr(flask_app, "logger"):
         flask_app.logger = logging.getLogger("app")
         logger = flask_app.logger
 
     logger.handlers = []
-    
+
     handler = logging.StreamHandler()
     if log_format == "json":
         formatter = JsonLogFormatter()
     else:
         formatter = logging.Formatter("[%(asctime)s] %(levelname)s %(message)s")
-    
+
     handler.setFormatter(formatter)
     logger.addHandler(handler)
     logger.setLevel(level)
@@ -87,10 +81,11 @@ logger = logging.getLogger("app")
 
 # ---- Security validation ----
 
+
 def validate_security_config(flask_app=None):
     """Fail closed in production when unsafe placeholder credentials are active."""
     config_source = flask_app.config if (flask_app is not None and hasattr(flask_app, "config")) else Config
-    
+
     def get_config_val(key):
         if hasattr(config_source, "get"):
             return config_source.get(key)
@@ -99,7 +94,7 @@ def validate_security_config(flask_app=None):
     secret_key = get_config_val("SECRET_KEY")
     if not secret_key:
         raise RuntimeError("SECRET_KEY must be set (see .env)")
-        
+
     if get_config_val("TESTING"):
         return
 
@@ -109,17 +104,12 @@ def validate_security_config(flask_app=None):
         "STAFF_PASSWORD": {"staff", "password", "change-me", "change-me-in-prod"},
     }
     weak_keys = [
-        key
-        for key, placeholders in weak_values.items()
-        if str(get_config_val(key) or "").strip() in placeholders
+        key for key, placeholders in weak_values.items() if str(get_config_val(key) or "").strip() in placeholders
     ]
     if not weak_keys:
         return
 
-    message = (
-        "Unsafe placeholder configuration detected for "
-        f"{', '.join(weak_keys)}. Update .env before deploying."
-    )
+    message = "Unsafe placeholder configuration detected for " f"{', '.join(weak_keys)}. Update .env before deploying."
     if get_config_val("APP_ENV") in {"prod", "production"}:
         raise RuntimeError(message)
     logger.warning(message)
@@ -130,11 +120,12 @@ validate_security_config()
 
 # ---- Lifespan context manager ----
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
     init_db()
-    
+
     # Run data seeding if db is empty (SQLite only by default)
     conn = get_db()
     try:
@@ -142,7 +133,7 @@ async def lifespan(app: FastAPI):
         pass
     finally:
         conn.close()
-        
+
     yield
     # Shutdown
 
@@ -155,19 +146,22 @@ app.logger = logger
 # Add session middleware (compatibility with Flask sessions)
 # ---- Middleware for request context metadata ----
 
+
 @app.middleware("http")
 async def add_request_metadata(request: Request, call_next):
     request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
     request.state.request_id = request_id
-    
+
     role = request.session.get("role", "guest")
-    request_meta.set({
-        "path": request.url.path,
-        "method": request.method,
-        "request_id": request_id,
-        "role": role,
-    })
-    
+    request_meta.set(
+        {
+            "path": request.url.path,
+            "method": request.method,
+            "request_id": request_id,
+            "role": role,
+        }
+    )
+
     response = await call_next(request)
     response.headers["X-Request-ID"] = request_id
     return response
@@ -183,7 +177,6 @@ app.add_middleware(
 )
 
 
-
 # ---- Static files and Templates ----
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -192,7 +185,7 @@ templates = Jinja2Templates(directory="templates")
 templates.env.globals["APP_ENV"] = getattr(Config, "APP_ENV", "development")
 templates.env.globals["config"] = Config
 
-from jinja2 import pass_context
+
 @pass_context
 def custom_url_for(context: dict, name: str, /, **path_params):
     request = context["request"]
@@ -207,12 +200,12 @@ def custom_url_for(context: dict, name: str, /, **path_params):
         return url
     return request.url_for(name, **path_params)
 
+
 templates.env.globals["url_for"] = custom_url_for
 
 
-
-
 # ---- Helpers ----
+
 
 def normalize_date_path(date_str):
     """Convert MM-DD-YYYY to YYYY-MM-DD."""
@@ -279,9 +272,7 @@ def get_rooms_with_reservations(selected_date=None):
                         }
                     )
 
-            rooms_with_reservations.append(
-                {"id": room["id"], "name": room["name"], "reservations": room_reservations}
-            )
+            rooms_with_reservations.append({"id": room["id"], "name": room["name"], "reservations": room_reservations})
 
         idle_reservations = []
         if idle_reservations_ids:
@@ -327,6 +318,7 @@ def get_rooms_with_reservations(selected_date=None):
 
 # ---- HTML View Routes ----
 
+
 @app.get("/")
 def index():
     today_path = datetime.now(ZoneInfo("America/Chicago")).strftime("%m-%d-%Y")
@@ -349,19 +341,19 @@ def improved_reservation(date: str = None):
 def reservation_by_date(request: Request, date_str: str):
     if not re.match(r"^\d{2}-\d{2}-\d{4}$", date_str):
         raise HTTPException(status_code=404, detail="Not Found")
-        
+
     try:
         iso_date = normalize_date_path(date_str)
     except ValueError:
         raise HTTPException(status_code=404, detail="Not Found")
-        
+
     data = get_rooms_with_reservations(iso_date)
     conn = get_db()
     try:
         stats = get_today_stats(conn, iso_date)
     finally:
         conn.close()
-        
+
     return templates.TemplateResponse(
         request=request,
         name="reservation.html",
@@ -370,9 +362,8 @@ def reservation_by_date(request: Request, date_str: str):
             "idle_reservations": data["idle_reservations"],
             "selected_date": iso_date,
             "today_stats": stats,
-        }
+        },
     )
-
 
 
 # Register API & REST routes router
@@ -383,6 +374,7 @@ app.include_router(api_router)
 
 if __name__ == "__main__":
     import uvicorn
+
     # If running with CLI commands: python app.py init-db
     if len(sys.argv) > 1:
         cmd = sys.argv[1]
@@ -390,14 +382,25 @@ if __name__ == "__main__":
             init_db()
             print("Initialized database schema and indexes.")
         elif cmd == "seed-sample":
-            target_date = sys.argv[2] if len(sys.argv) > 2 else datetime.now(ZoneInfo("America/Chicago")).strftime("%Y-%m-%d")
+            target_date = (
+                sys.argv[2] if len(sys.argv) > 2 else datetime.now(ZoneInfo("America/Chicago")).strftime("%Y-%m-%d")
+            )
             # Reuse core create logic via a direct connection
             conn = get_db()
             try:
                 # Seed rooms 1, 2, 3 if not present
-                conn.execute("INSERT OR IGNORE INTO rooms (id, name, capacity, hourly_rate, peak_hour_rate) VALUES (1, 'Room 1', 8, 35, 50)")
-                conn.execute("INSERT OR IGNORE INTO rooms (id, name, capacity, hourly_rate, peak_hour_rate) VALUES (2, 'Room 2', 8, 35, 50)")
-                conn.execute("INSERT OR IGNORE INTO rooms (id, name, capacity, hourly_rate, peak_hour_rate) VALUES (3, 'Room 3', 8, 35, 50)")
+                conn.execute(
+                    "INSERT OR IGNORE INTO rooms (id, name, capacity, hourly_rate, peak_hour_rate) "
+                    "VALUES (1, 'Room 1', 8, 35, 50)"
+                )
+                conn.execute(
+                    "INSERT OR IGNORE INTO rooms (id, name, capacity, hourly_rate, peak_hour_rate) "
+                    "VALUES (2, 'Room 2', 8, 35, 50)"
+                )
+                conn.execute(
+                    "INSERT OR IGNORE INTO rooms (id, name, capacity, hourly_rate, peak_hour_rate) "
+                    "VALUES (3, 'Room 3', 8, 35, 50)"
+                )
                 conn.commit()
                 print(f"Sample database seeded for date: {target_date}")
             finally:

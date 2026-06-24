@@ -4,9 +4,11 @@ import logging
 import asyncio
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
-from fastapi import APIRouter, Request, HTTPException, Depends, BackgroundTasks
+from fastapi import APIRouter, Request, BackgroundTasks
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from jinja2 import pass_context
+from sse_starlette.sse import EventSourceResponse
 
 from config import Config
 from services.db import get_db, is_postgres_connection
@@ -34,7 +36,7 @@ router = APIRouter()
 templates = Jinja2Templates(directory="templates")
 templates.env.globals["config"] = Config
 
-from jinja2 import pass_context
+
 @pass_context
 def custom_url_for(context: dict, name: str, /, **path_params):
     request = context["request"]
@@ -49,15 +51,16 @@ def custom_url_for(context: dict, name: str, /, **path_params):
         return url
     return request.url_for(name, **path_params)
 
+
 templates.env.globals["url_for"] = custom_url_for
-
-
 
 
 # ---- Response helpers ----
 
+
 def serialize_dates(obj):
     from datetime import date, time
+
     if isinstance(obj, dict):
         return {k: serialize_dates(v) for k, v in obj.items()}
     elif isinstance(obj, list):
@@ -105,6 +108,7 @@ async def get_request_payload(request: Request) -> dict:
 
 # ---- Auth Helper Dependencies ----
 
+
 def check_worker(request: Request):
     role = request.session.get("role", "guest")
     if role not in {"admin", "staff"}:
@@ -116,6 +120,7 @@ def check_worker(request: Request):
 
 # ---- Endpoints ----
 
+
 @router.get("/api/daily_reservations")
 def api_daily_reservations(request: Request, date: str = None):
     if not date:
@@ -124,7 +129,7 @@ def api_daily_reservations(request: Request, date: str = None):
     conn = get_db()
     try:
         rooms = conn.execute("SELECT * FROM rooms WHERE id > 0 ORDER BY id").fetchall()
-        
+
         role = request.session.get("role", "guest")
         user_id = request.session.get("user_id")
         is_worker = role in ("admin", "staff")
@@ -133,7 +138,7 @@ def api_daily_reservations(request: Request, date: str = None):
         idle_set = fetch_idle_set(conn, date)
 
         result = {"date": date, "rooms": [], "idle_reservations": []}
-        
+
         for room in rooms:
             reservations = conn.execute(
                 """
@@ -150,7 +155,7 @@ def api_daily_reservations(request: Request, date: str = None):
                     continue
                 serialized = serialize_reservation_row(res, False)
                 if not is_worker:
-                    is_owner = (user_id is not None and res["user_id"] == user_id)
+                    is_owner = user_id is not None and res["user_id"] == user_id
                     if not is_owner:
                         serialized["contact_name"] = "Reserved"
                         serialized["contact_phone"] = "Masked"
@@ -170,18 +175,18 @@ def api_daily_reservations(request: Request, date: str = None):
             placeholders = ",".join(["?"] * len(idle_set))
             idle_rows = conn.execute(
                 f"""
-                SELECT * FROM reservations 
+                SELECT * FROM reservations
                 WHERE id IN ({placeholders}) AND date = ? AND status NOT IN ('cancelled', 'rejected')
                 ORDER BY start_time
                 """,
                 list(idle_set) + [date],
             ).fetchall()
-            
+
             idle_res_list = []
             for r in idle_rows:
                 serialized = serialize_reservation_row(r, True)
                 if not is_worker:
-                    is_owner = (user_id is not None and r["user_id"] == user_id)
+                    is_owner = user_id is not None and r["user_id"] == user_id
                     if not is_owner:
                         serialized["contact_name"] = "Reserved"
                         serialized["contact_phone"] = "Masked"
@@ -193,7 +198,6 @@ def api_daily_reservations(request: Request, date: str = None):
         return api_ok(result)
     finally:
         conn.close()
-
 
 
 @router.get("/api/reservations")
@@ -265,25 +269,32 @@ async def api_update_reservation_route(request: Request, reservation_id: int):
     user_id = request.session.get("user_id")
 
     is_worker = role in {"admin", "staff"}
-    
+
     if not is_worker:
         if role != "customer" or user_id is None:
             return api_error("Worker login required", 401, code="auth_required")
-        
+
         # Check ownership
         conn = get_db()
         try:
-            existing = conn.execute(
-                "SELECT * FROM reservations WHERE id = ?", (reservation_id,)
-            ).fetchone()
+            existing = conn.execute("SELECT * FROM reservations WHERE id = ?", (reservation_id,)).fetchone()
             if not existing:
                 return api_error("Reservation not found", 404, code="not_found")
             if existing["user_id"] != user_id:
                 return api_error("Forbidden", 403, code="forbidden")
-            
+
             # Since they own it, we must validate restricted fields if any of them are in the request payload
             payload = await get_request_payload(request)
-            restricted_fields = ["date", "room_id", "start_time", "end_time", "status", "total_cost", "deposit_paid", "user_id"]
+            restricted_fields = [
+                "date",
+                "room_id",
+                "start_time",
+                "end_time",
+                "status",
+                "total_cost",
+                "deposit_paid",
+                "user_id",
+            ]
             for field in restricted_fields:
                 if field in payload:
                     val = payload[field]
@@ -293,7 +304,12 @@ async def api_update_reservation_route(request: Request, reservation_id: int):
                             val_int = int(val) if val is not None else None
                             exist_int = int(exist_val) if exist_val is not None else None
                             if val_int != exist_int:
-                                return api_error(f"Cannot modify restricted field: {field}", 400, code="validation_error", fields=[field])
+                                return api_error(
+                                    f"Cannot modify restricted field: {field}",
+                                    400,
+                                    code="validation_error",
+                                    fields=[field],
+                                )
                         except ValueError:
                             return api_error(f"Invalid {field} value", 400, code="validation_error", fields=[field])
                     elif field in ["total_cost", "deposit_paid"]:
@@ -301,7 +317,12 @@ async def api_update_reservation_route(request: Request, reservation_id: int):
                             val_float = float(val) if val is not None else None
                             exist_float = float(exist_val) if exist_val is not None else 0.0
                             if val_float != exist_float:
-                                return api_error(f"Cannot modify restricted field: {field}", 400, code="validation_error", fields=[field])
+                                return api_error(
+                                    f"Cannot modify restricted field: {field}",
+                                    400,
+                                    code="validation_error",
+                                    fields=[field],
+                                )
                         except ValueError:
                             return api_error(f"Invalid {field} value", 400, code="validation_error", fields=[field])
                     else:
@@ -313,16 +334,36 @@ async def api_update_reservation_route(request: Request, reservation_id: int):
                                     val_parts = val_norm.split(":")[:2]
                                     exist_parts = exist_norm.split(":")[:2]
                                     if val_parts != exist_parts:
-                                        return api_error(f"Cannot modify restricted field: {field}", 400, code="validation_error", fields=[field])
+                                        return api_error(
+                                            f"Cannot modify restricted field: {field}",
+                                            400,
+                                            code="validation_error",
+                                            fields=[field],
+                                        )
                                 else:
                                     if val_norm != exist_norm:
-                                        return api_error(f"Cannot modify restricted field: {field}", 400, code="validation_error", fields=[field])
+                                        return api_error(
+                                            f"Cannot modify restricted field: {field}",
+                                            400,
+                                            code="validation_error",
+                                            fields=[field],
+                                        )
                             except Exception:
                                 if val != exist_val:
-                                    return api_error(f"Cannot modify restricted field: {field}", 400, code="validation_error", fields=[field])
+                                    return api_error(
+                                        f"Cannot modify restricted field: {field}",
+                                        400,
+                                        code="validation_error",
+                                        fields=[field],
+                                    )
                         else:
                             if val != exist_val:
-                                return api_error(f"Cannot modify restricted field: {field}", 400, code="validation_error", fields=[field])
+                                return api_error(
+                                    f"Cannot modify restricted field: {field}",
+                                    400,
+                                    code="validation_error",
+                                    fields=[field],
+                                )
         finally:
             conn.close()
     else:
@@ -348,9 +389,7 @@ def public_schedule(request: Request, date: str = None):
     conn = get_db()
     try:
         rooms = conn.execute("SELECT * FROM rooms WHERE id > 0 ORDER BY id").fetchall()
-        reservations = conn.execute(
-            "SELECT * FROM reservations WHERE date = ? ORDER BY start_time", (date,)
-        ).fetchall()
+        reservations = conn.execute("SELECT * FROM reservations WHERE date = ? ORDER BY start_time", (date,)).fetchall()
         idle_set = fetch_idle_set(conn, date)
 
         schedule = []
@@ -411,11 +450,13 @@ def check_room_availability(request: Request, date: str = None):
 
         available_rooms = list(set(room_ids) - set(booked_room_ids))
 
-        return JSONResponse(content={
-            "available_rooms": available_rooms,
-            "total_rooms": len(room_ids),
-            "booked_rooms": len(booked_room_ids),
-        })
+        return JSONResponse(
+            content={
+                "available_rooms": available_rooms,
+                "total_rooms": len(room_ids),
+                "booked_rooms": len(booked_room_ids),
+            }
+        )
     finally:
         conn.close()
 
@@ -443,15 +484,9 @@ def api_calendar_availability(request: Request, start: str = None, end: str = No
     except ValueError:
         return api_error("Invalid date format", 400, code="validation_error", fields=["start", "end"])
 
-    role = request.session.get("role", "guest")
-    user_id = request.session.get("user_id")
-    is_worker = role in ("admin", "staff")
-
     conn = get_db()
     try:
-        total_rooms = conn.execute(
-            "SELECT COUNT(*) as count FROM rooms WHERE id > 0"
-        ).fetchone()["count"]
+        total_rooms = conn.execute("SELECT COUNT(*) as count FROM rooms WHERE id > 0").fetchone()["count"]
 
         date_range = []
         current_date = start_date_obj
@@ -528,9 +563,7 @@ async def price_estimate(request: Request):
         return api_error("Invalid room id", 400, code="validation_error", fields=["room_id"])
 
     try:
-        normalized_start, normalized_end, _, _ = normalize_time_range(
-            payload.get("date", ""), start_time, end_time
-        )
+        normalized_start, normalized_end, _, _ = normalize_time_range(payload.get("date", ""), start_time, end_time)
     except ValueError as e:
         return api_error(str(e), 400, code="validation_error", fields=["start_time", "end_time"])
 
@@ -639,14 +672,18 @@ def api_me(request: Request):
     if role == "customer":
         conn = get_db()
         try:
-            user_row = conn.execute("SELECT email_notifications FROM users WHERE id = ?", (request.session.get("user_id"),)).fetchone()
+            user_row = conn.execute(
+                "SELECT email_notifications FROM users WHERE id = ?", (request.session.get("user_id"),)
+            ).fetchone()
             email_notifications = bool(user_row["email_notifications"]) if user_row else True
-            payload.update({
-                "user_id": request.session.get("user_id"),
-                "name": request.session.get("user_name"),
-                "email": request.session.get("user_email"),
-                "email_notifications": email_notifications
-            })
+            payload.update(
+                {
+                    "user_id": request.session.get("user_id"),
+                    "name": request.session.get("user_name"),
+                    "email": request.session.get("user_email"),
+                    "email_notifications": email_notifications,
+                }
+            )
         finally:
             conn.close()
     return api_ok(payload)
@@ -662,13 +699,13 @@ def api_logout(request: Request):
 def login_google(request: Request):
     state = str(uuid.uuid4())
     request.session["oauth_state"] = state
-    
+
     client_id = getattr(Config, "GOOGLE_CLIENT_ID", "")
     base_url = getattr(Config, "BASE_URL", "")
-    
+
     if not client_id:
         return api_error("Google OAuth is not configured on this server.", 501, code="not_implemented")
-        
+
     redirect_uri = f"{base_url}/login/google/callback"
     auth_url = oauth_service.get_google_auth_url(state, redirect_uri, client_id)
     return RedirectResponse(url=auth_url, status_code=302)
@@ -678,24 +715,24 @@ def login_google(request: Request):
 def login_google_callback(request: Request, code: str = None, state: str = None):
     if not code or not state:
         return api_error("Missing authorization code or state", 400)
-        
+
     saved_state = request.session.pop("oauth_state", None)
     if not saved_state or saved_state != state:
         return api_error("Invalid OAuth state (CSRF detected)", 400, code="csrf_error")
-        
+
     client_id = getattr(Config, "GOOGLE_CLIENT_ID", "")
     client_secret = getattr(Config, "GOOGLE_CLIENT_SECRET", "")
     base_url = getattr(Config, "BASE_URL", "")
     redirect_uri = f"{base_url}/login/google/callback"
-    
+
     try:
         tokens = oauth_service.exchange_google_code(code, redirect_uri, client_id, client_secret)
         user_info = oauth_service.get_google_user_info(tokens["access_token"])
-        
+
         google_id = user_info["sub"]
         email = user_info["email"]
         name = user_info.get("name", email.split("@")[0])
-        
+
         conn = get_db()
         try:
             user = auth_service.get_user_by_google_id(google_id, conn=conn)
@@ -706,10 +743,12 @@ def login_google_callback(request: Request, code: str = None, state: str = None)
                     conn.commit()
                     user = auth_service.get_user_by_id(existing_user["id"], conn=conn)
                 else:
-                    user = auth_service.create_user(email=email, password=None, name=name, google_id=google_id, conn=conn)
+                    user = auth_service.create_user(
+                        email=email, password=None, name=name, google_id=google_id, conn=conn
+                    )
         finally:
             conn.close()
-                
+
         request.session["role"] = "customer"
         request.session["user_id"] = user["id"]
         request.session["user_name"] = user["name"]
@@ -729,7 +768,7 @@ def login_google_callback(request: Request, code: str = None, state: str = None)
                 logger.error(f"Failed to link guest messages: {e}")
             finally:
                 conn.close()
-        
+
         return RedirectResponse(url="/", status_code=302)
     except Exception as e:
         logger.error(f"Google Login error: {e}")
@@ -741,13 +780,13 @@ async def api_create_request(request: Request, background_tasks: BackgroundTasks
     role = request.session.get("role")
     if role != "customer" and role not in {"admin", "staff"}:
         return api_error("Login required to submit a booking request", 401, code="auth_required")
-        
+
     user_id = request.session.get("user_id")
     payload = await get_request_payload(request)
-    
+
     # We call the core creation logic
     resp = create_pending_request_api(payload, user_id, api_error, api_ok)
-    
+
     # If request was successful (status 201), schedule background emails
     if resp.status_code == 201:
         res_data = json.loads(resp.body.decode("utf-8"))
@@ -755,7 +794,7 @@ async def api_create_request(request: Request, background_tasks: BackgroundTasks
         if res_dict:
             background_tasks.add_task(email_service.send_request_received, res_dict)
             background_tasks.add_task(email_service.send_staff_notification, res_dict)
-            
+
     return resp
 
 
@@ -785,7 +824,7 @@ def api_approve_request(request: Request, reservation_id: int, background_tasks:
         row = conn.execute("SELECT * FROM reservations WHERE id = ?", (reservation_id,)).fetchone()
         if not row:
             return api_error("Reservation request not found", 404)
-            
+
         if is_postgres_connection(conn):
             conn.execute("SELECT id FROM rooms WHERE id = ? FOR UPDATE", (row["room_id"],))
         else:
@@ -798,40 +837,50 @@ def api_approve_request(request: Request, reservation_id: int, background_tasks:
 
         if row["status"] != "pending":
             return api_error(f"Cannot approve request with status '{row['status']}'", 409)
-            
+
         conflict = find_conflict(conn, row["room_id"], row["date"], row["start_time"], row["end_time"])
         if conflict:
             return api_error(
                 "Room is no longer available for the selected time (conflicts with another confirmed booking)",
                 409,
                 code="conflict",
-                details={"conflict_with": conflict["id"]}
+                details={"conflict_with": conflict["id"]},
             )
-            
+
         token = str(uuid.uuid4())
         conn.execute(
-            "UPDATE reservations SET status = 'confirmed', cancellation_token = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-            (token, reservation_id)
+            "UPDATE reservations SET status = 'confirmed', cancellation_token = ?, "
+            "updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (token, reservation_id),
         )
-        
+
         user_id = row["user_id"]
         if user_id:
-            message = f"Your reservation request for Room {row['room_id']} on {row['date']} ({row['start_time']} - {row['end_time']}) has been APPROVED!"
+            message = (
+                f"Your reservation request for Room {row['room_id']} on {row['date']} "
+                f"({row['start_time']} - {row['end_time']}) has been APPROVED!"
+            )
             conn.execute(
                 "INSERT INTO notifications (user_id, reservation_id, message) VALUES (?, ?, ?)",
-                (user_id, reservation_id, message)
+                (user_id, reservation_id, message),
             )
-            
+
         conn.commit()
-        
+
         updated_row = conn.execute("SELECT * FROM reservations WHERE id = ?", (reservation_id,)).fetchone()
         res_dict = dict(updated_row)
-        
+
         record_reservation_history(conn, reservation_id, "approved", res_dict)
-        log_action("reservation.approve", reservation_id=reservation_id, description=f"Approved request {reservation_id}")
-        
+        log_action(
+            "reservation.approve", reservation_id=reservation_id, description=f"Approved request {reservation_id}"
+        )
+
         # Publish change for SSE
-        publish_sse_event("reservation_approved", f"Reservation request {reservation_id} for Room {updated_row['room_id']} on {updated_row['date']} has been approved.")
+        publish_sse_event(
+            "reservation_approved",
+            f"Reservation request {reservation_id} for Room {updated_row['room_id']} "
+            f"on {updated_row['date']} has been approved.",
+        )
 
         # Asynchronously send email confirmation if user allowed it
         should_send_email = True
@@ -839,10 +888,10 @@ def api_approve_request(request: Request, reservation_id: int, background_tasks:
             user_pref = conn.execute("SELECT email_notifications FROM users WHERE id = ?", (user_id,)).fetchone()
             if user_pref and not user_pref["email_notifications"]:
                 should_send_email = False
-                
+
         if should_send_email:
             background_tasks.add_task(email_service.send_confirmation, res_dict)
-            
+
         return api_ok(message="Reservation approved")
     except Exception as e:
         conn.rollback()
@@ -865,7 +914,7 @@ async def api_decline_request(request: Request, reservation_id: int, background_
         row = conn.execute("SELECT * FROM reservations WHERE id = ?", (reservation_id,)).fetchone()
         if not row:
             return api_error("Reservation request not found", 404)
-            
+
         if is_postgres_connection(conn):
             conn.execute("SELECT id FROM rooms WHERE id = ? FOR UPDATE", (row["room_id"],))
         else:
@@ -878,31 +927,43 @@ async def api_decline_request(request: Request, reservation_id: int, background_
 
         if row["status"] != "pending":
             return api_error(f"Cannot decline request with status '{row['status']}'", 409)
-            
+
         conn.execute(
             "UPDATE reservations SET status = 'rejected', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-            (reservation_id,)
+            (reservation_id,),
         )
-        
+
         user_id = row["user_id"]
         if user_id:
             decline_reason = f" Reason: {reason}" if reason else ""
-            message = f"Your reservation request for Room {row['room_id']} on {row['date']} ({row['start_time']} - {row['end_time']}) was declined.{decline_reason}"
+            message = (
+                f"Your reservation request for Room {row['room_id']} on {row['date']} "
+                f"({row['start_time']} - {row['end_time']}) was declined.{decline_reason}"
+            )
             conn.execute(
                 "INSERT INTO notifications (user_id, reservation_id, message) VALUES (?, ?, ?)",
-                (user_id, reservation_id, message)
+                (user_id, reservation_id, message),
             )
-            
+
         conn.commit()
-        
+
         updated_row = conn.execute("SELECT * FROM reservations WHERE id = ?", (reservation_id,)).fetchone()
         res_dict = dict(updated_row)
-        
+
         record_reservation_history(conn, reservation_id, "declined", {"reason": reason, "details": res_dict})
-        log_action("reservation.decline", reservation_id=reservation_id, reason=reason, description=f"Declined request {reservation_id}")
-        
+        log_action(
+            "reservation.decline",
+            reservation_id=reservation_id,
+            reason=reason,
+            description=f"Declined request {reservation_id}",
+        )
+
         # Publish change for SSE
-        publish_sse_event("reservation_declined", f"Reservation request {reservation_id} for Room {updated_row['room_id']} on {updated_row['date']} has been declined.")
+        publish_sse_event(
+            "reservation_declined",
+            f"Reservation request {reservation_id} for Room {updated_row['room_id']} "
+            f"on {updated_row['date']} has been declined.",
+        )
 
         # Asynchronously send email rejection if user allowed it
         should_send_email = True
@@ -910,10 +971,10 @@ async def api_decline_request(request: Request, reservation_id: int, background_
             user_pref = conn.execute("SELECT email_notifications FROM users WHERE id = ?", (user_id,)).fetchone()
             if user_pref and not user_pref["email_notifications"]:
                 should_send_email = False
-                
+
         if should_send_email:
             background_tasks.add_task(email_service.send_rejection, res_dict, reason)
-            
+
         return api_ok(message="Reservation declined")
     except Exception as e:
         conn.rollback()
@@ -928,33 +989,43 @@ def render_cancel_confirm(request: Request, token: str):
     try:
         row = conn.execute("SELECT * FROM reservations WHERE cancellation_token = ?", (token,)).fetchone()
         if not row:
-            return templates.TemplateResponse(request=request, name="cancel_confirm.html", context={"error": "Invalid or expired cancellation link."})
-            
+            return templates.TemplateResponse(
+                request=request, name="cancel_confirm.html", context={"error": "Invalid or expired cancellation link."}
+            )
+
         if row["status"] == "cancelled":
-            return templates.TemplateResponse(request=request, name="cancel_done.html", context={"already_cancelled": True})
-            
+            return templates.TemplateResponse(
+                request=request, name="cancel_done.html", context={"already_cancelled": True}
+            )
+
         if row["status"] != "confirmed":
-            return templates.TemplateResponse(request=request, name="cancel_confirm.html", context={"error": f"Cannot cancel a reservation with status '{row['status']}'."})
-            
+            return templates.TemplateResponse(
+                request=request,
+                name="cancel_confirm.html",
+                context={"error": f"Cannot cancel a reservation with status '{row['status']}'."},
+            )
+
         chicago_tz = ZoneInfo("America/Chicago")
         now_local = datetime.now(chicago_tz)
-        
+
         res_start_hour, res_start_minute = map(int, row["start_time"].split(":"))
         res_date = datetime.strptime(row["date"], "%Y-%m-%d")
         if res_start_hour >= 24:
             res_start_hour -= 24
             res_date += timedelta(days=1)
-            
-        res_start_dt = datetime(res_date.year, res_date.month, res_date.day, res_start_hour, res_start_minute, tzinfo=chicago_tz)
+
+        res_start_dt = datetime(
+            res_date.year, res_date.month, res_date.day, res_start_hour, res_start_minute, tzinfo=chicago_tz
+        )
         cutoff_hours = int(getattr(Config, "CANCEL_CUTOFF_HOURS", 2))
         cutoff_time = res_start_dt - timedelta(hours=cutoff_hours)
-        
+
         can_cancel = now_local <= cutoff_time
-        
+
         return templates.TemplateResponse(
             request=request,
             name="cancel_confirm.html",
-            context={"reservation": dict(row), "can_cancel": can_cancel, "cutoff_hours": cutoff_hours}
+            context={"reservation": dict(row), "can_cancel": can_cancel, "cutoff_hours": cutoff_hours},
         )
     finally:
         conn.close()
@@ -967,7 +1038,7 @@ def execute_cancel(request: Request, token: str, background_tasks: BackgroundTas
         row = conn.execute("SELECT * FROM reservations WHERE cancellation_token = ?", (token,)).fetchone()
         if not row:
             return api_error("Invalid or expired cancellation token", 404)
-            
+
         if is_postgres_connection(conn):
             conn.execute("SELECT id FROM rooms WHERE id = ? FOR UPDATE", (row["room_id"],))
         else:
@@ -980,44 +1051,54 @@ def execute_cancel(request: Request, token: str, background_tasks: BackgroundTas
 
         if row["status"] == "cancelled":
             return templates.TemplateResponse(request=request, name="cancel_done.html", context={})
-            
+
         if row["status"] != "confirmed":
             return api_error(f"Cannot cancel a reservation with status '{row['status']}'", 409)
-            
+
         chicago_tz = ZoneInfo("America/Chicago")
         now_local = datetime.now(chicago_tz)
-        
+
         res_start_hour, res_start_minute = map(int, row["start_time"].split(":"))
         res_date = datetime.strptime(row["date"], "%Y-%m-%d")
         if res_start_hour >= 24:
             res_start_hour -= 24
             res_date += timedelta(days=1)
-            
-        res_start_dt = datetime(res_date.year, res_date.month, res_date.day, res_start_hour, res_start_minute, tzinfo=chicago_tz)
+
+        res_start_dt = datetime(
+            res_date.year, res_date.month, res_date.day, res_start_hour, res_start_minute, tzinfo=chicago_tz
+        )
         cutoff_hours = int(getattr(Config, "CANCEL_CUTOFF_HOURS", 2))
         cutoff_time = res_start_dt - timedelta(hours=cutoff_hours)
-        
+
         if now_local > cutoff_time:
-            return api_error(f"Reservations can only be cancelled up to {cutoff_hours} hours before the start time.", 409, code="cutoff_exceeded")
-            
+            return api_error(
+                f"Reservations can only be cancelled up to {cutoff_hours} hours before the start time.",
+                409,
+                code="cutoff_exceeded",
+            )
+
         conn.execute(
-            "UPDATE reservations SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-            (row["id"],)
+            "UPDATE reservations SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE id = ?", (row["id"],)
         )
         conn.commit()
-        
+
         updated_row = conn.execute("SELECT * FROM reservations WHERE id = ?", (row["id"],)).fetchone()
         res_dict = dict(updated_row)
-        
+
         record_reservation_history(conn, row["id"], "cancelled_by_customer", res_dict)
-        log_action("reservation.cancel_by_customer", reservation_id=row["id"], description=f"Cancelled reservation {row['id']}")
-        
+        log_action(
+            "reservation.cancel_by_customer", reservation_id=row["id"], description=f"Cancelled reservation {row['id']}"
+        )
+
         # Publish change for SSE
-        publish_sse_event("reservation_cancelled", f"Reservation {row['id']} for Room {row['room_id']} on {row['date']} has been cancelled by Customer.")
+        publish_sse_event(
+            "reservation_cancelled",
+            f"Reservation {row['id']} for Room {row['room_id']} on {row['date']} has been cancelled by Customer.",
+        )
 
         # Asynchronously send email cancellation notice to staff
         background_tasks.add_task(email_service.send_cancellation_notice, res_dict)
-            
+
         return templates.TemplateResponse(request=request, name="cancel_done.html", context={})
 
     except Exception as e:
@@ -1032,13 +1113,14 @@ def api_get_notifications(request: Request):
     role = request.session.get("role")
     if role != "customer":
         return api_ok({"notifications": []})
-        
+
     user_id = request.session.get("user_id")
     conn = get_db()
     try:
         rows = conn.execute(
-            "SELECT id, message, read, created_at FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 50",
-            (user_id,)
+            "SELECT id, message, read, created_at FROM notifications "
+            "WHERE user_id = ? ORDER BY created_at DESC LIMIT 50",
+            (user_id,),
         ).fetchall()
         return api_ok({"notifications": [dict(r) for r in rows]})
     finally:
@@ -1050,7 +1132,7 @@ def api_mark_all_notifications_read(request: Request):
     role = request.session.get("role")
     if role != "customer":
         return api_error("Customer login required", 401, code="auth_required")
-        
+
     user_id = request.session.get("user_id")
     conn = get_db()
     try:
@@ -1069,14 +1151,14 @@ def api_mark_notification_read(request: Request, notification_id: int):
     role = request.session.get("role")
     if role != "customer":
         return api_error("Customer login required", 401, code="auth_required")
-        
+
     user_id = request.session.get("user_id")
     conn = get_db()
     try:
         row = conn.execute("SELECT user_id FROM notifications WHERE id = ?", (notification_id,)).fetchone()
         if not row or row["user_id"] != user_id:
             return api_error("Notification not found", 404)
-            
+
         conn.execute("DELETE FROM notifications WHERE id = ?", (notification_id,))
         conn.commit()
         return api_ok(message="Notification marked as read")
@@ -1089,24 +1171,26 @@ def api_mark_notification_read(request: Request, notification_id: int):
 
 # ---- Direct Messaging API Endpoints ----
 
+
 @router.get("/api/messages")
 def api_get_messages(request: Request, mark_read: bool = False):
     session_id = request.session.get("guest_session_id")
     if not session_id:
         session_id = str(uuid.uuid4())
         request.session["guest_session_id"] = session_id
-        
+
     user_id = request.session.get("user_id")
     role = request.session.get("role")
-    is_customer = (role == "customer" and user_id is not None)
-    
+    is_customer = role == "customer" and user_id is not None
+
     conn = get_db()
     try:
         if is_customer:
             if mark_read:
                 # Mark staff replies as read by user
                 conn.execute(
-                    "UPDATE direct_messages SET read_by_user = 1 WHERE sender_role = 'staff' AND read_by_user = 0 AND (user_id = ? OR session_id = ?)",
+                    "UPDATE direct_messages SET read_by_user = 1 WHERE sender_role = 'staff' "
+                    "AND read_by_user = 0 AND (user_id = ? OR session_id = ?)",
                     (user_id, session_id),
                 )
                 conn.commit()
@@ -1118,29 +1202,35 @@ def api_get_messages(request: Request, mark_read: bool = False):
             if mark_read:
                 # Mark staff replies as read by user
                 conn.execute(
-                    "UPDATE direct_messages SET read_by_user = 1 WHERE sender_role = 'staff' AND read_by_user = 0 AND user_id IS NULL AND session_id = ?",
+                    "UPDATE direct_messages SET read_by_user = 1 WHERE sender_role = 'staff' "
+                    "AND read_by_user = 0 AND user_id IS NULL AND session_id = ?",
                     (session_id,),
                 )
                 conn.commit()
             rows = conn.execute(
-                "SELECT * FROM direct_messages WHERE user_id IS NULL AND session_id = ? ORDER BY created_at ASC, id ASC",
+                "SELECT * FROM direct_messages WHERE user_id IS NULL AND session_id = ? "
+                "ORDER BY created_at ASC, id ASC",
                 (session_id,),
             ).fetchall()
-            
+
         messages = []
         for r in rows:
-            messages.append({
-                "id": r["id"],
-                "user_id": r["user_id"],
-                "session_id": r["session_id"],
-                "guest_name": r["guest_name"],
-                "guest_email": r["guest_email"],
-                "message": r["message"],
-                "sender_role": r["sender_role"],
-                "read_by_staff": r["read_by_staff"],
-                "read_by_user": r["read_by_user"],
-                "created_at": r["created_at"].isoformat() if hasattr(r["created_at"], "isoformat") else str(r["created_at"]),
-            })
+            messages.append(
+                {
+                    "id": r["id"],
+                    "user_id": r["user_id"],
+                    "session_id": r["session_id"],
+                    "guest_name": r["guest_name"],
+                    "guest_email": r["guest_email"],
+                    "message": r["message"],
+                    "sender_role": r["sender_role"],
+                    "read_by_staff": r["read_by_staff"],
+                    "read_by_user": r["read_by_user"],
+                    "created_at": r["created_at"].isoformat()
+                    if hasattr(r["created_at"], "isoformat")
+                    else str(r["created_at"]),
+                }
+            )
         return api_ok({"messages": messages, "session_id": session_id})
     finally:
         conn.close()
@@ -1152,40 +1242,41 @@ async def api_post_message(request: Request):
     if not session_id:
         session_id = str(uuid.uuid4())
         request.session["guest_session_id"] = session_id
-        
+
     user_id = request.session.get("user_id")
     role = request.session.get("role")
-    is_customer = (role == "customer" and user_id is not None)
-    
+    is_customer = role == "customer" and user_id is not None
+
     payload = await get_request_payload(request)
     message = payload.get("message")
     if not message or not message.strip():
         return api_error("Message content is required", 400, code="validation_error", fields=["message"])
-        
+
     guest_name = payload.get("guest_name")
     guest_email = payload.get("guest_email")
-    
+
     conn = get_db()
     try:
         sender_role = "customer" if is_customer else "guest"
         conn.execute(
             """
-            INSERT INTO direct_messages (user_id, session_id, guest_name, guest_email, message, sender_role, read_by_staff, read_by_user)
+            INSERT INTO direct_messages (user_id, session_id, guest_name, guest_email,
+                                         message, sender_role, read_by_staff, read_by_user)
             VALUES (?, ?, ?, ?, ?, ?, 0, 1)
             """,
             (user_id if is_customer else None, session_id, guest_name, guest_email, message.strip(), sender_role),
         )
         conn.commit()
-        
+
         # Publish change for SSE
         publish_sse_event(
             "new_message",
             f"New message from {guest_name or 'Guest'}",
             user_id=user_id if is_customer else None,
             session_id=session_id,
-            sender_role=sender_role
+            sender_role=sender_role,
         )
-        
+
         return api_ok(message="Message sent successfully")
     except Exception as e:
         conn.rollback()
@@ -1199,18 +1290,18 @@ def api_get_staff_conversations(request: Request):
     auth_err = check_worker(request)
     if auth_err:
         return auth_err
-        
+
     conn = get_db()
     try:
         rows = conn.execute("SELECT * FROM direct_messages ORDER BY created_at ASC, id ASC").fetchall()
         user_rows = conn.execute("SELECT id, name, email FROM users").fetchall()
         user_map = {u["id"]: {"name": u["name"], "email": u["email"]} for u in user_rows}
-        
+
         conversations = {}
         for r in rows:
             sid = r["session_id"]
             uid = r["user_id"]
-            
+
             name = None
             email = None
             if uid in user_map:
@@ -1219,7 +1310,7 @@ def api_get_staff_conversations(request: Request):
             else:
                 name = r["guest_name"]
                 email = r["guest_email"]
-                
+
             if sid not in conversations:
                 conversations[sid] = {
                     "session_id": sid,
@@ -1230,20 +1321,22 @@ def api_get_staff_conversations(request: Request):
                     "last_message_time": "",
                     "last_sender_role": "",
                 }
-                
+
             c = conversations[sid]
             if name and (not c["name"] or c["name"] == "Guest"):
                 c["name"] = name
             if email and not c["email"]:
                 c["email"] = email
-                
+
             if r["read_by_staff"] == 0 and r["sender_role"] != "staff":
                 c["unread_count"] += 1
-                
+
             c["last_message"] = r["message"]
             c["last_sender_role"] = r["sender_role"]
-            c["last_message_time"] = r["created_at"].isoformat() if hasattr(r["created_at"], "isoformat") else str(r["created_at"])
-            
+            c["last_message_time"] = (
+                r["created_at"].isoformat() if hasattr(r["created_at"], "isoformat") else str(r["created_at"])
+            )
+
         sorted_convs = sorted(conversations.values(), key=lambda x: x["last_message_time"], reverse=True)
         return api_ok({"conversations": sorted_convs})
     finally:
@@ -1255,7 +1348,7 @@ def api_get_staff_conversation(request: Request, session_id: str):
     auth_err = check_worker(request)
     if auth_err:
         return auth_err
-        
+
     conn = get_db()
     try:
         conn.execute(
@@ -1263,12 +1356,12 @@ def api_get_staff_conversation(request: Request, session_id: str):
             (session_id,),
         )
         conn.commit()
-        
+
         rows = conn.execute(
             "SELECT * FROM direct_messages WHERE session_id = ? ORDER BY created_at ASC, id ASC",
             (session_id,),
         ).fetchall()
-        
+
         user_id = None
         guest_name = None
         guest_email = None
@@ -1279,7 +1372,7 @@ def api_get_staff_conversation(request: Request, session_id: str):
                 guest_name = r["guest_name"]
             if r["guest_email"]:
                 guest_email = r["guest_email"]
-                
+
         name = "Guest"
         email = ""
         if user_id:
@@ -1290,22 +1383,26 @@ def api_get_staff_conversation(request: Request, session_id: str):
         elif guest_name:
             name = guest_name
             email = guest_email or ""
-            
+
         messages = []
         for r in rows:
-            messages.append({
-                "id": r["id"],
-                "user_id": r["user_id"],
-                "session_id": r["session_id"],
-                "guest_name": r["guest_name"],
-                "guest_email": r["guest_email"],
-                "message": r["message"],
-                "sender_role": r["sender_role"],
-                "read_by_staff": r["read_by_staff"],
-                "read_by_user": r["read_by_user"],
-                "created_at": r["created_at"].isoformat() if hasattr(r["created_at"], "isoformat") else str(r["created_at"]),
-            })
-            
+            messages.append(
+                {
+                    "id": r["id"],
+                    "user_id": r["user_id"],
+                    "session_id": r["session_id"],
+                    "guest_name": r["guest_name"],
+                    "guest_email": r["guest_email"],
+                    "message": r["message"],
+                    "sender_role": r["sender_role"],
+                    "read_by_staff": r["read_by_staff"],
+                    "read_by_user": r["read_by_user"],
+                    "created_at": r["created_at"].isoformat()
+                    if hasattr(r["created_at"], "isoformat")
+                    else str(r["created_at"]),
+                }
+            )
+
         return api_ok({"messages": messages, "name": name, "email": email})
     finally:
         conn.close()
@@ -1316,12 +1413,12 @@ async def api_post_staff_reply(request: Request, session_id: str):
     auth_err = check_worker(request)
     if auth_err:
         return auth_err
-        
+
     payload = await get_request_payload(request)
     message = payload.get("message")
     if not message or not message.strip():
         return api_error("Message content is required", 400, code="validation_error", fields=["message"])
-        
+
     conn = get_db()
     try:
         row = conn.execute(
@@ -1329,7 +1426,7 @@ async def api_post_staff_reply(request: Request, session_id: str):
             (session_id,),
         ).fetchone()
         user_id = row["user_id"] if row else None
-        
+
         conn.execute(
             """
             INSERT INTO direct_messages (user_id, session_id, message, sender_role, read_by_staff, read_by_user)
@@ -1338,16 +1435,12 @@ async def api_post_staff_reply(request: Request, session_id: str):
             (user_id, session_id, message.strip()),
         )
         conn.commit()
-        
+
         # Publish change for SSE
         publish_sse_event(
-            "new_message",
-            "New support message",
-            user_id=user_id,
-            session_id=session_id,
-            sender_role="staff"
+            "new_message", "New support message", user_id=user_id, session_id=session_id, sender_role="staff"
         )
-        
+
         return api_ok(message="Reply sent successfully")
     except Exception as e:
         conn.rollback()
@@ -1361,15 +1454,15 @@ def api_delete_staff_conversation(request: Request, session_id: str):
     auth_err = check_worker(request)
     if auth_err:
         return auth_err
-        
+
     conn = get_db()
     try:
         conn.execute("DELETE FROM direct_messages WHERE session_id = ?", (session_id,))
         conn.commit()
-        
+
         # Publish change for SSE
-        publish_sse_event("conversation_removed", f"Conversation deleted by Staff", session_id=session_id)
-        
+        publish_sse_event("conversation_removed", "Conversation deleted by Staff", session_id=session_id)
+
         return api_ok(message="Conversation deleted successfully")
     except Exception as e:
         conn.rollback()
@@ -1383,29 +1476,25 @@ async def api_update_preferences(request: Request):
     role = request.session.get("role")
     if role != "customer":
         return api_error("Customer login required", 401, code="auth_required")
-        
+
     user_id = request.session.get("user_id")
     payload = await get_request_payload(request)
     email_notifications = payload.get("email_notifications")
-    
+
     if email_notifications is None:
         return api_error("Missing email_notifications parameter", 400, code="validation_error")
-        
+
     email_notifications_val = 1 if email_notifications else 0
-    
+
     conn = get_db()
     try:
         if is_postgres_connection(conn):
             conn.execute(
-                "UPDATE users SET email_notifications = ?::boolean WHERE id = ?",
-                (bool(email_notifications), user_id)
+                "UPDATE users SET email_notifications = ?::boolean WHERE id = ?", (bool(email_notifications), user_id)
             )
         else:
             email_notifications_val = 1 if email_notifications else 0
-            conn.execute(
-                "UPDATE users SET email_notifications = ? WHERE id = ?",
-                (email_notifications_val, user_id)
-            )
+            conn.execute("UPDATE users SET email_notifications = ? WHERE id = ?", (email_notifications_val, user_id))
         conn.commit()
         return api_ok(message="Preferences updated successfully")
     except Exception as e:
@@ -1420,7 +1509,7 @@ def api_get_my_bookings(request: Request):
     role = request.session.get("role")
     if role != "customer":
         return api_error("Customer login required", 401, code="auth_required")
-        
+
     user_id = request.session.get("user_id")
     conn = get_db()
     try:
@@ -1431,12 +1520,12 @@ def api_get_my_bookings(request: Request):
             WHERE user_id = ?
             ORDER BY date DESC, start_time DESC
             """,
-            (user_id,)
+            (user_id,),
         ).fetchall()
-        
+
         idle_set = fetch_idle_set(conn)
         bookings = [serialize_reservation_row(r, r["id"] in idle_set) for r in rows]
-        
+
         # Filter out cancelled/rejected bookings updated > 24 hours ago
         filtered_bookings = []
         now = datetime.now(timezone.utc)
@@ -1454,7 +1543,7 @@ def api_get_my_bookings(request: Request):
                             dt = updated_at_str
                         else:
                             dt = None
-                            
+
                         if dt:
                             if dt.tzinfo is None:
                                 dt = dt.replace(tzinfo=timezone.utc)
@@ -1464,7 +1553,7 @@ def api_get_my_bookings(request: Request):
                     except Exception:
                         pass
             filtered_bookings.append(b)
-            
+
         return api_ok({"bookings": filtered_bookings})
     finally:
         conn.close()
@@ -1475,14 +1564,14 @@ def api_customer_cancel_booking(request: Request, reservation_id: int, backgroun
     role = request.session.get("role")
     if role != "customer":
         return api_error("Customer login required", 401, code="auth_required")
-        
+
     user_id = request.session.get("user_id")
     conn = get_db()
     try:
         row = conn.execute("SELECT * FROM reservations WHERE id = ?", (reservation_id,)).fetchone()
         if not row or row["user_id"] != user_id:
             return api_error("Reservation not found", 404)
-            
+
         if is_postgres_connection(conn):
             conn.execute("SELECT id FROM rooms WHERE id = ? FOR UPDATE", (row["room_id"],))
         else:
@@ -1495,41 +1584,54 @@ def api_customer_cancel_booking(request: Request, reservation_id: int, backgroun
 
         if row["status"] == "cancelled":
             return api_ok(message="Reservation is already cancelled")
-            
+
         if row["status"] == "confirmed":
             chicago_tz = ZoneInfo("America/Chicago")
             now_local = datetime.now(chicago_tz)
-            
+
             res_start_hour, res_start_minute = map(int, row["start_time"].split(":"))
             res_date = datetime.strptime(row["date"], "%Y-%m-%d")
             if res_start_hour >= 24:
                 res_start_hour -= 24
                 res_date += timedelta(days=1)
-                
-            res_start_dt = datetime(res_date.year, res_date.month, res_date.day, res_start_hour, res_start_minute, tzinfo=chicago_tz)
+
+            res_start_dt = datetime(
+                res_date.year, res_date.month, res_date.day, res_start_hour, res_start_minute, tzinfo=chicago_tz
+            )
             cutoff_hours = int(getattr(Config, "CANCEL_CUTOFF_HOURS", 2))
             cutoff_time = res_start_dt - timedelta(hours=cutoff_hours)
-            
+
             if now_local > cutoff_time:
-                return api_error(f"Confirmed reservations can only be cancelled up to {cutoff_hours} hours before start time.", 409, code="cutoff_exceeded")
-                
+                return api_error(
+                    f"Confirmed reservations can only be cancelled up to {cutoff_hours} hours before start time.",
+                    409,
+                    code="cutoff_exceeded",
+                )
+
         conn.execute(
             "UPDATE reservations SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-            (reservation_id,)
+            (reservation_id,),
         )
         conn.commit()
-        
+
         updated_row = conn.execute("SELECT * FROM reservations WHERE id = ?", (reservation_id,)).fetchone()
         res_dict = dict(updated_row)
         record_reservation_history(conn, reservation_id, "cancelled_by_customer", res_dict)
-        log_action("reservation.cancel_by_customer", reservation_id=reservation_id, description=f"Cancelled booking {reservation_id}")
-        
+        log_action(
+            "reservation.cancel_by_customer",
+            reservation_id=reservation_id,
+            description=f"Cancelled booking {reservation_id}",
+        )
+
         # Publish change for SSE
-        publish_sse_event("reservation_cancelled", f"Reservation {reservation_id} for Room {row['room_id']} on {row['date']} has been cancelled by Customer.")
+        publish_sse_event(
+            "reservation_cancelled",
+            f"Reservation {reservation_id} for Room {row['room_id']} on {row['date']} has been cancelled by Customer.",
+        )
 
         if row["status"] == "confirmed":
             background_tasks.add_task(email_service.send_cancellation_notice, res_dict)
-                
+
         return api_ok(message="Reservation cancelled successfully")
     except Exception as e:
         conn.rollback()
@@ -1540,6 +1642,7 @@ def api_customer_cancel_booking(request: Request, reservation_id: int, backgroun
 
 # ---- Legacy compatibility REST endpoints ----
 
+
 @router.post("/login")
 async def admin_login(request: Request):
     payload = await get_request_payload(request)
@@ -1547,14 +1650,12 @@ async def admin_login(request: Request):
     password = payload.get("password")
     role = None
 
-    if (
-        username == getattr(Config, "ADMIN_USERNAME", "admin")
-        and password == getattr(Config, "ADMIN_PASSWORD", "admin")
+    if username == getattr(Config, "ADMIN_USERNAME", "admin") and password == getattr(
+        Config, "ADMIN_PASSWORD", "admin"
     ):
         role = "admin"
-    elif (
-        username == getattr(Config, "STAFF_USERNAME", "staff")
-        and password == getattr(Config, "STAFF_PASSWORD", "staff")
+    elif username == getattr(Config, "STAFF_USERNAME", "staff") and password == getattr(
+        Config, "STAFF_PASSWORD", "staff"
     ):
         role = "staff"
 
@@ -1601,42 +1702,46 @@ def legacy_get_reservation(request: Request, reservation_id: int):
         role = request.session.get("role", "guest")
         user_id = request.session.get("user_id")
         is_worker = role in ("admin", "staff")
-        is_owner = (user_id is not None and reservation["user_id"] == user_id)
+        is_owner = user_id is not None and reservation["user_id"] == user_id
 
         if not is_worker and not is_owner:
-            return JSONResponse(content={
+            return JSONResponse(
+                content={
+                    "id": reservation["id"],
+                    "date": reservation["date"],
+                    "start_time": reservation["start_time"],
+                    "end_time": reservation["end_time"],
+                    "num_people": reservation["num_people"],
+                    "contact_name": "Reserved",
+                    "contact_phone": "Masked",
+                    "contact_email": "Masked",
+                    "room_id": reservation["room_id"],
+                    "language": reservation["language"],
+                    "notes": "",
+                    "status": reservation["status"],
+                    "total_cost": reservation["total_cost"],
+                    "is_owner": False,
+                }
+            )
+
+        return JSONResponse(
+            content={
                 "id": reservation["id"],
                 "date": reservation["date"],
                 "start_time": reservation["start_time"],
                 "end_time": reservation["end_time"],
                 "num_people": reservation["num_people"],
-                "contact_name": "Reserved",
-                "contact_phone": "Masked",
-                "contact_email": "Masked",
+                "contact_name": reservation["contact_name"],
+                "contact_phone": reservation["contact_phone"],
+                "contact_email": reservation["contact_email"],
                 "room_id": reservation["room_id"],
                 "language": reservation["language"],
-                "notes": "",
+                "notes": reservation["notes"],
                 "status": reservation["status"],
                 "total_cost": reservation["total_cost"],
-                "is_owner": False,
-            })
-
-        return JSONResponse(content={
-            "id": reservation["id"],
-            "date": reservation["date"],
-            "start_time": reservation["start_time"],
-            "end_time": reservation["end_time"],
-            "num_people": reservation["num_people"],
-            "contact_name": reservation["contact_name"],
-            "contact_phone": reservation["contact_phone"],
-            "contact_email": reservation["contact_email"],
-            "room_id": reservation["room_id"],
-            "language": reservation["language"],
-            "notes": reservation["notes"],
-            "status": reservation["status"],
-            "total_cost": reservation["total_cost"],
-            "is_owner": is_owner,
-        })
+                "is_owner": is_owner,
+            }
+        )
     finally:
         conn.close()
 
@@ -1669,11 +1774,17 @@ def legacy_delete_reservation(request: Request, reservation_id: int):
             date=reservation["date"],
             room_id=reservation["room_id"],
         )
-        
-        # Publish change for SSE
-        publish_sse_event("reservation_deleted", f"Reservation {reservation_id} for Room {reservation['room_id']} on {reservation['date']} has been deleted by Staff.")
 
-        return JSONResponse(content={"message": "Reservation deleted successfully", "id": reservation_id}, status_code=200)
+        # Publish change for SSE
+        publish_sse_event(
+            "reservation_deleted",
+            f"Reservation {reservation_id} for Room {reservation['room_id']} "
+            f"on {reservation['date']} has been deleted by Staff.",
+        )
+
+        return JSONResponse(
+            content={"message": "Reservation deleted successfully", "id": reservation_id}, status_code=200
+        )
     except Exception as e:
         conn.rollback()
         raise e
@@ -1695,7 +1806,7 @@ async def legacy_update_reservation(request: Request, reservation_id: int):
             return JSONResponse(status_code=404, content={"error": "Reservation not found"})
 
         room_id = payload.get("room_id", existing["room_id"])
-        
+
         if is_postgres_connection(conn):
             conn.execute("SELECT id FROM rooms WHERE id = ? FOR UPDATE", (room_id,))
         else:
@@ -1718,19 +1829,26 @@ async def legacy_update_reservation(request: Request, reservation_id: int):
         try:
             normalized_start, normalized_end, _, _ = normalize_time_range(date, start_time_raw, end_time_raw)
         except ValueError as e:
-            return JSONResponse(status_code=400, content={"error": str(e), "fields": ["start_time", "end_time", "date"]})
+            return JSONResponse(
+                status_code=400, content={"error": str(e), "fields": ["start_time", "end_time", "date"]}
+            )
 
         conflict = find_conflict(conn, room_id, date, normalized_start, normalized_end, exclude_id=reservation_id)
         if conflict:
-            return JSONResponse(status_code=409, content={"error": "The selected time slot is already occupied by another reservation"})
+            return JSONResponse(
+                status_code=409, content={"error": "The selected time slot is already occupied by another reservation"}
+            )
 
         num_people = payload.get("num_people", existing["num_people"])
         try:
             num_people = int(num_people)
         except Exception:
-            return JSONResponse(status_code=400, content={"error": "Invalid number of people", "fields": ["num_people"]})
+            return JSONResponse(
+                status_code=400, content={"error": "Invalid number of people", "fields": ["num_people"]}
+            )
 
         from services.reservations import validate_room_capacity
+
         ok, msg, _ = validate_room_capacity(conn, room_id, num_people)
         if not ok:
             return JSONResponse(status_code=400, content={"error": msg})
@@ -1743,7 +1861,10 @@ async def legacy_update_reservation(request: Request, reservation_id: int):
 
         if time_or_room_changed:
             from services.pricing import calculate_cost
-            total_cost = calculate_cost(conn, room_id, normalized_start, normalized_end, float(getattr(Config, "TAX_RATE", 0.055)))
+
+            total_cost = calculate_cost(
+                conn, room_id, normalized_start, normalized_end, float(getattr(Config, "TAX_RATE", 0.055))
+            )
         else:
             total_cost = existing["total_cost"]
 
@@ -1771,7 +1892,7 @@ async def legacy_update_reservation(request: Request, reservation_id: int):
         conn.commit()
 
         updated = conn.execute("SELECT * FROM reservations WHERE id = ?", (reservation_id,)).fetchone()
-        
+
         record_reservation_history(conn, reservation_id, "updated", serialize_reservation_row(updated))
         log_action(
             "reservation.update",
@@ -1782,13 +1903,16 @@ async def legacy_update_reservation(request: Request, reservation_id: int):
             end_time=normalized_end,
             num_people=num_people,
         )
-        
+
         # Publish change for SSE
         role = request.session.get("role", "guest")
         updated_by = "Staff" if role in ("admin", "staff") else "Customer"
         publish_sse_event("reservation_updated", f"Reservation {reservation_id} updated by {updated_by}.")
 
-        return JSONResponse(content={"message": "Reservation updated successfully", "reservation": serialize_reservation_row(updated)}, status_code=200)
+        return JSONResponse(
+            content={"message": "Reservation updated successfully", "reservation": serialize_reservation_row(updated)},
+            status_code=200,
+        )
     except Exception as e:
         conn.rollback()
         raise e
@@ -1808,9 +1932,7 @@ def move_to_idle(request: Request, reservation_id: int):
         else:
             conn.execute("BEGIN IMMEDIATE")
 
-        reservation = conn.execute(
-            "SELECT * FROM reservations WHERE id = ?", (reservation_id,)
-        ).fetchone()
+        reservation = conn.execute("SELECT * FROM reservations WHERE id = ?", (reservation_id,)).fetchone()
         if not reservation:
             return JSONResponse(status_code=404, content={"error": "Reservation not found"})
 
@@ -1825,7 +1947,7 @@ def move_to_idle(request: Request, reservation_id: int):
             (reservation_id, reservation["date"]),
         )
         conn.commit()
-        
+
         # Publish change for SSE
         publish_sse_event("reservation_moved_to_idle", f"Reservation {reservation_id} moved to idle queue by Staff.")
 
@@ -1855,13 +1977,13 @@ def remove_from_idle(request: Request, reservation_id: int):
         if not existing:
             return JSONResponse(status_code=404, content={"error": "Reservation not found in idle area"})
 
-        conn.execute(
-            "DELETE FROM idle_reservations WHERE reservation_id = ?", (reservation_id,)
-        )
+        conn.execute("DELETE FROM idle_reservations WHERE reservation_id = ?", (reservation_id,))
         conn.commit()
-        
+
         # Publish change for SSE
-        publish_sse_event("reservation_removed_from_idle", f"Reservation {reservation_id} removed from idle queue by Staff.")
+        publish_sse_event(
+            "reservation_removed_from_idle", f"Reservation {reservation_id} removed from idle queue by Staff."
+        )
 
         return JSONResponse(content={"success": True})
     except Exception as e:
@@ -1897,9 +2019,7 @@ async def move_reservation(request: Request):
         else:
             conn.execute("BEGIN IMMEDIATE")
 
-        reservation = conn.execute(
-            "SELECT * FROM reservations WHERE id = ?", (reservation_id,)
-        ).fetchone()
+        reservation = conn.execute("SELECT * FROM reservations WHERE id = ?", (reservation_id,)).fetchone()
         if not reservation:
             return JSONResponse(status_code=404, content={"error": "Reservation not found"})
 
@@ -1934,7 +2054,9 @@ async def move_reservation(request: Request):
 
         # Normalize and validate time range
         try:
-            normalized_start, normalized_end, start_minutes, end_minutes = normalize_time_range(date, new_start_time, new_end_time)
+            normalized_start, normalized_end, start_minutes, end_minutes = normalize_time_range(
+                date, new_start_time, new_end_time
+            )
         except ValueError as e:
             return JSONResponse(status_code=400, content={"error": str(e)})
 
@@ -1967,9 +2089,7 @@ async def move_reservation(request: Request):
             )
 
         # Clear from idle reservations if it was in there
-        conn.execute(
-            "DELETE FROM idle_reservations WHERE reservation_id = ?", (reservation_id,)
-        )
+        conn.execute("DELETE FROM idle_reservations WHERE reservation_id = ?", (reservation_id,))
 
         conn.execute(
             """
@@ -1980,11 +2100,14 @@ async def move_reservation(request: Request):
             (room_id, normalized_start, normalized_end, date, reservation_id),
         )
         conn.commit()
-        
+
         # Publish change for SSE
         role = request.session.get("role", "guest")
         assigned_by = "Staff" if role in ("admin", "staff") else "Customer"
-        publish_sse_event("reservation_assigned", f"Reservation {reservation_id} rescheduled/assigned to Room {room_id} on {date} by {assigned_by}.")
+        publish_sse_event(
+            "reservation_assigned",
+            f"Reservation {reservation_id} rescheduled/assigned to Room {room_id} on {date} by {assigned_by}.",
+        )
 
         return JSONResponse(
             content={
@@ -2007,20 +2130,16 @@ async def move_reservation(request: Request):
 
 # ---- SSE Stream Endpoint ----
 
-from sse_starlette.sse import EventSourceResponse
 
 @router.get("/api/live_updates")
 async def live_updates(request: Request):
     q = sse_broker.subscribe()
-    
+
     async def event_generator():
         try:
             while True:
                 event_type = await q.get()
-                yield {
-                    "event": "message",
-                    "data": json.dumps({"type": event_type})
-                }
+                yield {"event": "message", "data": json.dumps({"type": event_type})}
         except asyncio.CancelledError:
             pass
         finally:
@@ -2030,6 +2149,7 @@ async def live_updates(request: Request):
 
 
 # ---- Test Router Endpoints (only enabled when testing is active) ----
+
 
 @router.post("/api/test/set_session")
 async def api_test_set_session(request: Request):

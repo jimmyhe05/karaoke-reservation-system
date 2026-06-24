@@ -42,9 +42,7 @@ def test_requires_auth_for_mutations(client):
         "room_id": 1,
         "language": "en",
     }
-    resp = client.post(
-        "/reservation", data=json.dumps(payload), content_type="application/json"
-    )
+    resp = client.post("/reservation", data=json.dumps(payload), content_type="application/json")
     assert resp.status_code == 401
 
 
@@ -61,9 +59,7 @@ def test_create_reservation_success(client):
         "room_id": 1,
         "language": "en",
     }
-    resp = client.post(
-        "/reservation", data=json.dumps(payload), content_type="application/json"
-    )
+    resp = client.post("/reservation", data=json.dumps(payload), content_type="application/json")
     assert resp.status_code == 200
     data = resp.get_json()
     assert data.get("message") == "Reservation created successfully"
@@ -104,17 +100,13 @@ def test_conflict_detection(client):
         "language": "en",
     }
     # create first
-    resp1 = client.post(
-        "/reservation", data=json.dumps(base_payload), content_type="application/json"
-    )
+    resp1 = client.post("/reservation", data=json.dumps(base_payload), content_type="application/json")
     assert resp1.status_code == 200
 
     # overlapping reservation should 409
     payload2 = base_payload.copy()
     payload2.update({"start_time": "12:30", "end_time": "13:30"})
-    resp2 = client.post(
-        "/reservation", data=json.dumps(payload2), content_type="application/json"
-    )
+    resp2 = client.post("/reservation", data=json.dumps(payload2), content_type="application/json")
     assert resp2.status_code == 409
     data2 = resp2.get_json()
     assert data2.get("error")
@@ -134,9 +126,7 @@ def test_move_to_idle_and_back(client):
         "room_id": 1,
         "language": "en",
     }
-    create_resp = client.post(
-        "/reservation", data=json.dumps(payload), content_type="application/json"
-    )
+    create_resp = client.post("/reservation", data=json.dumps(payload), content_type="application/json")
     assert create_resp.status_code == 200
 
     # fetch the reservation id via daily reservations API
@@ -184,9 +174,7 @@ def test_idle_persists_and_excludes_from_rooms(client):
     }
 
     # Create reservation and confirm it appears in room timeline
-    create_resp = client.post(
-        "/reservation", data=json.dumps(payload), content_type="application/json"
-    )
+    create_resp = client.post("/reservation", data=json.dumps(payload), content_type="application/json")
     assert create_resp.status_code == 200
 
     daily_before = client.get(f"/api/daily_reservations?date={today}").get_json()
@@ -220,14 +208,10 @@ def test_move_from_idle_clears_idle_and_places_in_room(client):
         "language": "en",
     }
 
-    create_resp = client.post(
-        "/reservation", data=json.dumps(payload), content_type="application/json"
-    )
+    create_resp = client.post("/reservation", data=json.dumps(payload), content_type="application/json")
     assert create_resp.status_code == 200
 
-    res_id = client.get(f"/api/daily_reservations?date={today}").get_json()["rooms"][0][
-        "reservations"
-    ][0]["id"]
+    res_id = client.get(f"/api/daily_reservations?date={today}").get_json()["rooms"][0]["reservations"][0]["id"]
 
     # Move to idle
     assert client.post(f"/move_to_idle/{res_id}").status_code == 200
@@ -273,15 +257,11 @@ def test_calendar_availability_excludes_idle(client):
     }
 
     # Create reservation
-    create_resp = client.post(
-        "/reservation", data=json.dumps(payload), content_type="application/json"
-    )
+    create_resp = client.post("/reservation", data=json.dumps(payload), content_type="application/json")
     assert create_resp.status_code == 200
 
     # Move to idle
-    res_id = client.get(f"/api/daily_reservations?date={today}").get_json()["rooms"][0][
-        "reservations"
-    ][0]["id"]
+    res_id = client.get(f"/api/daily_reservations?date={today}").get_json()["rooms"][0]["reservations"][0]["id"]
     assert client.post(f"/move_to_idle/{res_id}").status_code == 200
 
     # Calendar availability should show 1 reservation for that day (since idle reservations are included in counts)
@@ -309,13 +289,9 @@ def test_room_availability_excludes_idle(client):
         "notes": "",
     }
 
-    create_resp = client.post(
-        "/reservation", data=json.dumps(payload), content_type="application/json"
-    )
+    create_resp = client.post("/reservation", data=json.dumps(payload), content_type="application/json")
     assert create_resp.status_code == 200
-    res_id = client.get(f"/api/daily_reservations?date={today}").get_json()["rooms"][0][
-        "reservations"
-    ][0]["id"]
+    res_id = client.get(f"/api/daily_reservations?date={today}").get_json()["rooms"][0]["reservations"][0]["id"]
     assert client.post(f"/move_to_idle/{res_id}").status_code == 200
 
     availability = client.get(f"/api/room_availability?date={today}").get_json()
@@ -324,9 +300,7 @@ def test_room_availability_excludes_idle(client):
 
 
 def test_rendered_timeline_does_not_show_invalid_130_am_slot(client):
-    response = client.get(
-        f"/{datetime.now(ZoneInfo('America/Chicago')).strftime('%m-%d-%Y')}"
-    )
+    response = client.get(f"/{datetime.now(ZoneInfo('America/Chicago')).strftime('%m-%d-%Y')}")
     assert response.status_code == 200
     html = response.get_data(as_text=True)
     assert ">1:30 AM<" not in html
@@ -348,9 +322,7 @@ def test_idle_creation_bypasses_conflict(client):
         "language": "en",
     }
 
-    first = client.post(
-        "/api/reservations", data=json.dumps(payload), content_type="application/json"
-    )
+    first = client.post("/api/reservations", data=json.dumps(payload), content_type="application/json")
     assert first.status_code == 201
 
     idle_payload = payload.copy()
@@ -388,14 +360,10 @@ def test_audit_and_history_written(client):
         "notes": "",
     }
 
-    create_resp = client.post(
-        "/reservation", data=json.dumps(payload), content_type="application/json"
-    )
+    create_resp = client.post("/reservation", data=json.dumps(payload), content_type="application/json")
     assert create_resp.status_code == 200
 
-    res_id = client.get(f"/api/daily_reservations?date={today}").get_json()["rooms"][0][
-        "reservations"
-    ][0]["id"]
+    res_id = client.get(f"/api/daily_reservations?date={today}").get_json()["rooms"][0]["reservations"][0]["id"]
 
     with app.app_context():
         conn = get_db()
@@ -426,9 +394,7 @@ def test_public_schedule_is_anonymized(client):
         "room_id": 1,
         "language": "en",
     }
-    client.post(
-        "/reservation", data=json.dumps(payload), content_type="application/json"
-    )
+    client.post("/reservation", data=json.dumps(payload), content_type="application/json")
 
     public_resp = client.get(f"/api/public_schedule?date={today}")
     assert public_resp.status_code == 200
@@ -464,7 +430,7 @@ def test_login_me_logout_flow(client):
 def test_calendar_availability_role_filtering(client):
     chicago_tz = ZoneInfo("America/Chicago")
     today = datetime.now(chicago_tz).strftime("%Y-%m-%d")
-    
+
     from services.db import get_db
     from services.auth import create_user
 
@@ -482,23 +448,75 @@ def test_calendar_availability_role_filtering(client):
     try:
         # 1. Confirmed
         conn.execute(
-            "INSERT INTO reservations (room_id, date, start_time, end_time, num_people, contact_name, contact_phone, contact_email, status, user_id, total_cost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (1, today, "12:00", "13:00", 2, "Confirmed User", "555-0001", "confirmed@example.com", "confirmed", user_a["id"], 50.0)
+            "INSERT INTO reservations (room_id, date, start_time, end_time, num_people, contact_name, "
+            "contact_phone, contact_email, status, user_id, total_cost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                1,
+                today,
+                "12:00",
+                "13:00",
+                2,
+                "Confirmed User",
+                "555-0001",
+                "confirmed@example.com",
+                "confirmed",
+                user_a["id"],
+                50.0,
+            ),
         )
         # 2. Pending User A
         conn.execute(
-            "INSERT INTO reservations (room_id, date, start_time, end_time, num_people, contact_name, contact_phone, contact_email, status, user_id, total_cost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (1, today, "13:00", "14:00", 2, "Pending User A", "555-0002", "usera@example.com", "pending", user_a["id"], 50.0)
+            "INSERT INTO reservations (room_id, date, start_time, end_time, num_people, contact_name, "
+            "contact_phone, contact_email, status, user_id, total_cost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                1,
+                today,
+                "13:00",
+                "14:00",
+                2,
+                "Pending User A",
+                "555-0002",
+                "usera@example.com",
+                "pending",
+                user_a["id"],
+                50.0,
+            ),
         )
         # 3. Pending User B
         conn.execute(
-            "INSERT INTO reservations (room_id, date, start_time, end_time, num_people, contact_name, contact_phone, contact_email, status, user_id, total_cost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (1, today, "14:00", "15:00", 2, "Pending User B", "555-0003", "userb@example.com", "pending", user_b["id"], 50.0)
+            "INSERT INTO reservations (room_id, date, start_time, end_time, num_people, contact_name, "
+            "contact_phone, contact_email, status, user_id, total_cost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                1,
+                today,
+                "14:00",
+                "15:00",
+                2,
+                "Pending User B",
+                "555-0003",
+                "userb@example.com",
+                "pending",
+                user_b["id"],
+                50.0,
+            ),
         )
         # 4. Rejected
         conn.execute(
-            "INSERT INTO reservations (room_id, date, start_time, end_time, num_people, contact_name, contact_phone, contact_email, status, user_id, total_cost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (1, today, "15:00", "16:00", 2, "Rejected User", "555-0004", "rejected@example.com", "rejected", user_a["id"], 50.0)
+            "INSERT INTO reservations (room_id, date, start_time, end_time, num_people, contact_name, "
+            "contact_phone, contact_email, status, user_id, total_cost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                1,
+                today,
+                "15:00",
+                "16:00",
+                2,
+                "Rejected User",
+                "555-0004",
+                "rejected@example.com",
+                "rejected",
+                user_a["id"],
+                50.0,
+            ),
         )
         conn.commit()
     finally:
@@ -509,7 +527,7 @@ def test_calendar_availability_role_filtering(client):
         sess["role"] = "customer"
         sess["user_id"] = user_a["id"]
         sess["user_email"] = user_a["email"]
-    
+
     res_a = client.get(f"/api/calendar_availability?start={today}&end={today}").get_json()
     assert res_a[0]["reservationCount"] == 3
 
@@ -533,4 +551,3 @@ def test_calendar_availability_role_filtering(client):
     login_admin(client)
     res_admin = client.get(f"/api/calendar_availability?start={today}&end={today}").get_json()
     assert res_admin[0]["reservationCount"] == 3
-

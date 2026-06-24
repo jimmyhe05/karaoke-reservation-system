@@ -7,6 +7,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 def get_google_auth_url(state, redirect_uri, client_id):
     """Generate the Google OAuth authorization URL."""
     params = {
@@ -16,26 +17,27 @@ def get_google_auth_url(state, redirect_uri, client_id):
         "scope": "openid email profile",
         "state": state,
         "access_type": "online",
-        "prompt": "select_account"
+        "prompt": "select_account",
     }
     return "https://accounts.google.com/o/oauth2/v2/auth?" + urllib.parse.urlencode(params)
 
+
 def exchange_google_code(code, redirect_uri, client_id, client_secret):
     """Exchange authorization code for access and ID tokens."""
-    data = urllib.parse.urlencode({
-        "code": code,
-        "client_id": client_id,
-        "client_secret": client_secret,
-        "redirect_uri": redirect_uri,
-        "grant_type": "authorization_code"
-    }).encode("utf-8")
-    
+    data = urllib.parse.urlencode(
+        {
+            "code": code,
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "redirect_uri": redirect_uri,
+            "grant_type": "authorization_code",
+        }
+    ).encode("utf-8")
+
     req = urllib.request.Request(
-        "https://oauth2.googleapis.com/token",
-        data=data,
-        headers={"Content-Type": "application/x-www-form-urlencoded"}
+        "https://oauth2.googleapis.com/token", data=data, headers={"Content-Type": "application/x-www-form-urlencoded"}
     )
-    
+
     try:
         # Attempt with standard system SSL verification first
         with urllib.request.urlopen(req, timeout=10) as response:
@@ -50,13 +52,13 @@ def exchange_google_code(code, redirect_uri, client_id, client_secret):
                 return json.loads(response.read().decode("utf-8"))
         raise e
 
+
 def get_google_user_info(access_token):
     """Fetch user profile details (email, name, sub) from Google using access token."""
     req = urllib.request.Request(
-        "https://www.googleapis.com/oauth2/v3/userinfo",
-        headers={"Authorization": f"Bearer {access_token}"}
+        "https://www.googleapis.com/oauth2/v3/userinfo", headers={"Authorization": f"Bearer {access_token}"}
     )
-    
+
     try:
         # Attempt with standard system SSL verification first
         with urllib.request.urlopen(req, timeout=10) as response:

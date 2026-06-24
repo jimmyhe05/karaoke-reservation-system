@@ -91,9 +91,7 @@ def test_cancelled_excluded_from_conflict():
     with app.app_context():
         conn = get_db()
         date = datetime.now(ZoneInfo("America/Chicago")).strftime("%Y-%m-%d")
-        make_reservation(
-            conn, date=date, start_time="16:00", end_time="17:00", status="cancelled"
-        )
+        make_reservation(conn, date=date, start_time="16:00", end_time="17:00", status="cancelled")
         conflict = find_conflict(conn, 1, date, "16:00", "17:00")
         assert conflict is None
 

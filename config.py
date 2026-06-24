@@ -70,4 +70,3 @@ class Config:
     STAFF_NOTIFY_EMAIL = os.getenv("STAFF_NOTIFY_EMAIL", "")
     CANCEL_CUTOFF_HOURS = int(os.getenv("CANCEL_CUTOFF_HOURS", "2"))
     BASE_URL = os.getenv("BASE_URL", "http://localhost:5000")
-
