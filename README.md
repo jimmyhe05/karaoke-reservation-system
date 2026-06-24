@@ -127,8 +127,8 @@ venv/bin/pytest
 ### Step-by-Step Guide
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/jimmyhe05/karaoke-reservation-system.git
-   cd karaoke-reservation-system
+    git clone https://github.com/jimmyhe05/karaoke-reservation-operations-system.git
+    cd karaoke-reservation-operations-system
    ```
 2. **Create and activate virtual environment:**
    ```bash
