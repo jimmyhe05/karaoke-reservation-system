@@ -24,4 +24,4 @@ ENV FLASK_APP=app.py \
 EXPOSE 5000
 VOLUME ["/data"]
 
-CMD ["sh", "-c", "gunicorn app:app --bind 0.0.0.0:${PORT:-5000}"]
+CMD ["sh", "-c", "gunicorn app:app --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:${PORT:-5000}"]
