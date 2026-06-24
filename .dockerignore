@@ -8,5 +8,4 @@ __pycache__
 .env
 pytest_cache
 tests
-migrations
 node_modules
