@@ -1356,6 +1356,28 @@ async def api_post_staff_reply(request: Request, session_id: str):
         conn.close()
 
 
+@router.delete("/api/staff/messages/{session_id}")
+def api_delete_staff_conversation(request: Request, session_id: str):
+    auth_err = check_worker(request)
+    if auth_err:
+        return auth_err
+        
+    conn = get_db()
+    try:
+        conn.execute("DELETE FROM direct_messages WHERE session_id = ?", (session_id,))
+        conn.commit()
+        
+        # Publish change for SSE
+        publish_sse_event("conversation_removed", f"Conversation deleted by Staff", session_id=session_id)
+        
+        return api_ok(message="Conversation deleted successfully")
+    except Exception as e:
+        conn.rollback()
+        raise e
+    finally:
+        conn.close()
+
+
 @router.patch("/api/me/preferences")
 async def api_update_preferences(request: Request):
     role = request.session.get("role")

@@ -276,9 +276,14 @@
                                 </div>
                                 <!-- Active Chat Window -->
                                 <div class="staff-chat-window">
-                                    <div id="staff-chat-header" class="staff-chat-header d-none">
-                                        <div class="title" id="active-chat-title">Guest</div>
-                                        <div class="email" id="active-chat-email">guest@example.com</div>
+                                    <div id="staff-chat-header" class="staff-chat-header d-none d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <div class="title" id="active-chat-title">Guest</div>
+                                            <div class="email" id="active-chat-email">guest@example.com</div>
+                                        </div>
+                                        <button id="staff-delete-conversation-btn" class="btn btn-sm btn-outline-danger" title="Remove Conversation">
+                                            <i class="fas fa-trash-alt me-1"></i>Delete Chat
+                                        </button>
                                     </div>
                                     <div id="staff-chat-messages" class="staff-chat-messages">
                                         <div class="empty-state">

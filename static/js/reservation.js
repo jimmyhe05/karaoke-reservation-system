@@ -2865,6 +2865,31 @@ function setupSSE() {
           window.refreshStaffChat();
         }
 
+        if (data.action === "conversation_removed") {
+          if (activeStaffSessionId === data.session_id) {
+            activeStaffSessionId = null;
+            const chatHeader = document.getElementById("staff-chat-header");
+            const chatInputArea = document.getElementById("staff-chat-input-area");
+            const messagesDiv = document.getElementById("staff-chat-messages");
+            if (chatHeader) chatHeader.classList.add("d-none");
+            if (chatInputArea) chatInputArea.classList.add("d-none");
+            if (messagesDiv) {
+              messagesDiv.innerHTML = '<div class="empty-state">Select a conversation from the sidebar to start messaging.</div>';
+            }
+            if (typeof showToast === "function") {
+              showToast("The active conversation was deleted by another staff member.", "info");
+            }
+          }
+          if (activeSessionId === data.session_id) {
+            if (typeof resetCustomerChat === "function") {
+              resetCustomerChat();
+            }
+            if (typeof showToast === "function") {
+              showToast("This support conversation has been closed and removed by staff.", "info");
+            }
+          }
+        }
+
         // Show toast notification for updates
         const isWorker = window.currentRole === "admin" || window.currentRole === "staff";
         const isCustomer = window.currentRole === "customer";
@@ -3187,6 +3212,45 @@ function initStaffChat() {
           console.error("Send staff reply error", err);
         }
       });
+
+      const deleteBtn = document.getElementById("staff-delete-conversation-btn");
+      if (deleteBtn) {
+        deleteBtn.addEventListener("click", async () => {
+          if (!activeStaffSessionId) return;
+          if (!confirm("Are you sure you want to permanently delete this conversation and all its messages?")) return;
+
+          try {
+            const res = await fetch(`/api/staff/messages/${activeStaffSessionId}`, {
+              method: "DELETE"
+            });
+            if (res.ok) {
+              if (typeof showToast === "function") {
+                showToast("Conversation deleted successfully", "success");
+              }
+              // Reset UI
+              activeStaffSessionId = null;
+              const chatHeader = document.getElementById("staff-chat-header");
+              const chatInputArea = document.getElementById("staff-chat-input-area");
+              const messagesDiv = document.getElementById("staff-chat-messages");
+              if (chatHeader) chatHeader.classList.add("d-none");
+              if (chatInputArea) chatInputArea.classList.add("d-none");
+              if (messagesDiv) {
+                messagesDiv.innerHTML = '<div class="empty-state">Select a conversation from the sidebar to start messaging.</div>';
+              }
+              await loadStaffConversations();
+            } else {
+              if (typeof showToast === "function") {
+                showToast("Failed to delete conversation", "error");
+              }
+            }
+          } catch (err) {
+            console.error("Delete conversation error", err);
+            if (typeof showToast === "function") {
+              showToast("An error occurred while deleting the conversation", "error");
+            }
+          }
+        });
+      }
     }
   } else {
     panel.classList.add("d-none");

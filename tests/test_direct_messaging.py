@@ -269,3 +269,38 @@ def test_customer_edit_restrictions(client):
     assert res["room_id"] == 1
     assert res["start_time"] == "12:00"
     conn.close()
+
+def test_staff_delete_conversation(client):
+    # 1. Post message as guest to create a conversation
+    client.post(
+        "/api/messages",
+        data=json.dumps({"message": "Message to delete", "guest_name": "DeleteMe"}),
+        content_type="application/json",
+    )
+    
+    with client.session_transaction() as sess:
+        session_id = sess["guest_session_id"]
+        
+    # 2. Try deleting unauthenticated (should fail)
+    resp = client.delete(f"/api/staff/messages/{session_id}")
+    assert resp.status_code == 401
+    
+    # 3. Login as staff and delete conversation
+    with client.session_transaction() as sess:
+        sess["role"] = "staff"
+        
+    resp = client.delete(f"/api/staff/messages/{session_id}")
+    assert resp.status_code == 200
+    assert resp.get_json()["message"] == "Conversation deleted successfully"
+    
+    # 4. Verify conversation is gone from staff conversations list
+    resp = client.get("/api/staff/messages")
+    assert resp.status_code == 200
+    convs = resp.get_json()["conversations"]
+    assert len(convs) == 0
+    
+    # 5. Verify direct messages table is empty for this session
+    conn = get_db()
+    rows = conn.execute("SELECT * FROM direct_messages WHERE session_id = ?", (session_id,)).fetchall()
+    assert len(rows) == 0
+    conn.close()
