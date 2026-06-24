@@ -90,10 +90,10 @@ def test_notification_creation_and_retrieval(client):
     read_resp = client.post(f"/api/notifications/{notif_id}/read")
     assert read_resp.status_code == 200
     
-    # Retrieve again
+    # Retrieve again (should be deleted/empty now)
     notif_resp2 = client.get("/api/notifications")
     notifs2 = notif_resp2.get_json()["notifications"]
-    assert notifs2[0]["read"] == 1
+    assert len(notifs2) == 0
 
 def test_preferences_endpoint(client):
     user_id = mock_login_customer(client, "pref@example.com", "Pref User")

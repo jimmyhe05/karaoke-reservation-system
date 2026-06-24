@@ -36,22 +36,8 @@ function initImprovedLayout() {
 // Keep all room wrappers' vertical scroll positions in sync, so any room scrolled
 // will keep other rooms (and their labels) aligned. Only wrappers scroll.
 function syncInnerScrolls() {
-  const inners = Array.from(document.querySelectorAll('.scroll-sync-inner'));
-  if (!inners.length) return;
-  let isSyncing = false;
-  inners.forEach((el) => {
-    el.addEventListener('scroll', function () {
-      if (isSyncing) return;
-      isSyncing = true;
-      const st = this.scrollTop;
-      inners.forEach((other) => {
-        if (other !== this) other.scrollTop = st;
-      });
-      window.requestAnimationFrame(() => {
-        isSyncing = false;
-      });
-    });
-  });
+  // Disabled: vertical scrolling is handled at .rooms-container level
+  return;
 }
 
 // Initialize Sortable drag-and-drop between room timelines and the idle drop area
@@ -87,7 +73,7 @@ function initDragAndDrop() {
 
   function getSlotIndex(timeline, item, clientY, slotHeight) {
     const rect = timeline.getBoundingClientRect();
-    const scrollContainer = timeline.closest(".scroll-sync-inner");
+    const scrollContainer = timeline.closest(".scroll-sync-inner") || timeline.closest(".rooms-container") || timeline.closest(".content-area");
     const scrollTop = scrollContainer ? scrollContainer.scrollTop : 0;
     const paddingTop = getTimelinePaddingTop(timeline);
 

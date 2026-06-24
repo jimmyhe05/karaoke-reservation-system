@@ -284,11 +284,13 @@ def test_calendar_availability_excludes_idle(client):
     ][0]["id"]
     assert client.post(f"/move_to_idle/{res_id}").status_code == 200
 
-    # Calendar availability should show zero reservations for that day
+    # Calendar availability should show 1 reservation for that day (since idle reservations are included in counts)
     cal = client.get(f"/api/calendar_availability?start={today}&end={today}").get_json()
     assert isinstance(cal, list)
     assert cal[0]["date"] == today
-    assert cal[0]["reservationCount"] == 0
+    assert cal[0]["reservationCount"] == 1
+    # But availableRooms should still be 3 (since the idle reservation does not occupy any rooms)
+    assert cal[0]["availableRooms"] == 3
 
 
 def test_room_availability_excludes_idle(client):

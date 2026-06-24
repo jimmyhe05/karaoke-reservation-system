@@ -1,9 +1,37 @@
 // Enhanced Calendar Functionality
 
+// Helper to determine if a date is selectable based on role
+function isDateSelectable(dateStr) {
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  
+  const isWorker = window.currentRole === "staff" || window.currentRole === "admin";
+  if (isWorker) {
+    // Workers can select past dates up to 30 days ago
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(today.getDate() - 30);
+    const thirtyDaysAgoStr = `${thirtyDaysAgo.getFullYear()}-${String(thirtyDaysAgo.getMonth() + 1).padStart(2, "0")}-${String(thirtyDaysAgo.getDate()).padStart(2, "0")}`;
+    return dateStr >= thirtyDaysAgoStr;
+  } else {
+    // Guests/customers can only select today and future dates
+    return dateStr >= todayStr;
+  }
+}
+
 // Function to initialize the enhanced calendar
 function initEnhancedCalendar() {
   const calendarEl = document.getElementById("calendar");
   if (!calendarEl) return;
+
+  // Destroy previous calendar if it exists to prevent duplicate renders and memory leaks
+  if (window.calendar) {
+    try {
+      window.calendar.destroy();
+    } catch (e) {
+      console.warn("Failed to destroy calendar instance", e);
+    }
+    window.calendar = null;
+  }
 
   // Clean up any leftover Flatpickr artifacts (from earlier implementation)
   if (calendarEl.classList.contains("flatpickr-input")) {
@@ -80,9 +108,23 @@ function initEnhancedCalendar() {
         const today = new Date();
         return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
       };
-      // Add custom styling for past dates
-      if (info.dateStr < getLocalTodayStr()) {
+      
+      const todayStr = getLocalTodayStr();
+      const isPast = info.dateStr < todayStr;
+      const selectable = isDateSelectable(info.dateStr);
+
+      if (isPast) {
         info.el.classList.add("fc-day-past");
+        if (!selectable) {
+          info.el.classList.add("fc-day-disabled");
+          info.el.style.opacity = "0.4";
+          info.el.style.pointerEvents = "none";
+        } else {
+          // Selectable past date for staff
+          info.el.style.opacity = "0.75";
+          info.el.style.cursor = "pointer";
+          info.el.style.pointerEvents = "auto";
+        }
       }
 
       // Highlight the selected date
@@ -131,12 +173,7 @@ function initEnhancedCalendar() {
     },
     // Handle date selection
     dateClick: function (info) {
-      const getLocalTodayStr = () => {
-        const today = new Date();
-        return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-      };
-      // Don't allow selecting past dates
-      if (info.dateStr < getLocalTodayStr()) {
+      if (!isDateSelectable(info.dateStr)) {
         return;
       }
 
@@ -163,21 +200,19 @@ function initEnhancedCalendar() {
 
   // Delegate clicks on day cells to ensure selection works even if FullCalendar handlers aren't available
   const calRoot = document.getElementById("calendar");
-  if (calRoot) {
+  if (calRoot && !calRoot._clickListenerAttached) {
     calRoot.addEventListener("click", function (e) {
       const dayCell = e.target.closest(".fc-daygrid-day");
       if (!dayCell) return;
-      // Ignore disabled or past days
-      if (
-        dayCell.classList.contains("fc-day-disabled") ||
-        dayCell.classList.contains("fc-day-past")
-      )
-        return;
       const date = dayCell.getAttribute("data-date");
       if (!date) return;
+      if (!isDateSelectable(date)) {
+        return;
+      }
       // Apply selected date (this updates label, URL, and timelines)
       applySelectedDate(date);
     });
+    calRoot._clickListenerAttached = true;
   }
 
   // Store calendar reference globally

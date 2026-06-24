@@ -2,7 +2,7 @@ import json
 import uuid
 import logging
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Request, HTTPException, Depends, BackgroundTasks
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -466,10 +466,6 @@ def api_calendar_availability(request: Request, start: str = None, end: str = No
                 FROM reservations r
                 WHERE r.date = ?
                   AND r.status NOT IN ('cancelled', 'rejected')
-                  AND NOT EXISTS (
-                    SELECT 1 FROM idle_reservations i
-                    WHERE i.reservation_id = r.id AND i.date = r.date
-                  )
                 """,
                 (d,),
             ).fetchone()["count"]
@@ -770,7 +766,7 @@ def api_pending_requests(request: Request):
 
     conn = get_db()
     try:
-        rows = conn.execute("SELECT * FROM reservations WHERE status = 'pending' ORDER BY requested_at DESC").fetchall()
+        rows = conn.execute("SELECT * FROM reservations WHERE status = 'pending' ORDER BY requested_at ASC").fetchall()
         return api_ok({"requests": [dict(r) for r in rows]})
     finally:
         conn.close()
@@ -1057,7 +1053,7 @@ def api_mark_all_notifications_read(request: Request):
     user_id = request.session.get("user_id")
     conn = get_db()
     try:
-        conn.execute("UPDATE notifications SET read = 1 WHERE user_id = ?", (user_id,))
+        conn.execute("DELETE FROM notifications WHERE user_id = ?", (user_id,))
         conn.commit()
         return api_ok(message="All notifications marked as read")
     except Exception as e:
@@ -1080,7 +1076,7 @@ def api_mark_notification_read(request: Request, notification_id: int):
         if not row or row["user_id"] != user_id:
             return api_error("Notification not found", 404)
             
-        conn.execute("UPDATE notifications SET read = 1 WHERE id = ?", (notification_id,))
+        conn.execute("DELETE FROM notifications WHERE id = ?", (notification_id,))
         conn.commit()
         return api_ok(message="Notification marked as read")
     except Exception as e:
@@ -1362,10 +1358,17 @@ async def api_update_preferences(request: Request):
     
     conn = get_db()
     try:
-        conn.execute(
-            "UPDATE users SET email_notifications = ? WHERE id = ?",
-            (email_notifications_val, user_id)
-        )
+        if is_postgres_connection(conn):
+            conn.execute(
+                "UPDATE users SET email_notifications = ?::boolean WHERE id = ?",
+                (bool(email_notifications), user_id)
+            )
+        else:
+            email_notifications_val = 1 if email_notifications else 0
+            conn.execute(
+                "UPDATE users SET email_notifications = ? WHERE id = ?",
+                (email_notifications_val, user_id)
+            )
         conn.commit()
         return api_ok(message="Preferences updated successfully")
     except Exception as e:
@@ -1386,14 +1389,46 @@ def api_get_my_bookings(request: Request):
     try:
         rows = conn.execute(
             """
-            SELECT id, room_id, date, start_time, end_time, contact_name, num_people, status, total_cost, requested_at, notes
+            SELECT *
             FROM reservations
             WHERE user_id = ?
             ORDER BY date DESC, start_time DESC
             """,
             (user_id,)
         ).fetchall()
-        return api_ok({"bookings": [dict(r) for r in rows]})
+        
+        idle_set = fetch_idle_set(conn)
+        bookings = [serialize_reservation_row(r, r["id"] in idle_set) for r in rows]
+        
+        # Filter out cancelled/rejected bookings updated > 24 hours ago
+        filtered_bookings = []
+        now = datetime.now(timezone.utc)
+        for b in bookings:
+            if b.get("status") in ("cancelled", "rejected"):
+                updated_at_str = b.get("updated_at")
+                if updated_at_str:
+                    try:
+                        if isinstance(updated_at_str, str):
+                            if "T" in updated_at_str:
+                                dt = datetime.fromisoformat(updated_at_str.replace("Z", "+00:00"))
+                            else:
+                                dt = datetime.strptime(updated_at_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+                        elif isinstance(updated_at_str, datetime):
+                            dt = updated_at_str
+                        else:
+                            dt = None
+                            
+                        if dt:
+                            if dt.tzinfo is None:
+                                dt = dt.replace(tzinfo=timezone.utc)
+                            diff = now - dt
+                            if diff.total_seconds() > 24 * 3600:
+                                continue
+                    except Exception:
+                        pass
+            filtered_bookings.append(b)
+            
+        return api_ok({"bookings": filtered_bookings})
     finally:
         conn.close()
 

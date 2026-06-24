@@ -589,7 +589,8 @@ button,
   display: flex;
   min-width: 0;
   min-height: 0;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
   flex-direction: column;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -613,11 +614,11 @@ button,
 
 .rooms-container {
   display: flex;
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   gap: 12px;
   min-width: 0;
   min-height: 0;
-  height: auto;
+  height: fit-content;
   padding: 14px;
   overflow-x: auto;
   overflow-y: hidden;
@@ -632,8 +633,8 @@ button,
   flex: 1 0 218px;
   min-width: 218px;
   max-width: none;
-  height: 100%;
-  overflow: hidden;
+  height: fit-content;
+  overflow: visible;
   border: 1px solid var(--border);
   border-radius: 13px;
   background: #fff;
@@ -644,14 +645,16 @@ button,
   flex: 0 0 180px;
   min-width: 180px;
   max-width: 180px;
-  height: 100%;
+  height: fit-content;
   border-style: dashed;
   border-color: #c9bdd8;
   box-shadow: none;
 }
 
 .room-header {
-  position: relative;
+  position: sticky;
+  top: 0;
+  z-index: 100;
   display: flex;
   min-height: 58px;
   padding: 10px 78px 10px 12px;
@@ -711,11 +714,14 @@ button,
   border: 0;
   border-radius: 0 0 12px 12px;
   background: #fff;
+  overflow: visible;
 }
 
 .scroll-sync-inner {
   scrollbar-color: #c4bbcf transparent;
   scrollbar-width: thin;
+  overflow-y: visible;
+  height: auto;
 }
 
 .time-labels {
@@ -2287,4 +2293,63 @@ textarea.form-control {
 #pendingRequestsCollapse .card-body::-webkit-scrollbar-thumb:hover {
   background-color: rgba(91, 53, 181, 0.3);
 }
+
+/* Confirm button styling in modal */
+.btn-success {
+  color: #fff !important;
+  border-color: var(--success) !important;
+  background: var(--success) !important;
+}
+
+.btn-success:hover, .btn-success:focus-visible {
+  color: #fff !important;
+  border-color: #0f6149 !important;
+  background: #0f6149 !important;
+}
+
+/* All Bookings Accordion Styling */
+#all-bookings-panel .accordion-item {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+#all-bookings-panel .accordion-header {
+  margin: 0;
+}
+
+#all-bookings-panel .accordion-button {
+  background-color: var(--surface-soft);
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 0.88rem;
+  padding: 10px 14px;
+}
+
+#all-bookings-panel .accordion-button:not(.collapsed) {
+  background-color: var(--surface-tint);
+  color: var(--brand);
+}
+
+#all-bookings-panel .booking-item-card {
+  border-left: 4px solid var(--brand);
+  background: #faf9fc;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  border-left-width: 4px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  font-size: 0.85rem;
+}
+
+#all-bookings-panel .booking-item-card.pending {
+  border-left-color: var(--warning);
+  background: #fffdf5;
+}
+
+#all-bookings-panel .booking-item-card:last-child {
+  margin-bottom: 0;
+}
+
 

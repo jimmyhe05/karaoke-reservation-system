@@ -1540,8 +1540,10 @@ function showNewReservationModal(hour, minute, roomId, selectedDate) {
     statusRow.style.display = isWorker ? "block" : "none";
   }
 
-  // Hide the delete button for new reservations
+  // Hide the delete and quick-approve buttons for new reservations
   document.getElementById("delete-reservation-btn").style.display = "none";
+  const quickApproveBtn = document.getElementById("quick-approve-btn");
+  if (quickApproveBtn) quickApproveBtn.style.display = "none";
 
   // Customize submit button
   const saveBtn = reservationForm.querySelector("button[type='submit']");
@@ -1665,6 +1667,16 @@ function openModalForEditing(reservationId) {
         // Show status selection row for staff
         if (statusRow) statusRow.style.display = "block";
 
+        // Show quick-approve button if status is pending
+        const quickApproveBtn = document.getElementById("quick-approve-btn");
+        if (quickApproveBtn) {
+          if (data.status === "pending") {
+            quickApproveBtn.style.display = "block";
+          } else {
+            quickApproveBtn.style.display = "none";
+          }
+        }
+
         // Show delete and save buttons
         document.getElementById("delete-reservation-btn").style.display = "block";
         const saveBtn = reservationForm.querySelector("button[type='submit']");
@@ -1692,8 +1704,11 @@ function openModalForEditing(reservationId) {
         // Hide status selection row for customer
         if (statusRow) statusRow.style.display = "none";
 
-        // Hide delete, show save button
+        // Hide delete, quick-approve, show save button
         document.getElementById("delete-reservation-btn").style.display = "none";
+        const quickApproveBtn = document.getElementById("quick-approve-btn");
+        if (quickApproveBtn) quickApproveBtn.style.display = "none";
+        
         const saveBtn = reservationForm.querySelector("button[type='submit']");
         if (saveBtn) {
           saveBtn.style.display = "block";
@@ -1714,8 +1729,11 @@ function openModalForEditing(reservationId) {
         // Hide status selection row
         if (statusRow) statusRow.style.display = "none";
 
-        // Hide delete and save buttons
+        // Hide delete, quick-approve, and save buttons
         document.getElementById("delete-reservation-btn").style.display = "none";
+        const quickApproveBtn = document.getElementById("quick-approve-btn");
+        if (quickApproveBtn) quickApproveBtn.style.display = "none";
+        
         const saveBtn = reservationForm.querySelector("button[type='submit']");
         if (saveBtn) saveBtn.style.display = "none";
         
@@ -2247,6 +2265,16 @@ function setAuthUI(authState) {
     }
   }
 
+  const allBookingsPanel = document.getElementById("all-bookings-panel");
+  if (allBookingsPanel) {
+    if (isWorker) {
+      allBookingsPanel.classList.remove("d-none");
+      loadAllBookings();
+    } else {
+      allBookingsPanel.classList.add("d-none");
+    }
+  }
+
   const notificationContainer = document.getElementById("notification-container");
   const customerBookingsPanel = document.getElementById("customer-bookings-panel");
   
@@ -2271,6 +2299,21 @@ function setAuthUI(authState) {
   // Update chat widgets based on new role
   if (typeof initStaffChat === "function") initStaffChat();
   if (typeof fetchCustomerMessages === "function") fetchCustomerMessages();
+
+  // Hide customer support floating widget for workers/staff
+  const chatWidget = document.getElementById("customer-chat-widget");
+  if (chatWidget) {
+    if (isWorker) {
+      chatWidget.classList.add("d-none");
+    } else {
+      chatWidget.classList.remove("d-none");
+    }
+  }
+
+  // Re-run calendar initialization to apply past date visibility for workers
+  if (window.calendar && typeof initEnhancedCalendar === "function") {
+    initEnhancedCalendar();
+  }
 }
 
 window.updateReservationCardAccessibility = updateReservationCardAccessibility;
@@ -2339,6 +2382,165 @@ async function loadPendingRequests() {
     });
   } catch (err) {
     console.error("Failed to load pending requests", err);
+  }
+}
+
+async function loadAllBookings() {
+  const accordionEl = document.getElementById("all-bookings-accordion");
+  if (!accordionEl) return;
+
+  try {
+    const res = await fetch("/api/reservations");
+    if (!res.ok) return;
+    const data = await res.json();
+    const reservations = data.reservations || [];
+
+    // Group reservations by date (filtering out past dates)
+    const groups = {};
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    
+    let activeReservationsCount = 0;
+    reservations.forEach(r => {
+      if (r.date < todayStr) return; // skip past dates
+      if (!groups[r.date]) {
+        groups[r.date] = [];
+      }
+      groups[r.date].push(r);
+      activeReservationsCount++;
+    });
+
+    if (activeReservationsCount === 0) {
+      accordionEl.innerHTML = '<div class="text-center text-muted py-3">No active reservations in the system.</div>';
+      return;
+    }
+
+    // Sort dates chronologically ascending
+    const sortedDates = Object.keys(groups).sort();
+
+    let accordionHtml = "";
+    sortedDates.forEach((dateStr, index) => {
+      const dateBookings = groups[dateStr];
+      // Precise sorting inside the date: start_time ASC, then room_id ASC
+      dateBookings.sort((a, b) => {
+        if (a.start_time !== b.start_time) {
+          return a.start_time.localeCompare(b.start_time);
+        }
+        return a.room_id - b.room_id;
+      });
+
+      // Format date for header
+      let displayDate = dateStr;
+      try {
+        const d = new Date(dateStr + "T00:00:00");
+        if (!isNaN(d.getTime())) {
+          const options = { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' };
+          displayDate = d.toLocaleDateString(undefined, options);
+        }
+      } catch (e) {}
+
+      const collapseId = `collapse-date-${dateStr.replace(/-/g, '')}`;
+      const headingId = `heading-date-${dateStr.replace(/-/g, '')}`;
+
+      const itemsHtml = dateBookings.map(b => {
+        let statusBadgeClass = "bg-secondary";
+        if (b.status === "pending") statusBadgeClass = "bg-warning text-dark";
+        else if (b.status === "confirmed") statusBadgeClass = "bg-success";
+        else if (b.status === "rejected") statusBadgeClass = "bg-danger";
+        else if (b.status === "cancelled") statusBadgeClass = "bg-secondary";
+
+        // Format audit timestamps
+        const formatTimestamp = (ts) => {
+          if (!ts) return "N/A";
+          try {
+            const d = new Date(ts);
+            if (!isNaN(d.getTime())) {
+              return d.toLocaleString(undefined, {
+                month: "short",
+                day: "numeric",
+                hour: "numeric",
+                minute: "2-digit",
+                hour12: true
+              });
+            }
+          } catch(e) {}
+          return ts;
+        };
+
+        const reqTime = formatTimestamp(b.requested_at || b.created_at);
+        const modTime = formatTimestamp(b.updated_at);
+
+        return `
+          <div class="booking-item-card ${b.status === 'pending' ? 'pending' : ''}" id="all-booking-card-${b.id}">
+            <div class="d-flex justify-content-between align-items-start mb-1">
+              <div>
+                <strong>${escapeHtml(b.contact_name)}</strong>
+                <span class="badge bg-primary ms-1">Room ${b.room_id}</span>
+                <span class="badge ${statusBadgeClass} ms-1">${b.status}</span>
+              </div>
+              <div class="d-flex gap-1">
+                <button class="btn btn-xs btn-outline-primary py-0 px-2 view-on-schedule-btn" data-date="${b.date}" style="font-size: 0.72rem; height: auto; min-height: 24px; padding: 2px 6px;">
+                  <i class="fas fa-eye me-1"></i>View
+                </button>
+                <button class="btn btn-xs btn-outline-secondary py-0 px-2 edit-booking-btn" data-id="${b.id}" style="font-size: 0.72rem; height: auto; min-height: 24px; padding: 2px 6px;">
+                  <i class="fas fa-edit me-1"></i>Edit
+                </button>
+              </div>
+            </div>
+            <div style="font-size: 0.8rem; line-height: 1.35; color: var(--ink-soft);">
+              <div><i class="far fa-clock me-1"></i> ${b.start_time} - ${b.end_time} (${b.num_people} guests)</div>
+              ${b.notes ? `<div><i class="far fa-comment-alt me-1"></i> Note: "${escapeHtml(b.notes)}"</div>` : ''}
+              <div class="mt-1 d-flex justify-content-between text-muted" style="font-size: 0.7rem;">
+                <span>Requested: ${reqTime}</span>
+                <span>Modified: ${modTime}</span>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      accordionHtml += `
+        <div class="accordion-item">
+          <h2 class="accordion-header" id="${headingId}">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#${collapseId}" aria-expanded="false" aria-controls="${collapseId}">
+              ${displayDate} (${dateBookings.length})
+            </button>
+          </h2>
+          <div id="${collapseId}" class="accordion-collapse collapse" aria-labelledby="${headingId}" data-bs-parent="#all-bookings-accordion">
+            <div class="accordion-body p-2">
+              ${itemsHtml}
+            </div>
+          </div>
+        </div>
+      `;
+    });
+
+    accordionEl.innerHTML = accordionHtml;
+
+    // Attach event listeners
+    accordionEl.querySelectorAll(".edit-booking-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        openModalForEditing(btn.dataset.id);
+      });
+    });
+
+    accordionEl.querySelectorAll(".view-on-schedule-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const targetDate = btn.dataset.date;
+        const applyDateFn = window.applySelectedDate || (typeof applySelectedDate === "function" ? applySelectedDate : null);
+        if (applyDateFn) {
+          applyDateFn(targetDate);
+          // Scroll timeline area into view
+          const timelineSec = document.getElementById("main-content");
+          if (timelineSec) {
+            timelineSec.scrollIntoView({ behavior: "smooth" });
+          }
+        }
+      });
+    });
+
+  } catch (err) {
+    console.error("Failed to load all bookings list", err);
   }
 }
 
@@ -2428,6 +2630,43 @@ document
     } catch (error) {
       console.error("Error in deleteReservation function:", error);
       alert("Error in delete function: " + error.message);
+    }
+  });
+
+// Add event listener for the quick-approve (Confirm reservation) button
+document
+  .getElementById("quick-approve-btn")
+  .addEventListener("click", async function () {
+    const reservationId = document.getElementById("reservation_id").value;
+    if (!reservationId) return;
+
+    if (!confirm("Are you sure you want to confirm this reservation?")) return;
+
+    try {
+      const res = await fetch(`/api/requests/${reservationId}/approve`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error?.message || "Failed to confirm reservation");
+      }
+
+      showToast && showToast("Reservation confirmed successfully", "success");
+
+      // Hide modal
+      const modalEl = document.getElementById("reservationModal");
+      const modal = bootstrap.Modal.getInstance(modalEl);
+      if (modal) modal.hide();
+
+      // Refresh data
+      const selectedDate = window.calendarEl?.dataset?.selectedDate || new Date().toISOString().split("T")[0];
+      if (typeof updateRoomTimelines === "function") {
+        updateRoomTimelines(selectedDate);
+      }
+      loadPendingRequests();
+      loadAllBookings();
+
+    } catch (err) {
+      console.error(err);
+      showToast && showToast(err.message || "Failed to confirm reservation", "error");
     }
   });
 

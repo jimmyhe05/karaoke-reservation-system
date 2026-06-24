@@ -58,7 +58,7 @@ def fetch_idle_set(conn, date=None):
 def serialize_reservation_row(row, in_idle=False):
     if not row:
         return None
-    return {
+    res = {
         "id": row["id"],
         "room_id": row["room_id"],
         "date": row["date"],
@@ -74,6 +74,40 @@ def serialize_reservation_row(row, in_idle=False):
         "total_cost": row["total_cost"],
         "in_idle": bool(in_idle),
     }
+
+    # Safely extract audit timestamps if present in the database row
+    if hasattr(row, "get"):
+        res["requested_at"] = row.get("requested_at")
+        res["created_at"] = row.get("created_at")
+        res["updated_at"] = row.get("updated_at")
+    elif isinstance(row, dict):
+        res["requested_at"] = row.get("requested_at")
+        res["created_at"] = row.get("created_at")
+        res["updated_at"] = row.get("updated_at")
+    else:
+        try:
+            res["requested_at"] = row["requested_at"]
+        except Exception:
+            res["requested_at"] = None
+        try:
+            res["created_at"] = row["created_at"]
+        except Exception:
+            res["created_at"] = None
+        try:
+            res["updated_at"] = row["updated_at"]
+        except Exception:
+            res["updated_at"] = None
+
+    # Convert datetime values to ISO format strings for JSON serialization
+    for field in ["requested_at", "created_at", "updated_at"]:
+        val = res.get(field)
+        if isinstance(val, datetime):
+            res[field] = val.isoformat()
+        elif val is not None:
+            res[field] = str(val)
+
+    return res
+
 
 
 # ---- Helpers ----

@@ -90,7 +90,8 @@ body {
 
 .content-area {
   grid-area: content;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
 }
@@ -248,9 +249,9 @@ body {
 .rooms-container {
   display: flex;
   gap: 12px;
-  overflow-y: auto;
+  overflow-y: hidden;
   overflow-x: auto;
-  height: 100%;
+  height: fit-content;
   padding-bottom: 12px;
 }
 
@@ -258,7 +259,7 @@ body {
   flex: 0 0 200px;
   /* narrower columns */
   max-width: 200px;
-  height: 100%;
+  height: fit-content;
   background: white;
   border-radius: var(--border-radius);
   box-shadow: var(--box-shadow);
@@ -279,15 +280,15 @@ body {
 .room-timeline-wrapper {
   display: flex;
   flex: 1;
-  overflow: hidden;
+  overflow: visible;
 }
 
 /* Single shared vertical scrollbar for labels + timeline */
 .scroll-sync-inner {
   display: flex;
-  height: 100%;
+  height: auto;
   width: 100%;
-  overflow-y: auto;
+  overflow-y: visible;
   overflow-x: hidden;
 }
 
