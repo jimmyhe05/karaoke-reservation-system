@@ -121,6 +121,53 @@ def serialize_reservation_row(row, in_idle=False):
         elif val is not None:
             res[field] = str(val)
 
+    # Determine past state and cancellation permission (relative to Chicago time)
+    try:
+        from datetime import timedelta
+
+        chicago_tz = ZoneInfo("America/Chicago")
+        now_local = datetime.now(chicago_tz)
+
+        # Parse date and times
+        res_date = datetime.strptime(res["date"], "%Y-%m-%d")
+
+        # Start datetime
+        sh, sm = map(int, res["start_time"].split(":"))
+        if sh >= 24:
+            sh_adj = sh - 24
+            start_date = res_date + timedelta(days=1)
+        else:
+            sh_adj = sh
+            start_date = res_date
+        start_dt = datetime(start_date.year, start_date.month, start_date.day, sh_adj, sm, tzinfo=chicago_tz)
+
+        # End datetime
+        eh, em = map(int, res["end_time"].split(":"))
+        if eh >= 24:
+            eh_adj = eh - 24
+            end_date = res_date + timedelta(days=1)
+        else:
+            eh_adj = eh
+            end_date = res_date
+        end_dt = datetime(end_date.year, end_date.month, end_date.day, eh_adj, em, tzinfo=chicago_tz)
+
+        res["is_past"] = now_local > end_dt
+        res["is_started"] = now_local > start_dt
+
+        if res["status"] == "pending":
+            # Pending reservations can always be cancelled (or removed if expired)
+            res["can_cancel"] = True
+        elif res["status"] == "confirmed":
+            cutoff_hours = int(getattr(Config, "CANCEL_CUTOFF_HOURS", 2))
+            cutoff_time = start_dt - timedelta(hours=cutoff_hours)
+            res["can_cancel"] = now_local <= cutoff_time
+        else:
+            res["can_cancel"] = False
+    except Exception:
+        res["is_past"] = False
+        res["is_started"] = False
+        res["can_cancel"] = False
+
     return res
 
 

@@ -2773,11 +2773,23 @@ async function loadCustomerBookings() {
       }
 
       let cancelBtnHtml = "";
-      if (booking.status === "pending" || booking.status === "confirmed") {
+      if (booking.can_cancel) {
+        let btnText = "Cancel request";
+        if (booking.status === "confirmed") {
+          btnText = "Cancel booking";
+        } else if (booking.status === "pending" && (booking.is_started || booking.is_past)) {
+          btnText = "Remove request";
+        }
         cancelBtnHtml = `
           <button class="btn btn-sm btn-outline-danger w-100 mt-2 cancel-booking-btn" data-id="${booking.id}">
-            Cancel request
+            ${btnText}
           </button>
+        `;
+      } else if (booking.status === "confirmed" && !booking.is_past) {
+        cancelBtnHtml = `
+          <div class="text-muted small mt-2 text-center" style="font-size: 0.85rem;">
+            <i class="fas fa-lock me-1"></i>Non-cancellable (within 2h)
+          </div>
         `;
       }
 
@@ -2803,27 +2815,47 @@ async function loadCustomerBookings() {
       const cancelBtn = col.querySelector(".cancel-booking-btn");
       if (cancelBtn) {
         cancelBtn.addEventListener("click", async () => {
-          if (!confirm("Are you sure you want to cancel this booking?")) return;
+          let confirmMsg = "Are you sure you want to cancel this booking?";
+          let loadingText = "Cancelling...";
+          let successMsg = "Booking cancelled";
+          let fallbackText = "Cancel request";
+
+          if (booking.status === "confirmed") {
+            confirmMsg = "Are you sure you want to cancel this reservation?";
+            fallbackText = "Cancel booking";
+          } else if (booking.status === "pending") {
+            if (booking.is_started || booking.is_past) {
+              confirmMsg = "Are you sure you want to remove this expired request?";
+              loadingText = "Removing...";
+              successMsg = "Request removed";
+              fallbackText = "Remove request";
+            } else {
+              confirmMsg = "Are you sure you want to cancel this pending request?";
+              successMsg = "Request cancelled";
+            }
+          }
+
+          if (!confirm(confirmMsg)) return;
           cancelBtn.disabled = true;
-          cancelBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Cancelling...';
+          cancelBtn.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> ${loadingText}`;
           try {
             const cancelRes = await fetch(`/api/me/bookings/${booking.id}/cancel`, { method: "POST" });
             const cancelData = await cancelRes.json();
             if (cancelRes.ok) {
-              showToast(cancelData.message || "Booking cancelled", "success");
+              showToast(cancelData.message || successMsg, "success");
               loadCustomerBookings();
               const today = window.calendarEl?.dataset?.selectedDate || new Date().toISOString().split("T")[0];
               updateRoomTimelines(today);
             } else {
               showToast(cancelData.error || "Failed to cancel booking", "error");
               cancelBtn.disabled = false;
-              cancelBtn.textContent = "Cancel request";
+              cancelBtn.textContent = fallbackText;
             }
           } catch (err) {
             console.error("Cancel failed", err);
             showToast("Failed to cancel booking", "error");
             cancelBtn.disabled = false;
-            cancelBtn.textContent = "Cancel request";
+            cancelBtn.textContent = fallbackText;
           }
         });
       }
